@@ -1,0 +1,127 @@
+# Proposed fissile configuration shape.
+# Copy to the target repository as `.fissile.toml` or `fissile.toml`.
+
+fissile_config_version = 1
+
+[scan]
+# `check --staged` ignores this and receives its file set from git. `audit`
+# walks these roots.
+include = ["src", "tests", "benches", "docs", "e2e", "README.md", "CLAUDE.md"]
+exclude = [
+  "target/**",
+  "node_modules/**",
+  ".git/**",
+  "dist/**",
+  "build/**",
+  "vendor/**",
+  "**/*.lock",
+  "**/*.min.*",
+  "**/*.png",
+  "**/*.jpg",
+  "**/*.jpeg",
+  "**/*.gif",
+  "**/*.webp",
+  "**/*.pdf",
+]
+respect_gitignore = true
+
+[output]
+format = "text" # text | json
+color = "auto" # auto | always | never
+success = "ok"
+
+[exceptions]
+# Structured oversized-file rationales. Each entry is a grund declaration whose
+# body explains why the file is large and when the exception should be revisited.
+registry = "docs/file-size-exceptions.md"
+kind = "EX"
+stale = "warn" # warn | error | ignore
+
+[tokens]
+# Token budgets are opt-in; bytes and lines work without external tooling.
+enabled = false
+command = ["token-counter", "--count", "{path}"]
+
+[[messages]]
+id = "split-rust-module"
+text = "Split {path}: move cohesive helpers into a sibling module before adding more code."
+architecture_ref = "§AR-001-ci"
+owner = "maintainers"
+destination = "src/"
+action = "extract a helper module or split the public API from private implementation"
+
+[[messages]]
+id = "split-doc"
+text = "Split {path}: keep the declaration focused and move secondary detail into a cited child spec."
+architecture_ref = "§GOAL-008-architecture-aware-messages"
+owner = "docs"
+destination = "docs/"
+action = "extract a narrower declaration and cite it from the parent"
+
+[[messages]]
+id = "large-fixture"
+text = "Large fixture {path}: move generated or bulky test data out of the source tree, or add a cited exception."
+architecture_ref = "§GOAL-007-justified-exceptions"
+owner = "test"
+destination = "tests/fixtures/"
+action = "shrink the fixture, generate it in the test, or register an exception"
+
+[[messages]]
+id = "large-file-default"
+text = "Large file {path}: exclude generated/binary assets, or add a narrower rule with local architecture guidance."
+architecture_ref = "§FS-001-config.3.3"
+owner = "maintainers"
+destination = ".fissile.toml"
+action = "exclude files the tool should not reason about, or add a project-specific rule"
+
+[[rules]]
+id = "large-file-default"
+include = ["**/*"]
+unit = "bytes"
+soft = 524288
+hard = 1048576
+message = "large-file-default"
+
+[[rules]]
+id = "rust-source"
+include = ["src/**/*.rs", "benches/**/*.rs"]
+unit = "lines"
+soft = 350
+hard = 550
+count_blank_lines = true
+count_comment_lines = true
+message = "split-rust-module"
+
+[[rules]]
+id = "generated-rust"
+include = ["src/**/*.gen.rs"]
+unit = "lines"
+soft = 1200
+hard = 2000
+# Explicit priority resolves overlap with broader Rust source rules. Higher wins.
+priority = 20
+message = "split-rust-module"
+
+[[rules]]
+id = "rust-tests"
+include = ["tests/**/*.rs"]
+unit = "lines"
+soft = 450
+hard = 700
+message = "split-rust-module"
+
+[[rules]]
+id = "markdown-docs"
+include = ["docs/**/*.md", "README.md", "CLAUDE.md"]
+unit = "lines"
+soft = 250
+hard = 500
+message = "split-doc"
+
+[[rules]]
+id = "fixtures"
+include = ["tests/fixtures/**", "e2e/cases/**"]
+unit = "bytes"
+soft = 65536
+hard = 262144
+message = "large-fixture"

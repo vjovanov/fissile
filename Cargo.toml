@@ -1,0 +1,27 @@
+[package]
+name = "fissile"
+version = "0.1.0"
+edition = "2024"
+description = "Keep repository files small with architecture-aware overflow messages."
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+documentation = "https://docs.rs/fissile"
+keywords = ["pre-commit", "architecture", "file-size", "agents"]
+categories = ["development-tools"]
+
+[lib]
+name = "fissile"
+path = "src/lib.rs"
+
+[dependencies]
+
+# Bench-only. The real benchmark body is gated behind the `bench` feature so
+# normal build/test jobs compile a no-op bench target and never need Valgrind.
+iai-callgrind = { version = "0.16.1", optional = true }
+
+[features]
+bench = ["dep:iai-callgrind"]
+
+[[bench]]
+name = "instructions"
+harness = false

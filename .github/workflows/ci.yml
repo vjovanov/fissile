@@ -1,0 +1,143 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  test:
+    name: cargo test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v5
+        continue-on-error: true
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: cargo fmt --check
+        run: cargo fmt --all -- --check
+
+      - name: cargo build
+        run: cargo build --workspace --all-targets --locked
+
+      - name: cargo test
+        run: cargo test --workspace --all-targets --locked
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+      - name: fissile performance smoke
+        shell: bash
+        run: |
+          # Cheap catastrophic-regression guard (§AR-001-ci.4 / §GOAL-001-fast-feedback):
+          # the instruction-count benchmark job is the precise meter; this timeout catches
+          # accidental blow-ups without depending on Valgrind in the cross-platform matrix.
+          python - <<'PY'
+          import subprocess
+          import sys
+
+          try:
+              result = subprocess.run(
+                  [
+                      "cargo",
+                      "test",
+                      "--locked",
+                      "--release",
+                      "large_batch_smoke",
+                  ],
+                  timeout=30,
+              )
+          except subprocess.TimeoutExpired:
+              print("fissile large_batch_smoke exceeded 30s", file=sys.stderr)
+              sys.exit(124)
+
+          sys.exit(result.returncode)
+          PY
+
+      - name: Install grund
+        if: matrix.os == 'ubuntu-latest'
+        run: RUSTFLAGS= cargo install grund --version 0.4.0 --locked
+
+      - name: grund check
+        if: matrix.os == 'ubuntu-latest'
+        run: grund check
+
+      - name: cargo package list
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo package --locked --list
+
+  bench:
+    name: cargo bench (instruction counts)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v5
+        continue-on-error: true
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-bench-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-bench-
+            ${{ runner.os }}-cargo-
+
+      - name: Install Valgrind and iai-callgrind-runner
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y valgrind
+          RUSTFLAGS= cargo install iai-callgrind-runner --version 0.16.1 --locked
+
+      - name: Save base branch benchmark baseline
+        if: github.event_name == 'pull_request'
+        run: |
+          git checkout --force "origin/${{ github.base_ref }}"
+          cargo bench --features bench --locked --bench instructions -- --save-baseline=main --save-summary=json
+          git checkout --force "${{ github.sha }}"
+
+      - name: cargo bench
+        if: github.event_name != 'pull_request'
+        run: cargo bench --features bench --locked --bench instructions -- --save-summary=json
+
+      - name: cargo bench regression gate
+        if: github.event_name == 'pull_request'
+        run: cargo bench --features bench --locked --bench instructions -- --baseline=main --callgrind-limits=ir=5.0% --save-summary=json
+
+      - name: Upload benchmark summaries
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iai-callgrind-summaries
+          path: target/iai/**/summary.json
+          if-no-files-found: ignore
