@@ -45,7 +45,7 @@ command = ["token-counter", "--count", "{path}"]
 [[messages]]
 id = "split-rust-module"
 text = "Split {path}: move cohesive helpers into a sibling module before adding more code."
-architecture_ref = "§AR-001-ci"
+architecture_ref = "§GOAL-008-architecture-aware-messages"
 owner = "maintainers"
 destination = "src/"
 action = "extract a helper module or split the public API from private implementation"
