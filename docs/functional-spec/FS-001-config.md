@@ -1,10 +1,10 @@
 # FS-001-config: fissile reads a versioned TOML config file
 
-`fissile` is configured by a single TOML document at the repository root. The
-default discovery names are `.fissile.toml` and `fissile.toml`; an embedding CLI
-may also pass an explicit path. The config is data, not code, so it can be read
-inside a pre-commit hook without invoking a plugin system (§GOAL-002-tiny-footprint)
-while still making limits and messages project-owned (§GOAL-005-configurable).
+`fissile` is configured by a single TOML document. The default discovery path is
+`.agents/fissile.toml`; an embedding CLI may also pass an explicit path. The
+config is data, not code, so it can be read inside a pre-commit hook without
+invoking a plugin system (§GOAL-002-tiny-footprint) while still making limits and
+messages project-owned (§GOAL-005-configurable).
 
 The proposed concrete shape is maintained in `examples/fissile.toml`.
 

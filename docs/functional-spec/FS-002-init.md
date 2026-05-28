@@ -21,7 +21,7 @@ fissile init [<path>] [--name <name>] [--force] [--dry-run]
 - `--name <name>` is the human-readable project name used in a newly created
   `AGENTS.md` heading. It defaults to the target directory basename.
 - `--config <path>` changes the config path written under `<path>`. The default
-  is `.fissile.toml`.
+  is `.agents/fissile.toml`.
 - `--exceptions` also creates the configured soft and hard exception registry
   paths when absent.
 - `--force` refreshes managed agent blocks and generated starter files. It does
@@ -40,7 +40,8 @@ entrypoint selection rules in §3.
 Default `fissile init` writes:
 
 - one agent entrypoint or managed block, per §3;
-- `<path>/.fissile.toml`, when absent, using the schema from §FS-001-config.
+- `<path>/.agents/fissile.toml`, when absent, using the schema from
+  §FS-001-config.
 
 With `--exceptions`, it also writes the configured exception registries, default
 `docs/file-size-agent-exceptions.toml` and
@@ -48,9 +49,9 @@ With `--exceptions`, it also writes the configured exception registries, default
 contains `fissile_exceptions_version = 1`, explanatory comments, and no
 exception entries.
 
-Existing `.fissile.toml` and existing exception registries are project-owned.
-They are reported as `exists` and left byte-for-byte unchanged, even with
-`--force`.
+Existing `.agents/fissile.toml` and existing exception registries are
+project-owned. They are reported as `exists` and left byte-for-byte unchanged,
+even with `--force`.
 
 ## 3. Agent Entrypoints
 
@@ -116,7 +117,7 @@ An example rendered block lives at `examples/AGENTS.fissile.md`.
 On success, stderr reports one path per line:
 
 ```text
-wrote .fissile.toml
+wrote .agents/fissile.toml
 appended AGENTS.md
 ```
 
@@ -129,7 +130,7 @@ After a run that wrote, appended, or updated something, stderr prints a short
 
 ```text
 next:
-1. Review .fissile.toml and tune rule limits.
+1. Review .agents/fissile.toml and tune rule limits.
 2. Install the pre-commit hook that runs fissile check --staged.
 3. Run fissile audit once and add justified exceptions with fissile exception add.
 see AGENTS.md for the full workflow.

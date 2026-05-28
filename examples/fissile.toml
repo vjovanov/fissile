@@ -1,5 +1,5 @@
 # Proposed fissile configuration shape.
-# Copy to the target repository as `.fissile.toml` or `fissile.toml`.
+# Copy to the target repository as `.agents/fissile.toml`.
 
 fissile_config_version = 1
 
@@ -67,7 +67,7 @@ action = "shrink the fixture, generate it in the test, or register an exception"
 id = "large-file-default"
 text = "Large file {path}: exclude generated/binary assets, or add a narrower rule with local architecture guidance (§FS-001-config.3.3)."
 owner = "maintainers"
-destination = ".fissile.toml"
+destination = ".agents/fissile.toml"
 action = "exclude files the tool should not reason about, or add a project-specific rule"
 
 [[rules]]

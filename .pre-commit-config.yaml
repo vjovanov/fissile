@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: fissile-check
+        name: fissile check staged files
+        entry: fissile check --staged
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
