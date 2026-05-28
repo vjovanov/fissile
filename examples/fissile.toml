@@ -44,32 +44,28 @@ command = ["token-counter", "--count", "{path}"]
 
 [[messages]]
 id = "split-rust-module"
-text = "Split {path}: move cohesive helpers into a sibling module before adding more code."
-architecture_ref = "§GOAL-008-architecture-aware-messages"
+text = "Split {path}: move cohesive helpers into a sibling module before adding more code (§GOAL-008-architecture-aware-messages)."
 owner = "maintainers"
 destination = "src/"
 action = "extract a helper module or split the public API from private implementation"
 
 [[messages]]
 id = "split-doc"
-text = "Split {path}: keep the declaration focused and move secondary detail into a cited child spec."
-architecture_ref = "§GOAL-008-architecture-aware-messages"
+text = "Split {path}: keep the declaration focused and move secondary detail into a cited child spec (§GOAL-008-architecture-aware-messages)."
 owner = "docs"
 destination = "docs/"
 action = "extract a narrower declaration and cite it from the parent"
 
 [[messages]]
 id = "large-fixture"
-text = "Large fixture {path}: move generated or bulky test data out of the source tree, or add a cited exception."
-architecture_ref = "§GOAL-007-justified-exceptions"
+text = "Large fixture {path}: move generated or bulky test data out of the source tree, or add a cited exception (§GOAL-007-justified-exceptions)."
 owner = "test"
 destination = "tests/fixtures/"
 action = "shrink the fixture, generate it in the test, or register an exception"
 
 [[messages]]
 id = "large-file-default"
-text = "Large file {path}: exclude generated/binary assets, or add a narrower rule with local architecture guidance."
-architecture_ref = "§FS-001-config.3.3"
+text = "Large file {path}: exclude generated/binary assets, or add a narrower rule with local architecture guidance (§FS-001-config.3.3)."
 owner = "maintainers"
 destination = ".fissile.toml"
 action = "exclude files the tool should not reason about, or add a project-specific rule"

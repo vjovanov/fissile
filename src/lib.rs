@@ -98,7 +98,6 @@ impl Selector {
 pub struct MessageTemplate {
     pub id: String,
     pub text: String,
-    pub architecture_ref: Option<String>,
     pub owner: Option<String>,
     pub destination: Option<String>,
     pub action: Option<String>,
@@ -109,16 +108,10 @@ impl MessageTemplate {
         Self {
             id: id.into(),
             text: text.into(),
-            architecture_ref: None,
             owner: None,
             destination: None,
             action: None,
         }
-    }
-
-    pub fn with_architecture_ref(mut self, value: impl Into<String>) -> Self {
-        self.architecture_ref = Some(value.into());
-        self
     }
 
     pub fn with_owner(mut self, value: impl Into<String>) -> Self {
@@ -160,7 +153,6 @@ impl MessageTemplate {
         RenderedMessage {
             id: self.id.clone(),
             text,
-            architecture_ref: self.architecture_ref.clone(),
             owner: self.owner.clone(),
             destination: self.destination.clone(),
             action: self.action.clone(),
@@ -296,7 +288,6 @@ impl fmt::Display for Severity {
 pub struct RenderedMessage {
     pub id: String,
     pub text: String,
-    pub architecture_ref: Option<String>,
     pub owner: Option<String>,
     pub destination: Option<String>,
     pub action: Option<String>,
@@ -612,9 +603,8 @@ mod tests {
             Budget::new(Unit::Bytes, Some(5), None),
             MessageTemplate::new(
                 "domain-split",
-                "{severity} overflow in {path}; move code toward {rule}.",
+                "{severity} overflow in {path}; move code toward {rule} (§GOAL-008-architecture-aware-messages).",
             )
-            .with_architecture_ref("§GOAL-008-architecture-aware-messages")
             .with_owner("@domain")
             .with_destination("src/domain/services/")
             .with_action("extract a service"),
@@ -628,11 +618,7 @@ mod tests {
         assert_eq!(overflows[0].severity, Severity::Soft);
         assert_eq!(
             message.text,
-            "soft overflow in src/domain/order.rs; move code toward domain."
-        );
-        assert_eq!(
-            message.architecture_ref.as_deref(),
-            Some("§GOAL-008-architecture-aware-messages")
+            "soft overflow in src/domain/order.rs; move code toward domain (§GOAL-008-architecture-aware-messages)."
         );
         assert_eq!(message.owner.as_deref(), Some("@domain"));
         assert_eq!(message.destination.as_deref(), Some("src/domain/services/"));

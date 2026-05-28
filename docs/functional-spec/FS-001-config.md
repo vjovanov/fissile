@@ -42,7 +42,8 @@ inside known tables are errors, so a typo cannot silently disable a rule.
 
 - `include`: root directories or globs walked by `audit`;
 - `exclude`: globs ignored before measurement;
-- `respect_gitignore`: whether repository ignore files participate in traversal.
+- `respect_gitignore`: whether repository ignore files participate in traversal,
+  default `true`.
 
 Pre-commit checks receive their file set from git and do not use `include`, but
 they still apply `exclude` so generated assets and lockfiles stay out of the
@@ -173,13 +174,14 @@ share one architectural remedy. Each message has:
 
 - `id`: stable message ID included in machine-readable findings;
 - `text`: bounded template rendered for humans and agents;
-- `architecture_ref`: optional grund citation for deeper context;
 - `owner`: optional owner or team hint;
 - `destination`: optional module, folder, or boundary hint;
 - `action`: optional imperative next step.
 
 The supported template variables are `{path}`, `{rule}`, `{severity}`,
 `{actual}`, `{limit}`, and `{unit}`. Missing message IDs are schema errors.
+Grund citations are part of the message text or action text, not a separate
+field, so the rendered guidance remains the single source of human context.
 Messages cannot execute code, inspect file contents, or change pass/fail
 behavior (§GOAL-008-architecture-aware-messages).
 

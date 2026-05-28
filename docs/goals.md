@@ -103,7 +103,7 @@ Sensible defaults out of the box; full override when a project's reality diverge
 - **Limits per unit.** Bytes, lines, or tokens. A rule names the unit it uses; mixing is allowed across rules but not within one.
 - **Limits per file type.** Per extension (`.ts`, `.py`, …) and per glob (`src/**/*.gen.rs`). Each rule carries both a soft and a hard limit ([§GOAL-006-graded-limits](goals.md#goal-006-graded-limits-soft-warns-hard-blocks-ai-minimizes)).
 - **Exclusions.** Globs that opt files out of being checked at all — lockfiles, vendored code, generated artifacts, binaries. Exclusions need no rationale because the tool obviously does not apply; defaults cover the obvious cases so a fresh install does not immediately false-positive. Distinct from *exceptions* ([§GOAL-007-justified-exceptions](goals.md#goal-007-justified-exceptions-every-oversized-file-has-a-written-cited-reason)), which keep the file under check but accept it as oversized for a written reason.
-- **Overflow messages.** Each rule may name a message template. Templates are short text blocks with stable IDs and fields for architecture citation, owner, destination path, and suggested split.
+- **Overflow messages.** Each rule may name a message template. Templates are short text blocks with stable IDs, inline citations when useful, and optional owner, destination path, and suggested split fields.
 - **Scope.** Which directories are walked by `audit`; pre-commit always scopes to staged files.
 - **Output defaults.** Format (`text` / `json`) and color, overridable per invocation.
 
@@ -201,13 +201,13 @@ The key promise of [§GND-001-fissile](grund.md#gnd-001-fissile-keep-files-small
 ### 1. What the message knows
 
 - **The matched rule.** The message is selected by the same rule that selected the budget, so `src/http/**` and `src/domain/**` can teach different split patterns.
-- **The architecture citation.** A message may cite a `§AR-`, `§FS-`, `§GOAL-`, or project-local exception ID so the reader can pull deeper context only when needed.
+- **The architecture citation.** A message's text may cite a `§AR-`, `§FS-`, `§GOAL-`, or project-local exception ID so the reader can pull deeper context only when needed.
 - **The destination hint.** A message may name a module, directory, owner, or interface boundary that should receive the extracted code.
 - **The expected action.** The text says what to do next: split a helper, extract a fixture, move generated output, add an exception, or tighten the rule.
 
 ### 2. Constraints
 
-Messages are project-owned but not arbitrary scripts. They are static templates with bounded length, stable IDs, and explicit fields. They cannot run code, inspect file contents beyond the matched rule, or change pass/fail behavior. The finding remains machine-readable; the message is the local architectural explanation layered on top.
+Messages are project-owned but not arbitrary scripts. They are static templates with bounded length, stable IDs, and explicit owner/destination/action fields. They cannot run code, inspect file contents beyond the matched rule, or change pass/fail behavior. The finding remains machine-readable; the message is the local architectural explanation layered on top.
 
 ### 3. Measurable
 
