@@ -48,3 +48,16 @@ summaries for inspection.
 
 The benchmark body is gated behind the `bench` Cargo feature, so ordinary build
 and test jobs compile a no-op bench target and never require Valgrind.
+
+## 6. PGO pre-release check
+
+PGO stays out of push and pull-request CI. The manual `Pre-release checks`
+workflow installs `llvm-tools-preview` and runs `scripts/pgo-build.sh`. That
+keeps the ordinary feedback loop focused on format, build, test, lint,
+grounding, smoke, and instruction counts, while still proving the PGO toolchain
+before a release.
+
+`fissile` is currently a library core, so the PGO script trains on the release
+test workload and rebuilds release library artifacts under `target/release`.
+When a CLI binary lands, the script should grow a CLI hot-command training loop
+before the final profile-use rebuild, matching the benchmarked command surface.

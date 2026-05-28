@@ -39,6 +39,12 @@ This requires Valgrind and `iai-callgrind-runner` on `PATH`. In CI, the benchmar
 job installs those tools, records a base-branch baseline for pull requests, and
 fails the pull request if instruction count grows by more than 5%.
 
+PGO is a separate pre-release concern (§AR-001-ci.6). The benchmark job records
+deterministic instruction counts on every push and pull request; it does not run
+the PGO pipeline. While `fissile` remains library-only, `scripts/pgo-build.sh`
+uses the release test workload for training. When a CLI target exists, the PGO
+training workload should be aligned with the hot operations measured here.
+
 ## 4. Relationship to goals
 
 This harness is the measurable part of §GOAL-001-fast-feedback. The goal names
