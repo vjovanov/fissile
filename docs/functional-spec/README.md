@@ -8,7 +8,8 @@ By convention every spec under this directory is linked from this README so the 
 |---|---|
 | [§FS-001-config](FS-001-config.md#fs-001-config-fissile-reads-a-versioned-toml-config-file) | fissile reads a versioned TOML config file |
 | [§FS-002-init](FS-002-init.md#fs-002-init-fissile-init-installs-config-exceptions-and-agent-instructions) | fissile init installs config, exceptions, and agent instructions |
-| [§FS-003-exceptions](FS-003-exceptions.md#fs-003-exceptions-oversized-files-are-accepted-through-a-cited-registry) | oversized files are accepted through a cited registry |
+| [§FS-003-exceptions](FS-003-exceptions.md#fs-003-exceptions-oversized-files-are-accepted-through-configured-registries) | oversized files are accepted through configured registries |
 | [§FS-004-check-audit](FS-004-check-audit.md#fs-004-check-audit-fissile-check-and-audit-enforce-file-budgets) | fissile check and audit enforce file budgets |
+| [§FS-005-exception-add](FS-005-exception-add.md#fs-005-exception-add-fissile-exception-add-writes-structured-exception-entries) | fissile exception add writes structured exception entries |
 
 This index is navigational — citations should target the spec ID directly, never this file.

@@ -159,7 +159,7 @@ Use `[scan].exclude` for files `fissile` should not reason about:
 - binary/media assets;
 - build outputs and package caches.
 
-Use the exception registry (§FS-003-exceptions) for files `fissile` should still
+Use the exception registries (§FS-003-exceptions) for files `fissile` should still
 reason about, but that are accepted as oversized for a written reason: hand-made
 fixtures, intentionally consolidated compatibility layers, generated sources
 checked in for bootstrap reasons, or architectural seams that cannot yet be
@@ -187,16 +187,23 @@ behavior (§GOAL-008-architecture-aware-messages).
 
 ## 5. Exceptions
 
-`[exceptions]` names the central oversized-file rationale registry:
+`[exceptions]` names the severity-specific oversized-file rationale
+registries:
 
-- `registry`: markdown path, default `docs/file-size-exceptions.md`;
-- `kind`: grund kind prefix for exception declarations, default `EX`;
+- `soft_registry`: TOML path for soft-limit exceptions, default
+  `docs/file-size-agent-exceptions.toml`;
+- `hard_registry`: TOML path for hard-limit exceptions, default
+  `docs/file-size-human-exceptions.toml`;
 - `stale`: `warn`, `error`, or `ignore` for entries that match no scanned file.
 
-Exceptions keep a file under check but silence the named overflow when the
-registry contains a written, cited reason (§GOAL-007-justified-exceptions).
-They are distinct from `[scan].exclude`, which removes files the tool does not
-apply to at all. The registry file format is specified in §FS-003-exceptions.
+Soft exceptions are for agent-facing warning debt: they keep soft findings from
+being repeated when the repository has deliberately accepted the current shape.
+Hard exceptions are for human-reviewed blocking debt: they are the only way to
+accept a hard-limit overflow without disabling the rule
+(§GOAL-007-justified-exceptions). Exceptions are distinct from `[scan].exclude`,
+which removes files the tool does not apply to at all. Each exception entry
+records a maximum accepted measurement so the finding reappears if the file grows
+again. The registry file formats are specified in §FS-003-exceptions.
 
 ## 6. Output
 

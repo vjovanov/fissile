@@ -11,7 +11,7 @@ description, not the name.
 
 The tool is named `fissile`. The published crate is `fissile`, the installed binary is
 `fissile`, and the primary invocations read `fissile check` / `fissile audit` /
-`fissile init`.
+`fissile init` / `fissile exception add`.
 
 ## 2. Why `fissile`
 

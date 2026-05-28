@@ -18,9 +18,13 @@ alone unless the task is about that file.
 
 ### Exceptions
 
+Soft-limit exceptions are agent-facing warning debt. If a file is intentionally
+above the soft limit and the configured guidance should stop repeating, run
+`fissile exception add <path> --severity soft --rule <id> --reason <text> --until <text>`.
+
 Hard-limit overflows are not bypassed with flags or source comments. If a file is
-large for a real reason, add a written exception to `docs/file-size-exceptions.md`
-and cite that exception from the file or architecture that depends on it.
+large for a real human-reviewed reason, run
+`fissile exception add <path> --severity hard --rule <id> --reason <text> --until <text>`.
 
 Use `fissile audit --stale-exceptions` before removing or moving large files so
-dead exceptions do not stay in the registry.
+dead exceptions do not stay in the registries.

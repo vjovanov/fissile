@@ -11,8 +11,10 @@ pre-commit and audit workflows.
 The proposed repository config is documented in
 `docs/functional-spec/FS-001-config.md`; a concrete sample lives at
 `examples/fissile.toml`. The proposed `fissile init` workflow is specified in
-`docs/functional-spec/FS-002-init.md`, and the exception registry format is
-specified in `docs/functional-spec/FS-003-exceptions.md`.
+`docs/functional-spec/FS-002-init.md`, and the exception registry formats are
+specified in `docs/functional-spec/FS-003-exceptions.md`. The proposed command
+for adding exceptions is specified in
+`docs/functional-spec/FS-005-exception-add.md`.
 
 ```rust
 use fissile::{Budget, Checker, MessageTemplate, Rule, Selector, Unit, measure_text};

@@ -1,9 +1,9 @@
 # FS-002-init: fissile init installs config, exceptions, and agent instructions
 
 `fissile init` bootstraps a repository for commit-time file-size discipline. It
-writes the proposed config file, creates the exception registry if requested, and
-adds a versioned managed block to agent instruction files so coding agents know
-how to react to soft and hard overflows. It follows the same non-intrusive shape
+writes the proposed config file, creates the exception registries if requested,
+and adds a versioned managed block to agent instruction files so coding agents
+know how to react to soft and hard overflows. It follows the same non-intrusive shape
 as `grund init`: preserve user-authored content, update only managed blocks, make
 every choice a flag, and support `--dry-run`.
 
@@ -22,9 +22,10 @@ fissile init [<path>] [--name <name>] [--force] [--dry-run]
   `AGENTS.md` heading. It defaults to the target directory basename.
 - `--config <path>` changes the config path written under `<path>`. The default
   is `.fissile.toml`.
-- `--exceptions` also creates the configured exception registry path when absent.
+- `--exceptions` also creates the configured soft and hard exception registry
+  paths when absent.
 - `--force` refreshes managed agent blocks and generated starter files. It does
-  not overwrite an existing config or existing exception registry.
+  not overwrite an existing config or any existing exception registries.
 - `--dry-run` reports what would be written, appended, or updated without
   changing the filesystem.
 - Agent flags explicitly select entrypoint families. Without any agent flag,
@@ -41,9 +42,11 @@ Default `fissile init` writes:
 - one agent entrypoint or managed block, per §3;
 - `<path>/.fissile.toml`, when absent, using the schema from §FS-001-config.
 
-With `--exceptions`, it also writes the configured exception registry, default
-`docs/file-size-exceptions.md`, when absent. The starter registry contains a
-title, a short explanation, and no exception entries.
+With `--exceptions`, it also writes the configured exception registries, default
+`docs/file-size-agent-exceptions.toml` and
+`docs/file-size-human-exceptions.toml`, when absent. Each starter registry
+contains `fissile_exceptions_version = 1`, explanatory comments, and no
+exception entries.
 
 Existing `.fissile.toml` and existing exception registries are project-owned.
 They are reported as `exists` and left byte-for-byte unchanged, even with
@@ -100,7 +103,10 @@ The canonical v1 block teaches:
 - treat hard overflows as stop-the-line failures unless a structured exception
   exists;
 - read the message ID and guidance line as the local architecture instruction;
-- add or update `docs/file-size-exceptions.md` for justified oversized files;
+- use `fissile exception add --severity soft` for accepted agent-facing warning
+  debt;
+- use `fissile exception add --severity hard` only for human-reviewed blocking
+  debt;
 - run `fissile audit --stale-exceptions` before removing or moving large files.
 
 An example rendered block lives at `examples/AGENTS.fissile.md`.
@@ -125,7 +131,7 @@ After a run that wrote, appended, or updated something, stderr prints a short
 next:
 1. Review .fissile.toml and tune rule limits.
 2. Install the pre-commit hook that runs fissile check --staged.
-3. Run fissile audit once and add justified exceptions.
+3. Run fissile audit once and add justified exceptions with fissile exception add.
 see AGENTS.md for the full workflow.
 ```
 

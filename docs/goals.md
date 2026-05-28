@@ -10,7 +10,7 @@ Current goals:
 - [§GOAL-004-token-thrift](goals.md#goal-004-token-thrift-the-tool-itself-spends-as-few-tokens-as-it-saves)
 - [§GOAL-005-configurable](goals.md#goal-005-configurable-every-limit-and-message-overridable-per-file-type-and-path)
 - [§GOAL-006-graded-limits](goals.md#goal-006-graded-limits-soft-warns-hard-blocks-ai-minimizes)
-- [§GOAL-007-justified-exceptions](goals.md#goal-007-justified-exceptions-every-oversized-file-has-a-written-cited-reason)
+- [§GOAL-007-justified-exceptions](goals.md#goal-007-justified-exceptions-every-oversized-file-has-a-written-reason)
 - [§GOAL-008-architecture-aware-messages](goals.md#goal-008-architecture-aware-messages-overflows-explain-the-local-architecture)
 
 ## GOAL-001-fast-feedback: the hook is imperceptible
@@ -102,7 +102,7 @@ Sensible defaults out of the box; full override when a project's reality diverge
 
 - **Limits per unit.** Bytes, lines, or tokens. A rule names the unit it uses; mixing is allowed across rules but not within one.
 - **Limits per file type.** Per extension (`.ts`, `.py`, …) and per glob (`src/**/*.gen.rs`). Each rule carries both a soft and a hard limit ([§GOAL-006-graded-limits](goals.md#goal-006-graded-limits-soft-warns-hard-blocks-ai-minimizes)).
-- **Exclusions.** Globs that opt files out of being checked at all — lockfiles, vendored code, generated artifacts, binaries. Exclusions need no rationale because the tool obviously does not apply; defaults cover the obvious cases so a fresh install does not immediately false-positive. Distinct from *exceptions* ([§GOAL-007-justified-exceptions](goals.md#goal-007-justified-exceptions-every-oversized-file-has-a-written-cited-reason)), which keep the file under check but accept it as oversized for a written reason.
+- **Exclusions.** Globs that opt files out of being checked at all — lockfiles, vendored code, generated artifacts, binaries. Exclusions need no rationale because the tool obviously does not apply; defaults cover the obvious cases so a fresh install does not immediately false-positive. Distinct from *exceptions* ([§GOAL-007-justified-exceptions](goals.md#goal-007-justified-exceptions-every-oversized-file-has-a-written-reason)), which keep the file under check but accept it as oversized for a written reason in the soft or hard registry.
 - **Overflow messages.** Each rule may name a message template. Templates are short text blocks with stable IDs, inline citations when useful, and optional owner, destination path, and suggested split fields.
 - **Scope.** Which directories are walked by `audit`; pre-commit always scopes to staged files.
 - **Output defaults.** Format (`text` / `json`) and color, overridable per invocation.
@@ -126,8 +126,8 @@ A single threshold is a false economy. Set it low and the tool nags constantly u
 ### 1. The two tiers
 
 - **Soft limit.** A file at or above the soft limit emits a warning. The commit is not blocked. The diagnostic names the file, the size, the soft limit, and the rule. An AI agent reading the output is expected to attempt to reduce the file — split it, extract a helper, prune dead code — before claiming the task done. A human can ignore it; the friction is intentional but bounded.
-- **Hard limit.** A file at or above the hard limit fails the commit. There is no override flag and no severity knob ([§GOAL-003-friendly-output.2](goals.md#2-what-this-rules-out)). The only way past it is the structured exception registry of [§GOAL-007-justified-exceptions](goals.md#goal-007-justified-exceptions-every-oversized-file-has-a-written-cited-reason).
-- **Order.** A file above the hard limit reports only the hard violation; the soft warning is implied. A file with an accepted exception reports neither — exceptions silence both tiers for the named file.
+- **Hard limit.** A file at or above the hard limit fails the commit. There is no override flag and no severity knob ([§GOAL-003-friendly-output.2](goals.md#2-what-this-rules-out)). The only way past it is the structured hard exception registry of [§GOAL-007-justified-exceptions](goals.md#goal-007-justified-exceptions-every-oversized-file-has-a-written-reason).
+- **Order.** A file above the hard limit reports only the hard violation; the soft warning is implied. If a hard exception silences that hard violation, the soft warning may still appear unless the soft registry also accepts it.
 
 ### 2. The AI-minimize contract
 
@@ -145,54 +145,61 @@ This is the half of [§GND-001-fissile](grund.md#gnd-001-fissile-keep-files-smal
 
 E2E fixtures cover all four states per rule: clean, soft-only, hard-only, both. The hard-only case must exit non-zero; the soft-only case must exit zero with the warning on stderr. A fixture that wires the soft warning through a mock agent loop asserts the diagnostic shape an agent would key off.
 
-## GOAL-007-justified-exceptions: every oversized file has a written, cited reason
+## GOAL-007-justified-exceptions: every oversized file has a written reason
 
-The hard limit ([§GOAL-006-graded-limits](goals.md#goal-006-graded-limits-soft-warns-hard-blocks-ai-minimizes)) has no override flag. It does have one escape hatch — a structured exceptions registry where each oversized file is declared, with a written rationale, as a grund declaration. The registry is the paper trail: every file that violates the budget has, somewhere in the repo, a paragraph explaining why, and that paragraph carries an ID that code and specs can cite back to.
+The hard limit ([§GOAL-006-graded-limits](goals.md#goal-006-graded-limits-soft-warns-hard-blocks-ai-minimizes)) has no override flag. It does have one escape hatch — a structured hard exceptions registry where each oversized file is declared with a written rationale and a maximum accepted measurement. Soft warnings have a parallel soft exceptions registry for agent-facing debt that the repository has deliberately accepted. The registries are the paper trail: every accepted oversized file has, somewhere in the repo, a paragraph explaining why, and that paragraph carries a stable local ID for output and review.
 
-This is the contract that lets [§GND-001-fissile](grund.md#gnd-001-fissile-keep-files-small-on-every-commit-with-architecture-aware-overflow-messages) hold under real-world adoption. A team turning the tool on for the first time will have files over the hard limit on day one; the registry is how they accept the current state without disabling the guard, and how the next reviewer can tell "this file is large for a reason" from "this file is large because nobody noticed."
+This is the contract that lets [§GND-001-fissile](grund.md#gnd-001-fissile-keep-files-small-on-every-commit-with-architecture-aware-overflow-messages) hold under real-world adoption. A team turning the tool on for the first time will have files over the soft and hard limits on day one; the registries are how they accept the current state without disabling the guard, and how the next reviewer or agent can tell "this file is large for a reason" from "this file is large because nobody noticed."
 
-### 1. What the registry is
+### 1. What the registries are
 
-A single markdown file at a configured path in the target repo (default `docs/file-size-exceptions.md`), holding one inline grund declaration per exempted file. Each declaration looks like:
+Two TOML files at configured paths in the target repo hold one structured entry per exempted file. The soft registry defaults to `docs/file-size-agent-exceptions.toml`; the hard registry defaults to `docs/file-size-human-exceptions.toml`. Each entry looks like:
 
-```markdown
-# EX-NNN-slug: <path or glob being exempted>
+```toml
+fissile_exceptions_version = 1
 
-<one paragraph of rationale: why this file is large, what would need to change for the exception to be retired, who to ask before deleting it>
-
-- **Path:** `path/to/file.ts` (or glob)
-- **Limit waived:** soft | hard | both
-- **Until:** <condition or date for review, or "indefinite">
+[[exceptions]]
+id = "EX-NNN-slug"
+path = "path/to/file.ts"
+match = "exact"
+rules = ["rule-id"]
+max_accepted = { value = 800, unit = "lines" }
+until = "condition, date, or indefinite"
+reason = """
+One paragraph of rationale: why this file is large, what would need to change
+for the exception to be retired, and who to ask before deleting it.
+"""
 ```
 
-The kind prefix (`EX` here; configurable per the target repo's `grund.toml`) is registered as a grund kind so:
-
-- The declaration has a stable ID and can be cited as `§EX-NNN-slug` from anywhere — the file itself (as a header comment), the architecture doc that depends on its shape, the changelog entry that introduced it.
-- `grund check` validates that every cited `§EX-` ID resolves, so a deleted exception with stale citations fails review.
-- The exception's rationale paragraph is the body of a grund declaration, so `grund EX-NNN-slug` returns it on demand — an agent reading the warning can pull the rationale without opening the file.
+The `EX-` ID is local to `fissile`; the parsing contract lives in
+§FS-003-exceptions.
 
 ### 2. How the checker uses it
 
-- On startup the checker loads the registry, parses each `# EX-NNN-slug:` declaration, extracts the path or glob from the structured fields, and builds a path → exception index.
-- A file matched by an exception is silenced for the limits the exception names (soft, hard, or both).
+- On startup the checker loads both registries, parses each `[[exceptions]]` entry, extracts the path or glob from the structured fields, and builds a path → exception index per severity.
+- A file matched by a soft-registry exception is silenced for soft findings at or below the entry's `max_accepted` value. A file matched by a hard-registry exception is silenced for hard findings at or below the entry's `max_accepted` value.
+- If the file grows past `max_accepted`, the finding appears again even though the path still has an exception entry.
+- `fissile exception add` (§FS-005-exception-add) is the supported way to append
+  entries, so users do not need to hand-edit registry TOML for current
+  overflows.
 - An exception whose path matches no file under scan is reported by `audit --stale` — dead exceptions rot fast and the tool refuses to pretend they are load-bearing.
 - The diagnostic for a file under exception still names the exception ID on `audit --verbose`, so reviewers can find the rationale without grep.
 
 ### 3. What this rules out
 
 - **An exception without a rationale.** The schema requires the prose paragraph; an entry with empty body is a parse error. Silent override is exactly what [§GOAL-003-friendly-output](goals.md#goal-003-friendly-output-tell-the-user-exactly-what-broke-and-how-to-fix-it) refuses.
-- **A flag-based override.** No `--allow path/to/file`, no `# fissile: allow` magic comment. The registry is the only escape hatch, because the registry is the only form that survives review and shows up in history.
-- **An exception that lives next to its file.** Centralizing the registry is what makes the inventory legible: one file lists every oversized file, in one place. A scattered "exemption per file" cannot answer "show me everything we have given up on."
+- **A flag-based override.** No `--allow path/to/file`, no `# fissile: allow` magic comment. The registries are the only escape hatch, because they are the only form that survives review and shows up in history.
+- **An exception that lives next to its file.** Centralizing the registries is what makes the inventory legible: one file lists soft agent debt and one file lists hard human debt. A scattered "exemption per file" cannot answer "show me everything we have given up on."
 
 ### 4. Composition with the other goals
 
-- [§GOAL-006-graded-limits](goals.md#goal-006-graded-limits-soft-warns-hard-blocks-ai-minimizes) defines what the registry overrides; this goal defines the shape of the override.
-- [§GOAL-005-configurable.1](goals.md#1-what-is-configurable) separates exclusions (no rationale, for files the tool obviously does not apply to) from exceptions (rationale required, for files the tool applies to but accepts). The split is deliberate — silencing a `.png` and silencing a 4,000-line module are not the same kind of decision and the registry shape should not let them look the same.
+- [§GOAL-006-graded-limits](goals.md#goal-006-graded-limits-soft-warns-hard-blocks-ai-minimizes) defines what the registries override; this goal defines the shape of the override.
+- [§GOAL-005-configurable.1](goals.md#1-what-is-configurable) separates exclusions (no rationale, for files the tool obviously does not apply to) from exceptions (rationale required, for files the tool applies to but accepts). The split is deliberate — silencing a `.png` and silencing a 4,000-line module are not the same kind of decision and the registry shapes should not let them look the same.
 - [§GOAL-004-token-thrift](goals.md#goal-004-token-thrift-the-tool-itself-spends-as-few-tokens-as-it-saves) holds: a file under exception emits no diagnostic by default, only on `--verbose`.
 
 ### 5. Measurable
 
-E2E fixtures cover: a registry with a single exception silencing a hard violation; a registry whose exception names a path that no longer exists (audit must flag it stale); a registry entry whose rationale is empty (parse error); a citation in source code (`§EX-NNN-slug`) that points at the registry entry (resolves cleanly under `grund check`). A snapshot test on the default registry path and the parse rules guards against silent schema changes.
+E2E fixtures cover: `fissile exception add` appending soft and hard entries; a hard registry with a single exception silencing a hard violation; a soft registry with a single exception silencing a soft warning; a file that outgrows its exception's maximum accepted size and reports again; a registry whose exception names a path that no longer exists (audit must flag it stale); and a registry entry whose rationale is empty (parse error). A snapshot test on the default registry paths and the parse rules guards against silent schema changes.
 
 ## GOAL-008-architecture-aware-messages: overflows explain the local architecture
 
@@ -201,7 +208,7 @@ The key promise of [§GND-001-fissile](grund.md#gnd-001-fissile-keep-files-small
 ### 1. What the message knows
 
 - **The matched rule.** The message is selected by the same rule that selected the budget, so `src/http/**` and `src/domain/**` can teach different split patterns.
-- **The architecture citation.** A message's text may cite a `§AR-`, `§FS-`, `§GOAL-`, or project-local exception ID so the reader can pull deeper context only when needed.
+- **The architecture citation.** A message's text may cite a `§AR-`, `§FS-`, or `§GOAL-` ID so the reader can pull deeper context only when needed.
 - **The destination hint.** A message may name a module, directory, owner, or interface boundary that should receive the extracted code.
 - **The expected action.** The text says what to do next: split a helper, extract a fixture, move generated output, add an exception, or tighten the rule.
 

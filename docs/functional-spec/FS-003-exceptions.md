@@ -1,82 +1,105 @@
-# FS-003-exceptions: oversized files are accepted through a cited registry
+# FS-003-exceptions: oversized files are accepted through configured registries
 
-The exception registry is a markdown file, default
-`docs/file-size-exceptions.md`, that records every file or glob accepted above a
-configured limit. It is the only hard-limit escape hatch. The registry is
-reviewable prose plus structured fields: a reviewer can read why the file is
-large, and `fissile` can parse which path, rule, and limit are waived.
+Exception registries are TOML documents that record every file or glob accepted
+above a configured limit. Version 1 uses two registries with configurable paths:
+
+- the soft registry, default `docs/file-size-agent-exceptions.toml`, accepts
+  agent-facing soft-limit warning debt;
+- the hard registry, default `docs/file-size-human-exceptions.toml`, accepts
+  human-reviewed hard-limit blocking debt.
+
+The hard registry is the only hard-limit escape hatch. Both registries are typed
+data plus reviewable rationale: a reviewer or agent can read why the file is
+large, and `fissile` can parse which path and rule are waived. The registry file,
+not a field inside the entry, determines whether an entry waives soft or hard
+findings. Each entry also records the largest accepted measurement, so an
+exception starts reporting again if the file keeps growing.
 
 ## 1. File Shape
 
-The file starts with a normal title:
+The file is a versioned TOML document:
 
-```markdown
-# File Size Exceptions
+```toml
+fissile_exceptions_version = 1
+
+[[exceptions]]
+id = "EX-001-generated-parser-fixture"
+title = "generated parser fixture"
+path = "tests/fixtures/parser/large-corpus.json"
+match = "exact"
+rules = ["fixtures"]
+max_accepted = { value = 300000, unit = "bytes" }
+until = "review after parser fixture generator lands"
+owner = "parser"
+created = "2026-05-26"
+reason = """
+This fixture is intentionally large because it is a golden corpus copied from
+production parser incidents. Retire this exception when the fixture can be
+generated deterministically inside the test or split by parser feature without
+losing incident coverage.
+"""
 ```
 
-Each exception is a second-level grund declaration:
-
-```markdown
-## EX-001-generated-parser-fixture: generated parser fixture
-
-`tests/fixtures/parser/large-corpus.json` is intentionally large because it is a
-golden corpus copied from production parser incidents. Retire this exception when
-the fixture can be generated deterministically inside the test or split by parser
-feature without losing incident coverage.
-
-- **Path:** `tests/fixtures/parser/large-corpus.json`
-- **Match:** exact
-- **Rules:** `fixtures`
-- **Limit waived:** hard
-- **Until:** review after parser fixture generator lands
-- **Owner:** `parser`
-- **Created:** `2026-05-26`
-```
-
-The ID prefix defaults to `EX` and is configured by `[exceptions].kind` in
-§FS-001-config. The declaration body must contain at least one prose paragraph
-before the structured fields. Empty rationales are parse errors.
+`fissile_exceptions_version` is required and must be `1`. Unknown keys are
+errors. The `id` uses the `EX-` prefix and is local to `fissile`; exception files
+are parsed only according to this functional spec.
 
 ## 2. Fields
 
 Required fields:
 
-- `Path`: the repo-relative path or glob being accepted;
-- `Match`: `exact` or `glob`;
-- `Rules`: comma-separated rule IDs, or `*` for every matching rule;
-- `Limit waived`: `soft`, `hard`, or `both`;
-- `Until`: review condition, date, or `indefinite`.
+- `id`: stable local exception ID with the `EX-` prefix;
+- `path`: repo-relative path or glob being accepted;
+- `match`: `exact` or `glob`;
+- `rules`: array of rule IDs, or `["*"]` for every matching rule;
+- `max_accepted.value`: largest measurement this exception accepts;
+- `max_accepted.unit`: `bytes`, `lines`, or `tokens`;
+- `until`: review condition, date, or `indefinite`;
+- `reason`: non-empty rationale explaining why the file is accepted and what
+  would let the exception be retired.
 
 Optional fields:
 
-- `Owner`: team, person, or component responsible for retiring the exception;
-- `Created`: ISO date when the exception was added;
-- `Issue`: tracker URL or ID;
-- `Replaces`: prior exception ID when splitting or renaming entries.
+- `title`: short human-readable label;
+- `owner`: team, person, or component responsible for retiring the exception;
+- `created`: ISO date when the exception was added;
+- `issue`: tracker URL or ID;
+- `replaces`: prior exception ID when splitting or renaming entries.
 
 Unknown fields are errors in version 1 so typos cannot silently weaken the
 registry.
 
 ## 3. Matching
 
-`Match: exact` compares `Path` to the repo-relative normalized path. `Match:
-glob` uses the same glob engine as config rules. An exception applies only when
-both the path matcher and the `Rules` field match the overflow rule. If `Limit
-waived` is `hard`, a soft warning still appears when the file is below the hard
-limit but above the soft limit; `both` silences both tiers.
+`match = "exact"` compares `path` to the repo-relative normalized path.
+`match = "glob"` uses the same glob engine as config rules. An exception applies
+only when the path matcher, the `rules` field, the registry severity, and
+`max_accepted` match the overflow. `max_accepted.unit` uses the matched rule's
+unit and `max_accepted.value` must be greater than or equal to the rule limit for
+the registry severity. A soft-registry entry silences only soft findings at or
+below its accepted maximum. A hard-registry entry silences only hard findings at
+or below its accepted maximum. If the measured value is higher than
+`max_accepted.value`, `fissile` reports the overflow again. If a hard finding is
+silenced and no matching soft exception exists, `fissile` may still emit the soft
+finding so agents can keep minimizing accepted human debt.
 
-When more than one exception matches the same overflow, `fissile` reports a
-schema error. One accepted oversized condition should have one rationale.
+When more than one exception in the same severity registry matches the same
+overflow, `fissile` reports a schema error. One accepted oversized condition at
+one severity should have one rationale. A single exception entry may list
+multiple rules only when all listed rules use the same unit.
 
 ## 4. Validation
 
-`fissile` validates the registry before evaluating overflows:
+`fissile` validates both registries before evaluating overflows:
 
-- every exception ID is unique;
+- every exception ID is unique across both registries;
 - every required field is present once;
-- every listed rule ID exists, unless `Rules: *`;
-- every `§` citation in the rationale resolves under `grund check` when the repo
-  uses grund;
+- every listed rule ID exists, unless `rules = ["*"]`;
+- `max_accepted.value` is a positive integer;
+- `max_accepted.unit` is `bytes`, `lines`, or `tokens`;
+- `max_accepted.unit` matches every rule the entry can silence;
+- `max_accepted.value` is at least the corresponding soft or hard rule limit;
+- `reason` is not empty after trimming whitespace;
 - every matched path is inside the scan scope unless stale handling is disabled;
 - every stale entry follows `[exceptions].stale`: `warn`, `error`, or `ignore`.
 
@@ -86,14 +109,20 @@ because a staged deletion may make the path temporarily absent. Whole-repo
 
 ## 5. Output
 
-An overflow silenced by an exception emits no default finding. In verbose audit
-output, `fissile` includes the exception ID so a reviewer can resolve the
-rationale:
+An overflow silenced by an exception emits no default finding for that severity.
+In verbose audit output, `fissile` includes the exception ID and severity so a
+reviewer can resolve the rationale:
 
 ```text
-tests/fixtures/parser/large-corpus.json: exception EX-001-generated-parser-fixture
+tests/fixtures/parser/large-corpus.json: hard exception EX-001-generated-parser-fixture (accepted up to 300000 bytes)
 ```
 
-JSON output carries the same ID as `exception_id`.
+JSON output carries the same ID as `exception_id` and the same ceiling as
+`exception_max`.
 
-An example registry lives at `examples/file-size-exceptions.md`.
+## 6. Adding Entries
+
+`fissile exception add` (§FS-005-exception-add) is the supported command for
+adding entries. It measures exact-path files, chooses the configured soft or hard
+registry, writes `max_accepted`, and validates the result before modifying the
+registry.

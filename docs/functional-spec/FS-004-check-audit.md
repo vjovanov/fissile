@@ -3,7 +3,7 @@
 `fissile check` and `fissile audit` are the user-visible enforcement surfaces
 for the library core. `check` is the commit-time gate; `audit` is the whole-repo
 inventory and migration tool. Both use the same effective config, rule
-resolution, exclusions, messages, and exception registry.
+resolution, exclusions, messages, and exception registries.
 
 ## 1. Check
 
@@ -13,10 +13,11 @@ fissile check [--staged] [--config <path>] [--format text|json] [--no-color]
 
 `check --staged` receives the file set from git and applies `[scan].exclude`.
 Without `--staged`, `check` evaluates the paths passed by the caller or the
-configured scan scope. A soft overflow exits `0`; a hard overflow exits non-zero
-unless an accepted exception applies. Severity is not configurable. This is the
-stable CI/pre-commit contract: the same config must produce the same pass/fail
-result locally and remotely (§GOAL-003-friendly-output).
+configured scan scope. A soft overflow exits `0` unless a matching soft
+exception applies; a hard overflow exits non-zero unless a matching hard
+exception applies. Severity is not configurable. This is the stable
+CI/pre-commit contract: the same config must produce the same pass/fail result
+locally and remotely (§GOAL-003-friendly-output).
 
 Text output for an overflow has a compact finding line plus, when configured, a
 single rendered guidance line:
@@ -37,6 +38,7 @@ JSON output emits one record per overflow with at least:
 - `message_id`
 - `message`
 - `exception_id`, when applicable in verbose output
+- `exception_max`, when an exception is reported in verbose output
 
 When no findings are emitted, text output prints exactly `ok`; JSON output emits
 no success envelope.

@@ -31,10 +31,10 @@ color = "auto" # auto | always | never
 success = "ok"
 
 [exceptions]
-# Structured oversized-file rationales. Each entry is a grund declaration whose
-# body explains why the file is large and when the exception should be revisited.
-registry = "docs/file-size-exceptions.md"
-kind = "EX"
+# Structured oversized-file rationales. Each entry has a typed ceiling so
+# findings resume if the accepted file keeps growing.
+soft_registry = "docs/file-size-agent-exceptions.toml"
+hard_registry = "docs/file-size-human-exceptions.toml"
 stale = "warn" # warn | error | ignore
 
 [tokens]
@@ -58,7 +58,7 @@ action = "extract a narrower declaration and cite it from the parent"
 
 [[messages]]
 id = "large-fixture"
-text = "Large fixture {path}: move generated or bulky test data out of the source tree, or add a cited exception (§GOAL-007-justified-exceptions)."
+text = "Large fixture {path}: move generated or bulky test data out of the source tree, or add a written exception (§GOAL-007-justified-exceptions)."
 owner = "test"
 destination = "tests/fixtures/"
 action = "shrink the fixture, generate it in the test, or register an exception"
