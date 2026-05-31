@@ -15,7 +15,7 @@ Current goals:
 
 ## GOAL-001-fast-feedback: the hook is imperceptible
 
-A pre-commit hook is run by a human waiting on a prompt. If it is slower than a heartbeat the human routes around it — `--no-verify`, uninstall, or quiet resentment — and the protection [§GND-001-fissile](grund.md#gnd-001-fissile-steer-agents-toward-smaller-files-to-spend-fewer-tokens-without-risking-architecture-or-correctness) promised never lands. So speed is not a target; it is the *ordering principle* of this tool. When a design choice trades clarity, generality, or features for raw throughput on the hook path, raw throughput wins.
+A pre-commit hook is run by a human waiting on a prompt. If it is slower than a heartbeat the human routes around it — `--no-verify`, uninstall, or quiet resentment — and the protection [§GND-001-fissile](grund.md#gnd-001-fissile-steer-agents-toward-leaner-files--fewer-tokens-architecture-intact) promised never lands. So speed is not a target; it is the *ordering principle* of this tool. When a design choice trades clarity, generality, or features for raw throughput on the hook path, raw throughput wins.
 
 ### 1. Performance targets
 
@@ -36,7 +36,7 @@ Manual timing on the library core and on a synthetic 10k-file batch should stay 
 
 ## GOAL-002-tiny-footprint: one small static binary, no runtime
 
-This tool is dropped into other people's repos. Every megabyte it adds and every runtime it requires is friction that the next contributor pays. So: a single statically-linked binary, on the order of a few MB stripped, with no Python/Node/JVM dependency at install time and a dependency tree small enough to audit on one screen. This is the *adoption* contract for [§GND-001-fissile](grund.md#gnd-001-fissile-steer-agents-toward-smaller-files-to-spend-fewer-tokens-without-risking-architecture-or-correctness): a tool that nags you to keep your repo small had better keep itself small first.
+This tool is dropped into other people's repos. Every megabyte it adds and every runtime it requires is friction that the next contributor pays. So: a single statically-linked binary, on the order of a few MB stripped, with no Python/Node/JVM dependency at install time and a dependency tree small enough to audit on one screen. This is the *adoption* contract for [§GND-001-fissile](grund.md#gnd-001-fissile-steer-agents-toward-leaner-files--fewer-tokens-architecture-intact): a tool that nags you to keep your repo small had better keep itself small first.
 
 ### 1. Hard requirements
 
@@ -133,7 +133,7 @@ A single threshold is a false economy. Set it low and the tool nags constantly u
 
 The warning is the load-bearing surface for an agent. Its finding shape is fixed so an agent can pattern-match on it without prose parsing: `path: <actual> <unit> > <soft-limit> <unit> [soft, rule: <name>, message: <id>]`. The companion line in the managed `AGENTS.md` block (written by `fissile init`, parallel to grund's pattern) names this output and the expected response: *if you wrote this file in this turn, follow the configured architecture guidance and try to bring it back under the soft limit; if you did not, leave it alone unless the task is about that file*.
 
-This is the half of [§GND-001-fissile](grund.md#gnd-001-fissile-steer-agents-toward-smaller-files-to-spend-fewer-tokens-without-risking-architecture-or-correctness)'s promise that pays off continuously — not by blocking commits, but by making "shrink the file you just grew in the way this repo expects" the path of least resistance for the agent that grew it.
+This is the half of [§GND-001-fissile](grund.md#gnd-001-fissile-steer-agents-toward-leaner-files--fewer-tokens-architecture-intact)'s promise that pays off continuously — not by blocking commits, but by making "shrink the file you just grew in the way this repo expects" the path of least resistance for the agent that grew it.
 
 ### 3. What this rules out
 
@@ -149,7 +149,7 @@ E2E fixtures cover all four states per rule: clean, soft-only, hard-only, both. 
 
 The hard limit ([§GOAL-006-graded-limits](goals.md#goal-006-graded-limits-soft-warns-hard-blocks-ai-minimizes)) has no override flag. It does have one escape hatch — a structured hard exceptions registry where each oversized file is declared with a written rationale and a maximum accepted measurement. Soft warnings have a parallel soft exceptions registry for agent-facing debt that the repository has deliberately accepted. The registries are the paper trail: every accepted oversized file has, somewhere in the repo, a paragraph explaining why, and that paragraph carries a stable local ID for output and review.
 
-This is the contract that lets [§GND-001-fissile](grund.md#gnd-001-fissile-steer-agents-toward-smaller-files-to-spend-fewer-tokens-without-risking-architecture-or-correctness) hold under real-world adoption. A team turning the tool on for the first time will have files over the soft and hard limits on day one; the registries are how they accept the current state without disabling the guard, and how the next reviewer or agent can tell "this file is large for a reason" from "this file is large because nobody noticed."
+This is the contract that lets [§GND-001-fissile](grund.md#gnd-001-fissile-steer-agents-toward-leaner-files--fewer-tokens-architecture-intact) hold under real-world adoption. A team turning the tool on for the first time will have files over the soft and hard limits on day one; the registries are how they accept the current state without disabling the guard, and how the next reviewer or agent can tell "this file is large for a reason" from "this file is large because nobody noticed."
 
 ### 1. What the registries are
 
@@ -203,7 +203,7 @@ E2E fixtures cover: `fissile exception add` appending soft and hard entries; a h
 
 ## GOAL-008-architecture-aware-messages: overflows can carry local remediation guidance
 
-The key promise of [§GND-001-fissile](grund.md#gnd-001-fissile-steer-agents-toward-smaller-files-to-spend-fewer-tokens-without-risking-architecture-or-correctness) is not only that the library notices large files on every commit. It gives the repository a place to say what it already knows: which boundary the file is pressing against, where new code should move, and which local rule explains that move. The tool guarantees the slot and keeps it bounded; whether a given message names real architecture is the project's choice, and the built-in defaults stay deliberately generic.
+The key promise of [§GND-001-fissile](grund.md#gnd-001-fissile-steer-agents-toward-leaner-files--fewer-tokens-architecture-intact) is not only that the library notices large files on every commit. It gives the repository a place to say what it already knows: which boundary the file is pressing against, where new code should move, and which local rule explains that move. The tool guarantees the slot and keeps it bounded; whether a given message names real architecture is the project's choice, and the built-in defaults stay deliberately generic.
 
 ### 1. What a message may carry
 

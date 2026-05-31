@@ -1,8 +1,8 @@
 ## Keeping Files Small With fissile (v1)
 
 This repository uses [`fissile`](https://github.com/vjovanov/fissile) to keep
-files small so agents spend fewer tokens reading them — without risking
-architecture or correctness. It is a simple guard, not a style police.
+files small so agents spend fewer tokens reading them, while respecting the
+architecture. It is a simple guard, not a style police.
 
 - Run `fissile check --staged` before claiming work is done.
 - Treat a **soft** overflow as actionable guidance when you changed the file:

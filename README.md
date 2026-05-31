@@ -1,7 +1,7 @@
 # fissile
 
-`fissile` does one simple thing: it helps agents keep repository files small so
-they spend fewer tokens, without putting architecture or correctness at risk. It
+`fissile` does one simple thing: it steers agents toward smaller repository
+files so they spend fewer tokens, while respecting the architecture. It
 checks measured files against configured size budgets and returns structured
 overflow findings, and each finding can carry a short, project-configured
 message suggesting how to split the file. It only measures and reports; it never
