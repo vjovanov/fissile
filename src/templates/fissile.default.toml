@@ -1,0 +1,85 @@
+# fissile configuration (§FS-001-config).
+#
+# Every value is written explicitly at its default so the file is editable in
+# place without consulting the spec (§DF-002-explicit-config). The defaults are
+# deliberately generic; tune the rules and messages to match this repository's
+# architecture once you know its layout.
+
+fissile_config_version = 1
+
+[scan]
+# `audit` walks these roots; `check --staged` ignores them and takes its file
+# set from git. Both honor `exclude`.
+include = ["src", "tests", "benches", "docs", "README.md"]
+exclude = [
+  "target/**",
+  "node_modules/**",
+  ".git/**",
+  "dist/**",
+  "build/**",
+  "vendor/**",
+  "**/*.lock",
+  "**/*.min.*",
+  "**/*.png",
+  "**/*.jpg",
+  "**/*.jpeg",
+  "**/*.gif",
+  "**/*.webp",
+  "**/*.pdf",
+]
+respect_gitignore = true
+
+[output]
+format = "text" # text | json
+color = "auto"  # auto | always | never
+success = "ok"
+
+[exceptions]
+soft_registry = "docs/file-size-agent-exceptions.toml"
+hard_registry = "docs/file-size-human-exceptions.toml"
+stale = "warn" # warn | error | ignore
+
+[tokens]
+# Token budgets are opt-in; bytes and lines work without external tooling.
+enabled = false
+command = ["token-counter", "--count", "{path}"]
+
+[[messages]]
+id = "split-source"
+text = "Split {path}: move cohesive helpers into a sibling module before adding more code (§GOAL-008-architecture-aware-messages)."
+
+[[messages]]
+id = "split-doc"
+text = "Split {path}: keep the declaration focused and move secondary detail into a cited child spec (§GOAL-008-architecture-aware-messages)."
+
+[[messages]]
+id = "large-file-default"
+text = "Large file {path}: exclude generated/binary assets, or add a narrower rule with local guidance (§FS-001-config.3.3)."
+
+[[rules]]
+id = "large-file-default"
+include = ["**/*"]
+unit = "bytes"
+soft = 524288
+hard = 1048576
+message = "large-file-default"
+
+[[rules]]
+id = "source"
+include = ["src/**/*", "tests/**/*", "benches/**/*"]
+unit = "lines"
+soft = 350
+hard = 550
+count_blank_lines = false
+count_comment_lines = true
+message = "split-source"
+
+[[rules]]
+id = "markdown-docs"
+include = ["docs/**/*.md", "README.md"]
+unit = "lines"
+soft = 250
+hard = 500
+count_blank_lines = false
+count_comment_lines = true
+message = "split-doc"

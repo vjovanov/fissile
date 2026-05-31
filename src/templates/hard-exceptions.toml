@@ -1,0 +1,20 @@
+# Hard (human-reviewed) file-size exception registry (§FS-003-exceptions).
+#
+# This is the only escape hatch for a hard-limit overflow short of disabling the
+# rule. Each entry is human-reviewed blocking debt with a written reason and a
+# maximum accepted size so the failure returns if the file grows past it. Add
+# entries with `fissile exception add --severity hard` (§FS-005-exception-add).
+
+fissile_exceptions_version = 1
+
+# [[exceptions]]
+# id = "EX-001-example"
+# path = "path/to/large-file"
+# match = "exact"               # exact | glob
+# rules = ["*"]                 # rule ids this applies to, or ["*"] for all
+# max_accepted = { value = 0, unit = "lines" }
+# until = "indefinite"
+# reason = """
+# Why this file is accepted as oversized, and what would let the exception be
+# retired.
+# """

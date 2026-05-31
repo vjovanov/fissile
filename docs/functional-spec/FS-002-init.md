@@ -41,7 +41,9 @@ Default `fissile init` writes:
 
 - one agent entrypoint or managed block, per §3;
 - `<path>/.agents/fissile.toml`, when absent, using the schema from
-  §FS-001-config.
+  §FS-001-config. The generated config is fully populated: every schema field is
+  written at its default value, ready to edit in place, rather than a minimal
+  skeleton (§DF-002-explicit-config).
 
 With `--exceptions`, it also writes the configured exception registries, default
 `docs/file-size-agent-exceptions.toml` and

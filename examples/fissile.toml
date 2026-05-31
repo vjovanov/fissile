@@ -1,5 +1,9 @@
 # Proposed fissile configuration shape.
 # Copy to the target repository as `.agents/fissile.toml`.
+#
+# Every value is spelled out at its default so the file is editable in place
+# without consulting the spec; omitting a field is also legal and takes the same
+# default (§DF-002-explicit-config).
 
 fissile_config_version = 1
 
@@ -72,7 +76,7 @@ include = ["src/**/*.rs", "benches/**/*.rs"]
 unit = "lines"
 soft = 350
 hard = 550
-count_blank_lines = true
+count_blank_lines = false
 count_comment_lines = true
 message = "split-rust-module"
 
@@ -82,6 +86,8 @@ include = ["src/**/*.gen.rs"]
 unit = "lines"
 soft = 1200
 hard = 2000
+count_blank_lines = false
+count_comment_lines = true
 # Explicit priority resolves overlap with broader Rust source rules. Higher wins.
 priority = 20
 message = "split-rust-module"
@@ -92,6 +98,8 @@ include = ["tests/**/*.rs"]
 unit = "lines"
 soft = 450
 hard = 700
+count_blank_lines = false
+count_comment_lines = true
 message = "split-rust-module"
 
 [[rules]]
@@ -100,6 +108,8 @@ include = ["docs/**/*.md", "README.md", "CLAUDE.md"]
 unit = "lines"
 soft = 250
 hard = 500
+count_blank_lines = false
+count_comment_lines = true
 message = "split-doc"
 
 [[rules]]

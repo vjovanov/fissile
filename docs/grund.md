@@ -1,4 +1,4 @@
-# GND-001-fissile: Keep files small on every commit with architecture-aware overflow messages.
+# GND-001-fissile: Help agents keep files small to spend fewer tokens, without risking architecture or correctness.
 
 Large files are an invisible tax on every AI-assisted workflow in a repo. A 4,000-line module
 or a multi-megabyte fixture gets dragged into context whenever an agent (or a reviewer) needs
@@ -27,13 +27,16 @@ usually a mistake. A useful guard has to know the difference.
 
 ## 2. What this project does about it
 
-`fissile` is a small Rust library and CLI that enforces per-repo, per-file-type size
-budgets at the moment new content is introduced. The name is part of the product contract:
-a file over budget is fissile because it is ready to split under its own accumulated mass
-(§DF-001-tool-name). The library keeps files small on every commit by pairing each overflow
-with a short, architecture-aware, user-customizable message that tells the next contributor
-how this repository wants the file split (§GOAL-008-architecture-aware-messages).
-The CLI runs in two modes:
+`fissile` does one simple thing. At the moment new content is introduced, it flags files that
+have outgrown a per-repo, per-file-type size budget, so that agents and reviewers spend fewer
+tokens whenever one of those files is pulled into context. It only measures and reports; it
+never rewrites code, so it cannot put the repository's architecture or correctness at risk —
+how to split a flagged file is always the contributor's decision. The name carries the
+contract: a file over budget is *fissile* because it is ready to split under its own
+accumulated mass (§DF-001-tool-name). Each overflow can also carry a short, project-configured
+message suggesting how this repository prefers such a file to be split, but that guidance is
+help layered on top, not the point (§GOAL-008-architecture-aware-messages). The CLI runs in
+two modes:
 
 - as a **pre-commit hook** that checks staged files and refuses the commit when a hard budget
   is exceeded, with a configured message that explains the local architectural remedy;

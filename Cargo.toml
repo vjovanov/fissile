@@ -2,7 +2,7 @@
 name = "fissile"
 version = "0.1.0"
 edition = "2024"
-description = "Keep repository files small with architecture-aware overflow messages."
+description = "Help agents keep files small to spend fewer tokens, without risking architecture or correctness."
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 documentation = "https://docs.rs/fissile"
@@ -13,7 +13,16 @@ categories = ["development-tools"]
 name = "fissile"
 path = "src/lib.rs"
 
+[[bin]]
+name = "fissile"
+path = "src/main.rs"
+
 [dependencies]
+# Config is data, not code (§GOAL-002-tiny-footprint): serde + toml parse the
+# versioned TOML document. The glob engine and CLI argument parsing are
+# hand-rolled to keep the dependency tree auditable on one screen.
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
 
 # Bench-only. The real benchmark body is gated behind the `bench` feature so
 # normal build/test jobs compile a no-op bench target and never need Valgrind.

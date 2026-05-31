@@ -26,6 +26,11 @@ identity. `fissile` earns its keep when projects replace the generic defaults
 with named, project-specific rules and messages that can speak to local
 architecture.
 
+A hand-written config may omit any field and take its default; an omitted field
+is not an error. The config that `fissile init` *generates*, however, is fully
+populated — every field is written out at its default so the file is editable
+without consulting this spec (§DF-002-explicit-config).
+
 ## 1. Top-level version
 
 Every config starts with:
@@ -75,13 +80,16 @@ it. A config with anonymous or auto-numbered rules is invalid.
 
 Line rules may define what counts:
 
-- `count_blank_lines`: boolean, default `true`;
+- `count_blank_lines`: boolean, default `false`;
 - `count_comment_lines`: boolean, default `true`.
 
-The defaults measure physical file size, which is the most honest proxy for
-token and review cost. Projects may set either field to `false` when they want a
-style-lint-like line budget instead. The policy is per rule because generated
-docs, tests, and source files often need different treatment.
+The defaults count lines that carry content — code and comments — but ignore
+blank separator lines, so readable spacing is never what pushes a file over
+budget. Counting comments by default keeps documentation honest about its review
+and token cost. Projects may flip either field: set `count_blank_lines = true`
+to measure raw physical file size, or `count_comment_lines = false` for a
+code-only budget. The policy is per rule because generated docs, tests, and
+source files often need different treatment.
 
 ### 3.2 Overlapping Rules
 

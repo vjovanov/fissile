@@ -9,6 +9,12 @@ use std::error::Error;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
+mod glob;
+pub mod config;
+pub mod init;
+
+pub use glob::Glob;
+
 /// The unit a size budget is measured in.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Unit {
@@ -68,6 +74,10 @@ pub enum Selector {
     Extension(String),
     Prefix(String),
     Exact(String),
+    /// One or more globs; the selector matches when any glob matches. This is
+    /// the variant produced from a config rule's `include` list
+    /// (§FS-001-config.3).
+    Glob(Vec<Glob>),
 }
 
 impl Selector {
@@ -80,6 +90,10 @@ impl Selector {
                 .is_some_and(|value| value == extension.trim_start_matches('.')),
             Selector::Prefix(prefix) => path.to_string_lossy().starts_with(prefix),
             Selector::Exact(expected) => path.to_string_lossy() == expected.as_str(),
+            Selector::Glob(globs) => {
+                let path = path.to_string_lossy();
+                globs.iter().any(|glob| glob.matches(&path))
+            }
         }
     }
 
@@ -89,6 +103,10 @@ impl Selector {
             Selector::Extension(extension) => (1, extension.trim_start_matches('.').len()),
             Selector::Prefix(prefix) => (2, prefix.len()),
             Selector::Exact(path) => (3, path.len()),
+            // Only consulted when a glob selector is compared against a
+            // non-glob one, which a config-built checker never does; glob-vs-glob
+            // overlap uses the partial order in `selector_specificity_cmp`.
+            Selector::Glob(_) => (2, 0),
         }
     }
 }
@@ -144,6 +162,13 @@ pub struct Rule {
     pub budget: Budget,
     pub message: MessageTemplate,
     pub priority: i32,
+    /// Whether blank lines count toward a `lines` budget. Default `false`
+    /// (§FS-001-config.3.1).
+    pub count_blank_lines: bool,
+    /// Whether comment lines count toward a `lines` budget; default `true`
+    /// (§FS-001-config.3.1). Stored for the future driver (§FS-004-check-audit);
+    /// comment-line exclusion is not applied by [`count_lines`] yet.
+    pub count_comment_lines: bool,
 }
 
 impl Rule {
@@ -159,11 +184,20 @@ impl Rule {
             budget,
             message,
             priority: 0,
+            count_blank_lines: false,
+            count_comment_lines: true,
         }
     }
 
     pub fn with_priority(mut self, priority: i32) -> Self {
         self.priority = priority;
+        self
+    }
+
+    /// Set the line-counting policy (§FS-001-config.3.1).
+    pub fn with_line_policy(mut self, count_blank_lines: bool, count_comment_lines: bool) -> Self {
+        self.count_blank_lines = count_blank_lines;
+        self.count_comment_lines = count_comment_lines;
         self
     }
 
@@ -235,6 +269,19 @@ pub fn measure_text(path: impl Into<PathBuf>, text: &str) -> FileMeasurement {
 /// Measure arbitrary bytes by byte count only.
 pub fn measure_bytes(path: impl Into<PathBuf>, bytes: &[u8]) -> FileMeasurement {
     FileMeasurement::new(path, bytes.len() as u64)
+}
+
+/// Count the logical lines of `text` under a line-counting policy
+/// (§FS-001-config.3.1): blank/whitespace-only lines are skipped when
+/// `count_blank_lines` is false. Comment-line exclusion is not handled here.
+pub fn count_lines(text: &str, count_blank_lines: bool) -> u64 {
+    if text.is_empty() {
+        return 0;
+    }
+
+    text.lines()
+        .filter(|line| count_blank_lines || !line.trim().is_empty())
+        .count() as u64
 }
 
 /// Overflow severity.
@@ -358,7 +405,7 @@ impl Checker {
                 .iter()
                 .position(|candidate| candidate.rule.budget.unit == rule.budget.unit)
             {
-                Some(index) => match compare_rules(rule, selected[index].rule) {
+                Some(index) => match compare_rules(rule, selected[index].rule, &file.path) {
                     Ordering::Greater => {
                         selected[index] = EffectiveRule {
                             rule,
@@ -402,12 +449,41 @@ struct EffectiveRule<'a> {
     tied_rule_ids: Vec<String>,
 }
 
-fn compare_rules(left: &Rule, right: &Rule) -> Ordering {
-    left.priority.cmp(&right.priority).then_with(|| {
-        left.selector
-            .specificity()
-            .cmp(&right.selector.specificity())
-    })
+fn compare_rules(left: &Rule, right: &Rule, path: &Path) -> Ordering {
+    left.priority
+        .cmp(&right.priority)
+        .then_with(|| selector_specificity_cmp(&left.selector, &right.selector, path))
+}
+
+/// Compare two selectors' specificity for a path. Glob-vs-glob uses the glob
+/// engine's partial order — incomparable globs collapse to `Equal` so the caller
+/// raises an ambiguity error (§FS-001-config.3.2); other pairings use tiers.
+fn selector_specificity_cmp(left: &Selector, right: &Selector, path: &Path) -> Ordering {
+    match (left, right) {
+        (Selector::Glob(left_globs), Selector::Glob(right_globs)) => {
+            let path = path.to_string_lossy();
+            match (
+                best_glob_spec(left_globs, &path),
+                best_glob_spec(right_globs, &path),
+            ) {
+                (Some(left_spec), Some(right_spec)) => left_spec.cmp_specificity(&right_spec),
+                _ => Ordering::Equal,
+            }
+        }
+        _ => left.specificity().cmp(&right.specificity()),
+    }
+}
+
+/// The specificity of the most-specific glob in `globs` that matches `path`.
+fn best_glob_spec(globs: &[Glob], path: &str) -> Option<glob::GlobSpec> {
+    globs
+        .iter()
+        .filter(|glob| glob.matches(path))
+        .map(Glob::spec)
+        .reduce(|best, candidate| match candidate.cmp_specificity(&best) {
+            Ordering::Greater => candidate,
+            _ => best,
+        })
 }
 
 fn render_template(template: &str, context: &MessageContext<'_>) -> String {

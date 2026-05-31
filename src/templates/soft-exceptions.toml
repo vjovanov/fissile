@@ -1,0 +1,20 @@
+# Soft (agent-facing) file-size exception registry (§FS-003-exceptions).
+#
+# Entries here silence soft-limit warnings for files this repo has deliberately
+# accepted as oversized, each with a written reason and a maximum accepted size
+# so the warning returns if the file grows past it. Add entries with
+# `fissile exception add --severity soft` (§FS-005-exception-add).
+
+fissile_exceptions_version = 1
+
+# [[exceptions]]
+# id = "EX-001-example"
+# path = "path/to/large-file"
+# match = "exact"               # exact | glob
+# rules = ["*"]                 # rule ids this applies to, or ["*"] for all
+# max_accepted = { value = 0, unit = "lines" }
+# until = "indefinite"
+# reason = """
+# Why this file is accepted as oversized, and what would let the exception be
+# retired.
+# """

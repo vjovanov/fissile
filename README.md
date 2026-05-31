@@ -1,12 +1,19 @@
 # fissile
 
-`fissile` is a Rust library for keeping repository files small on every commit.
-It checks measured files against configured size budgets and returns structured
-overflow findings with short, architecture-aware messages that a project can
-customize per rule.
+`fissile` does one simple thing: it helps agents keep repository files small so
+they spend fewer tokens, without putting architecture or correctness at risk. It
+checks measured files against configured size budgets and returns structured
+overflow findings, and each finding can carry a short, project-configured
+message suggesting how to split the file. It only measures and reports; it never
+rewrites code, so how to split a flagged file is always the contributor's
+decision (§GND-001-fissile).
 
-The crate is currently the library core. A CLI can build on top of it to provide
-pre-commit and audit workflows.
+The crate is both a library and a `fissile` binary. The binary currently
+provides `fissile init`, which writes a fully populated starter config, the
+exception registries, and a managed agent-instruction block (§FS-002-init); the
+library loads and validates that config (§FS-001-config) and evaluates files
+against it. The `check`, `audit`, and `exception` commands are specified but not
+yet wired into the CLI.
 
 The proposed repository config is documented in
 `docs/functional-spec/FS-001-config.md`; a concrete sample lives at

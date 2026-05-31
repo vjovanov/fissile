@@ -76,7 +76,7 @@ include = ["src/**/*.rs"]
 unit = "lines"
 soft = 700
 hard = 900
-count_blank_lines = true
+count_blank_lines = false
 count_comment_lines = true
 message = "split-rust-library"
 
@@ -86,7 +86,7 @@ include = ["benches/**/*.rs"]
 unit = "lines"
 soft = 250
 hard = 400
-count_blank_lines = true
+count_blank_lines = false
 count_comment_lines = true
 message = "split-rust-benchmark"
 
@@ -96,6 +96,8 @@ include = ["docs/**/*.md", "README.md", "CLAUDE.md", "examples/**/*.md", "e2e/**
 unit = "lines"
 soft = 225
 hard = 350
+count_blank_lines = false
+count_comment_lines = true
 message = "split-spec"
 
 [[rules]]
@@ -104,6 +106,8 @@ include = [".github/**/*.yml", ".github/**/*.yaml", "scripts/**/*.sh"]
 unit = "lines"
 soft = 200
 hard = 350
+count_blank_lines = false
+count_comment_lines = true
 message = "split-tooling"
 
 [[rules]]
@@ -112,4 +116,6 @@ include = ["**/*.toml"]
 unit = "lines"
 soft = 180
 hard = 300
+count_blank_lines = false
+count_comment_lines = true
 message = "split-tooling"
