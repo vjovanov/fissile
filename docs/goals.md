@@ -11,7 +11,7 @@ Current goals:
 - [§GOAL-005-configurable](goals.md#goal-005-configurable-every-limit-and-message-overridable-per-file-type-and-path)
 - [§GOAL-006-graded-limits](goals.md#goal-006-graded-limits-soft-warns-hard-blocks-ai-minimizes)
 - [§GOAL-007-justified-exceptions](goals.md#goal-007-justified-exceptions-every-oversized-file-has-a-written-reason)
-- [§GOAL-008-architecture-aware-messages](goals.md#goal-008-architecture-aware-messages-overflows-explain-the-local-architecture)
+- [§GOAL-008-architecture-aware-messages](goals.md#goal-008-architecture-aware-messages-overflows-can-carry-local-remediation-guidance)
 
 ## GOAL-001-fast-feedback: the hook is imperceptible
 
@@ -61,7 +61,7 @@ A pre-commit hook that says "rejected" is worse than no hook at all. When the ch
 
 - **Errors point at the file.** Every diagnostic is `path: <actual> <unit> exceeds <limit> <unit> (rule: <rule-name>)`. Editors and agents jump to the path unmodified.
 - **The fix is named.** When a limit was crossed, the diagnostic names the config key that controls it (e.g. `[limits.ts] lines = 400`) and the message rule that produced the remediation text.
-- **The local remedy is present.** An overflow includes the project's configured guidance for that rule: destination module, ownership boundary, extraction pattern, or architecture citation ([§GOAL-008-architecture-aware-messages](goals.md#goal-008-architecture-aware-messages-overflows-explain-the-local-architecture)).
+- **The local remedy is present.** An overflow includes the project's configured guidance for that rule: destination module, ownership boundary, extraction pattern, or architecture citation ([§GOAL-008-architecture-aware-messages](goals.md#goal-008-architecture-aware-messages-overflows-can-carry-local-remediation-guidance)).
 - **Output is parseable.** A `--format=json` flag emits a stable JSON shape, one record per violation, suitable for LLM consumption and editor integration.
 - **Help is one screen.** `fissile --help` fits in 24 lines and every flag carries a one-line example.
 - **Explicit success.** A passing text run prints exactly `ok` on stdout; the JSON form stays diagnostics-only.
@@ -103,7 +103,7 @@ Sensible defaults out of the box; full override when a project's reality diverge
 - **Limits per unit.** Bytes, lines, or tokens. A rule names the unit it uses; mixing is allowed across rules but not within one.
 - **Limits per file type.** Per extension (`.ts`, `.py`, …) and per glob (`src/**/*.gen.rs`). Each rule carries both a soft and a hard limit ([§GOAL-006-graded-limits](goals.md#goal-006-graded-limits-soft-warns-hard-blocks-ai-minimizes)).
 - **Exclusions.** Globs that opt files out of being checked at all — lockfiles, vendored code, generated artifacts, binaries. Exclusions need no rationale because the tool obviously does not apply; defaults cover the obvious cases so a fresh install does not immediately false-positive. Distinct from *exceptions* ([§GOAL-007-justified-exceptions](goals.md#goal-007-justified-exceptions-every-oversized-file-has-a-written-reason)), which keep the file under check but accept it as oversized for a written reason in the soft or hard registry.
-- **Overflow messages.** Each rule may name a message template. Templates are short text blocks with stable IDs, inline citations when useful, and optional owner, destination path, and suggested split fields.
+- **Overflow messages.** Each rule may name a message template. Templates are short text blocks with stable IDs and inline citations when useful; the destination, owner, and split hints live in the message text.
 - **Scope.** Which directories are walked by `audit`; pre-commit always scopes to staged files.
 - **Output defaults.** Format (`text` / `json`) and color, overridable per invocation.
 
@@ -201,21 +201,23 @@ The `EX-` ID is local to `fissile`; the parsing contract lives in
 
 E2E fixtures cover: `fissile exception add` appending soft and hard entries; a hard registry with a single exception silencing a hard violation; a soft registry with a single exception silencing a soft warning; a file that outgrows its exception's maximum accepted size and reports again; a registry whose exception names a path that no longer exists (audit must flag it stale); and a registry entry whose rationale is empty (parse error). A snapshot test on the default registry paths and the parse rules guards against silent schema changes.
 
-## GOAL-008-architecture-aware-messages: overflows explain the local architecture
+## GOAL-008-architecture-aware-messages: overflows can carry local remediation guidance
 
-The key promise of [§GND-001-fissile](grund.md#gnd-001-fissile-keep-files-small-on-every-commit-with-architecture-aware-overflow-messages) is not only that the library notices large files on every commit. It tells the contributor what the repository already knows: which architectural boundary the file is pressing against, where new code should move, and which local rule explains that move.
+The key promise of [§GND-001-fissile](grund.md#gnd-001-fissile-keep-files-small-on-every-commit-with-architecture-aware-overflow-messages) is not only that the library notices large files on every commit. It gives the repository a place to say what it already knows: which boundary the file is pressing against, where new code should move, and which local rule explains that move. The tool guarantees the slot and keeps it bounded; whether a given message names real architecture is the project's choice, and the built-in defaults stay deliberately generic.
 
-### 1. What the message knows
+### 1. What a message may carry
 
-- **The matched rule.** The message is selected by the same rule that selected the budget, so `src/http/**` and `src/domain/**` can teach different split patterns.
-- **The architecture citation.** A message's text may cite a `§AR-`, `§FS-`, or `§GOAL-` ID so the reader can pull deeper context only when needed.
-- **The destination hint.** A message may name a module, directory, owner, or interface boundary that should receive the extracted code.
-- **The expected action.** The text says what to do next: split a helper, extract a fixture, move generated output, add an exception, or tighten the rule.
+- **The matched rule.** The message is selected by the same rule that selected the budget, so `src/http/**` and `src/domain/**` can teach different split patterns when a project configures them to.
+- **An architecture citation.** A message's text may cite a `§AR-`, `§FS-`, or `§GOAL-` ID so the reader can pull deeper context only when needed.
+- **A destination hint.** A message may name a module, directory, owner, or interface boundary that should receive the extracted code.
+- **A next step.** The text may say what to do next: split a helper, extract a fixture, move generated output, add an exception, or tighten the rule.
+
+None of these are required. A rule may point at a generic message, and the defaults do exactly that rather than pretending to know a repository's layout.
 
 ### 2. Constraints
 
-Messages are project-owned but not arbitrary scripts. They are static templates with bounded length, stable IDs, and explicit owner/destination/action fields. They cannot run code, inspect file contents beyond the matched rule, or change pass/fail behavior. The finding remains machine-readable; the message is the local architectural explanation layered on top.
+Messages are project-owned but not arbitrary scripts. They are static templates with bounded length and stable IDs, carrying any destination, owner, or next-step hint inline in the text. They cannot run code, inspect file contents beyond the matched rule, or change pass/fail behavior. The finding remains machine-readable; the message is whatever local guidance the project chose to layer on top.
 
 ### 3. Measurable
 
-E2E fixtures cover rule-specific messages, a message that cites an architecture declaration, a missing citation that fails validation, and JSON output that includes both the message ID and rendered guidance.
+E2E fixtures cover rule-specific messages, a message that cites an architecture declaration, a generic message with no citation that still validates, and JSON output that includes both the message ID and rendered guidance.

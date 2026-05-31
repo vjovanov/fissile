@@ -103,7 +103,8 @@ The canonical v1 block teaches:
   file;
 - treat hard overflows as stop-the-line failures unless a structured exception
   exists;
-- read the message ID and guidance line as the local architecture instruction;
+- read the message ID and guidance line as the configured remediation guidance
+  for that rule;
 - use `fissile exception add --severity soft` for accepted agent-facing warning
   debt;
 - use `fissile exception add --severity hard` only for human-reviewed blocking

@@ -70,7 +70,7 @@ exit `0`. Stale exceptions follow `[exceptions].stale`: `warn`, `error`, or
 The built-in config includes a simple byte-size guard over all non-excluded
 files. It is intentionally boring: it catches accidental blobs and platform-host
 problems before they reach review. Projects should tune or replace it with
-architecture-aware rules once they know their layout.
+named, project-specific rules once they know their layout.
 
 This guard does not replace line or token budgets. A file may be checked by one
 effective byte rule and one effective line rule at the same time (§FS-001-config.3.2).

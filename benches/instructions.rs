@@ -22,8 +22,7 @@ fn rust_checker() -> Checker {
         MessageTemplate::new(
             "split-rust-module",
             "Move cohesive helpers from {path} into the nearest owned module (§GOAL-008-architecture-aware-messages).",
-        )
-        .with_action("split a helper or extract a submodule"),
+        ),
     )])
     .expect("benchmark checker is valid")
 }

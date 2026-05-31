@@ -98,9 +98,6 @@ impl Selector {
 pub struct MessageTemplate {
     pub id: String,
     pub text: String,
-    pub owner: Option<String>,
-    pub destination: Option<String>,
-    pub action: Option<String>,
 }
 
 impl MessageTemplate {
@@ -108,25 +105,7 @@ impl MessageTemplate {
         Self {
             id: id.into(),
             text: text.into(),
-            owner: None,
-            destination: None,
-            action: None,
         }
-    }
-
-    pub fn with_owner(mut self, value: impl Into<String>) -> Self {
-        self.owner = Some(value.into());
-        self
-    }
-
-    pub fn with_destination(mut self, value: impl Into<String>) -> Self {
-        self.destination = Some(value.into());
-        self
-    }
-
-    pub fn with_action(mut self, value: impl Into<String>) -> Self {
-        self.action = Some(value.into());
-        self
     }
 
     fn validate(&self, rule_id: &str) -> Result<(), FissileError> {
@@ -153,9 +132,6 @@ impl MessageTemplate {
         RenderedMessage {
             id: self.id.clone(),
             text,
-            owner: self.owner.clone(),
-            destination: self.destination.clone(),
-            action: self.action.clone(),
         }
     }
 }
@@ -288,9 +264,6 @@ impl fmt::Display for Severity {
 pub struct RenderedMessage {
     pub id: String,
     pub text: String,
-    pub owner: Option<String>,
-    pub destination: Option<String>,
-    pub action: Option<String>,
 }
 
 /// A structured finding for a file that crossed a budget.
@@ -596,7 +569,7 @@ mod tests {
     }
 
     #[test]
-    fn renders_architecture_aware_message_fields() {
+    fn renders_message_template_variables() {
         let checker = Checker::new(vec![Rule::new(
             "domain",
             Selector::Prefix("src/domain/".to_owned()),
@@ -604,10 +577,7 @@ mod tests {
             MessageTemplate::new(
                 "domain-split",
                 "{severity} overflow in {path}; move code toward {rule} (§GOAL-008-architecture-aware-messages).",
-            )
-            .with_owner("@domain")
-            .with_destination("src/domain/services/")
-            .with_action("extract a service"),
+            ),
         )])
         .expect("valid checker");
 
@@ -620,9 +590,6 @@ mod tests {
             message.text,
             "soft overflow in src/domain/order.rs; move code toward domain (§GOAL-008-architecture-aware-messages)."
         );
-        assert_eq!(message.owner.as_deref(), Some("@domain"));
-        assert_eq!(message.destination.as_deref(), Some("src/domain/services/"));
-        assert_eq!(message.action.as_deref(), Some("extract a service"));
     }
 
     #[test]

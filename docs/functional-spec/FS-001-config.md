@@ -23,7 +23,8 @@ A repo with no config still gets a useful guard:
 These defaults borrow the useful part of generic large-file hooks and platform
 file-size guidance: catch obvious accidents immediately. They are not the product
 identity. `fissile` earns its keep when projects replace the generic defaults
-with named, architecture-aware rules and messages.
+with named, project-specific rules and messages that can speak to local
+architecture.
 
 ## 1. Top-level version
 
@@ -170,18 +171,20 @@ the cost.
 ## 4. Messages
 
 Messages are declared separately as `[[messages]]` entries so multiple rules can
-share one architectural remedy. Each message has:
+share one remediation message. Each message has:
 
 - `id`: stable message ID included in machine-readable findings;
-- `text`: bounded template rendered for humans and agents;
-- `owner`: optional owner or team hint;
-- `destination`: optional module, folder, or boundary hint;
-- `action`: optional imperative next step.
+- `text`: bounded template rendered for humans and agents.
+
+A message has no separate `owner`, `destination`, or `action` fields: the
+destination module, ownership boundary, and next step all live in `text`, so the
+rendered guidance is a single human-readable string rather than a record the
+caller must reassemble.
 
 The supported template variables are `{path}`, `{rule}`, `{severity}`,
 `{actual}`, `{limit}`, and `{unit}`. Missing message IDs are schema errors.
-Grund citations are part of the message text or action text, not a separate
-field, so the rendered guidance remains the single source of human context.
+Grund citations are part of the message text, not a separate field, so the
+rendered guidance remains the single source of human context.
 Messages cannot execute code, inspect file contents, or change pass/fail
 behavior (§GOAL-008-architecture-aware-messages).
 

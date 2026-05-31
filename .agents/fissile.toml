@@ -45,37 +45,22 @@ command = ["token-counter", "--count", "{path}"]
 [[messages]]
 id = "split-rust-library"
 text = "Split {path}: move cohesive library behavior into smaller modules before adding more surface area (§GOAL-008-architecture-aware-messages)."
-owner = "maintainers"
-destination = "src/"
-action = "extract a focused module or move tests/docs out of the core type definitions"
 
 [[messages]]
 id = "split-rust-benchmark"
 text = "Split {path}: keep benchmark setup and measured cases compact so performance changes stay reviewable (§AR-002-instruction-benchmarks)."
-owner = "maintainers"
-destination = "benches/"
-action = "extract shared benchmark setup or reduce repeated fixtures"
 
 [[messages]]
 id = "split-spec"
 text = "Split {path}: keep each declaration focused and move secondary detail into a narrower cited spec (§GOAL-008-architecture-aware-messages)."
-owner = "docs"
-destination = "docs/"
-action = "extract a narrower declaration and cite it from the parent"
 
 [[messages]]
 id = "split-tooling"
 text = "Split {path}: keep workflow and helper scripts short enough to audit quickly (§AR-001-ci)."
-owner = "maintainers"
-destination = ".github/ or scripts/"
-action = "extract repeated shell or workflow setup into a smaller helper"
 
 [[messages]]
 id = "large-file-default"
 text = "Large file {path}: exclude generated/binary assets, or add a narrower rule with local architecture guidance (§FS-001-config.3.3)."
-owner = "maintainers"
-destination = ".agents/fissile.toml"
-action = "exclude files the tool should not reason about, or add a project-specific rule"
 
 [[rules]]
 id = "large-file-default"
