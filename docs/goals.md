@@ -55,13 +55,13 @@ CI publishes the stripped binary size per platform on every release. A regressio
 
 ## GOAL-003-friendly-output: tell the user exactly what broke and how to fix it
 
-A pre-commit hook that says "rejected" is worse than no hook at all. When the checker stops a commit, the contributor must know — without re-running anything, without reading docs — which file, which limit, by how much, and what local architectural move is expected next. This is the half of the contract a human reads. The other half ([§GOAL-004-token-thrift](goals.md#goal-004-token-thrift-the-tool-itself-spends-as-few-tokens-as-it-saves)) is what an agent reads; the two compose.
+A pre-commit hook that says "rejected" is worse than no hook at all. When the checker stops a commit, the contributor must know — without re-running anything, without reading docs — which file, which limit, by how much, and whatever guidance the project configured for that rule. This is the half of the contract a human reads. The other half ([§GOAL-004-token-thrift](goals.md#goal-004-token-thrift-the-tool-itself-spends-as-few-tokens-as-it-saves)) is what an agent reads; the two compose.
 
 ### 1. Hard requirements
 
 - **Errors point at the file.** Every diagnostic is `path: <actual> <unit> exceeds <limit> <unit> (rule: <rule-name>)`. Editors and agents jump to the path unmodified.
 - **The fix is named.** When a limit was crossed, the diagnostic names the config key that controls it (e.g. `[limits.ts] lines = 400`) and the message rule that produced the remediation text.
-- **The local remedy is present.** An overflow includes the project's configured guidance for that rule: destination module, ownership boundary, extraction pattern, or architecture citation ([§GOAL-008-architecture-aware-messages](goals.md#goal-008-architecture-aware-messages-overflows-can-carry-local-remediation-guidance)).
+- **The configured guidance is present.** An overflow includes whatever message the rule names — which may point at a destination module, ownership boundary, or extraction pattern, or may be deliberately generic ([§GOAL-008-architecture-aware-messages](goals.md#goal-008-architecture-aware-messages-overflows-can-carry-local-remediation-guidance)).
 - **Output is parseable.** A `--format=json` flag emits a stable JSON shape, one record per violation, suitable for LLM consumption and editor integration.
 - **Help is one screen.** `fissile --help` fits in 24 lines and every flag carries a one-line example.
 - **Explicit success.** A passing text run prints exactly `ok` on stdout; the JSON form stays diagnostics-only.
@@ -76,7 +76,7 @@ Every diagnostic emitted by the tool is matched by an e2e fixture asserting its 
 
 ## GOAL-004-token-thrift: the tool itself spends as few tokens as it saves
 
-The whole point of this checker is to lower the token cost of working in the repo. A checker whose own output is verbose, repetitive, or wraps each finding in generic preamble is at war with its own purpose. So: every byte the tool prints, an agent will eventually read — make each one carry weight. Custom messages are allowed because they replace rediscovery with local architectural guidance, but they stay bounded and structured.
+The whole point of this checker is to lower the token cost of working in the repo. A checker whose own output is verbose, repetitive, or wraps each finding in generic preamble is at war with its own purpose. So: every byte the tool prints, an agent will eventually read — make each one carry weight. Custom messages are allowed because they replace rediscovery with the project's own guidance, but they stay bounded and structured.
 
 ### 1. What this requires
 
@@ -96,7 +96,7 @@ On a 10k-file fixture with N violations, total stdout is under `N * 240` bytes p
 
 ## GOAL-005-configurable: every limit and message overridable per file type and path
 
-Sensible defaults out of the box; full override when a project's reality diverges. A 2,000-line generated SQL dump is fine and a 2,000-line hand-written TypeScript module is not, and the tool only earns its keep when it can tell those apart and explain the local split that should happen. Configuration is data — a single TOML file at the repo root — not a plugin surface ([§GOAL-002-tiny-footprint.2](goals.md#2-what-this-rules-out)).
+Sensible defaults out of the box; full override when a project's reality diverges. A 2,000-line generated SQL dump is fine and a 2,000-line hand-written TypeScript module is not, and the tool earns its keep by telling those apart; when a project wants, a rule's message can also explain the local split. Configuration is data — a single TOML file at the repo root — not a plugin surface ([§GOAL-002-tiny-footprint.2](goals.md#2-what-this-rules-out)).
 
 ### 1. What is configurable
 
@@ -131,7 +131,7 @@ A single threshold is a false economy. Set it low and the tool nags constantly u
 
 ### 2. The AI-minimize contract
 
-The warning is the load-bearing surface for an agent. Its finding shape is fixed so an agent can pattern-match on it without prose parsing: `path: <actual> <unit> > <soft-limit> <unit> [soft, rule: <name>, message: <id>]`. The companion line in the managed `AGENTS.md` block (written by `fissile init`, parallel to grund's pattern) names this output and the expected response: *if you wrote this file in this turn, follow the configured architecture guidance and try to bring it back under the soft limit; if you did not, leave it alone unless the task is about that file*.
+The warning is the load-bearing surface for an agent. Its finding shape is fixed so an agent can pattern-match on it without prose parsing: `path: <actual> <unit> > <soft-limit> <unit> [soft, rule: <name>, message: <id>]`. The companion line in the managed `AGENTS.md` block (written by `fissile init`, parallel to grund's pattern) names this output and the expected response: *if you wrote this file in this turn, follow the configured guidance and try to bring it back under the soft limit; if you did not, leave it alone unless the task is about that file*.
 
 This is the half of [§GND-001-fissile](grund.md#gnd-001-fissile-steer-agents-toward-leaner-files--fewer-tokens-architecture-intact)'s promise that pays off continuously — not by blocking commits, but by making "shrink the file you just grew in the way this repo expects" the path of least resistance for the agent that grew it.
 
