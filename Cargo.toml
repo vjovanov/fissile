@@ -2,7 +2,7 @@
 name = "fissile"
 version = "0.1.0"
 edition = "2024"
-description = "Help agents keep files small to spend fewer tokens, without risking architecture or correctness."
+description = "Nudge files smaller to spend fewer tokens, without risking architecture or correctness."
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 documentation = "https://docs.rs/fissile"

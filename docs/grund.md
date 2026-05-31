@@ -1,4 +1,4 @@
-# GND-001-fissile: Help agents keep files small to spend fewer tokens, without risking architecture or correctness.
+# GND-001-fissile: Nudge files smaller to spend fewer tokens, without risking architecture or correctness.
 
 Large files are an invisible tax on every AI-assisted workflow in a repo. A 4,000-line module
 or a multi-megabyte fixture gets dragged into context whenever an agent (or a reviewer) needs
