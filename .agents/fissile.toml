@@ -55,6 +55,10 @@ id = "split-spec"
 text = "Split {path}: keep each declaration focused and move secondary detail into a narrower cited spec (§GOAL-008-remediation-messages)."
 
 [[messages]]
+id = "trim-readme"
+text = "Trim {path}: the README is the front door — move depth into docs/ and cite it rather than growing the overview (§GOAL-008-remediation-messages)."
+
+[[messages]]
 id = "split-tooling"
 text = "Split {path}: keep workflow and helper scripts short enough to audit quickly (§AR-001-ci)."
 
@@ -92,13 +96,25 @@ message = "split-rust-benchmark"
 
 [[rules]]
 id = "spec-docs"
-include = ["docs/**/*.md", "README.md", "CLAUDE.md", "examples/**/*.md", "e2e/**/*.md"]
+include = ["docs/**/*.md", "CLAUDE.md", "examples/**/*.md", "e2e/**/*.md"]
 unit = "lines"
 soft = 225
 hard = 350
 count_blank_lines = false
 count_comment_lines = true
 message = "split-spec"
+
+# The README is the project's front door, not a focused declaration; it gets a
+# far larger budget than the spec docs. Up to ~2000 lines is acceptable.
+[[rules]]
+id = "readme"
+include = ["README.md"]
+unit = "lines"
+soft = 1800
+hard = 2000
+count_blank_lines = false
+count_comment_lines = true
+message = "trim-readme"
 
 [[rules]]
 id = "tooling"
