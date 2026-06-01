@@ -11,7 +11,7 @@ Current goals:
 - [§GOAL-005-configurable](goals.md#goal-005-configurable-every-limit-and-message-overridable-per-file-type-and-path)
 - [§GOAL-006-graded-limits](goals.md#goal-006-graded-limits-soft-warns-hard-blocks-ai-minimizes)
 - [§GOAL-007-justified-exceptions](goals.md#goal-007-justified-exceptions-every-oversized-file-has-a-written-reason)
-- [§GOAL-008-architecture-aware-messages](goals.md#goal-008-architecture-aware-messages-overflows-can-carry-local-remediation-guidance)
+- [§GOAL-008-remediation-messages](goals.md#goal-008-remediation-messages-overflows-can-carry-local-remediation-guidance)
 
 ## GOAL-001-fast-feedback: the hook is imperceptible
 
@@ -61,7 +61,7 @@ A pre-commit hook that says "rejected" is worse than no hook at all. When the ch
 
 - **Errors point at the file.** Every diagnostic is `path: <actual> <unit> exceeds <limit> <unit> (rule: <rule-name>)`. Editors and agents jump to the path unmodified.
 - **The fix is named.** When a limit was crossed, the diagnostic names the config key that controls it (e.g. `[limits.ts] lines = 400`) and the message rule that produced the remediation text.
-- **The configured guidance is present.** An overflow includes whatever message the rule names — which may point at a destination module, ownership boundary, or extraction pattern, or may be deliberately generic ([§GOAL-008-architecture-aware-messages](goals.md#goal-008-architecture-aware-messages-overflows-can-carry-local-remediation-guidance)).
+- **The configured guidance is present.** An overflow includes whatever message the rule names — which may point at a destination module, ownership boundary, or extraction pattern, or may be deliberately generic ([§GOAL-008-remediation-messages](goals.md#goal-008-remediation-messages-overflows-can-carry-local-remediation-guidance)).
 - **Output is parseable.** A `--format=json` flag emits a stable JSON shape, one record per violation, suitable for LLM consumption and editor integration.
 - **Help is one screen.** `fissile --help` fits in 24 lines and every flag carries a one-line example.
 - **Explicit success.** A passing text run prints exactly `ok` on stdout; the JSON form stays diagnostics-only.
@@ -201,7 +201,7 @@ The `EX-` ID is local to `fissile`; the parsing contract lives in
 
 E2E fixtures cover: `fissile exception add` appending soft and hard entries; a hard registry with a single exception silencing a hard violation; a soft registry with a single exception silencing a soft warning; a file that outgrows its exception's maximum accepted size and reports again; a registry whose exception names a path that no longer exists (audit must flag it stale); and a registry entry whose rationale is empty (parse error). A snapshot test on the default registry paths and the parse rules guards against silent schema changes.
 
-## GOAL-008-architecture-aware-messages: overflows can carry local remediation guidance
+## GOAL-008-remediation-messages: overflows can carry local remediation guidance
 
 The key promise of [§GND-001-fissile](grund.md#gnd-001-fissile-steer-agents-toward-leaner-files--fewer-tokens-architecture-intact) is not only that the library notices large files on every commit. It gives the repository a place to say what it already knows: which boundary the file is pressing against, where new code should move, and which local rule explains that move. The tool guarantees the slot and keeps it bounded; whether a given message names real architecture is the project's choice, and the built-in defaults stay deliberately generic.
 

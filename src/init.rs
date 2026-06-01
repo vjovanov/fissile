@@ -78,6 +78,9 @@ impl AgentTargets {
 pub struct InitOptions {
     pub root: PathBuf,
     pub config_path: PathBuf,
+    /// Project name for a freshly created `AGENTS.md` heading; defaults to the
+    /// target directory basename (§FS-002-init.1).
+    pub name: Option<String>,
     pub exceptions: bool,
     pub force: bool,
     pub dry_run: bool,
@@ -89,6 +92,7 @@ impl InitOptions {
         Self {
             root: root.into(),
             config_path: PathBuf::from(".agents/fissile.toml"),
+            name: None,
             exceptions: false,
             force: false,
             dry_run: false,
@@ -206,24 +210,28 @@ pub fn run(options: &InitOptions) -> Result<Report, InitError> {
         options.dry_run,
     )?);
 
-    // 2. Exception registries, only with --exceptions (§FS-002-init.2).
+    // 2. Exception registries, only with --exceptions (§FS-002-init.2). The
+    //    paths come from the generated config so they stay in lockstep with it.
     if options.exceptions {
+        let config = crate::config::Config::built_in();
         outcomes.push(write_new_file(
-            &options.root.join("docs/file-size-agent-exceptions.toml"),
+            &options.root.join(&config.exceptions.soft_registry),
             DEFAULT_SOFT_REGISTRY,
             options.dry_run,
         )?);
         outcomes.push(write_new_file(
-            &options.root.join("docs/file-size-human-exceptions.toml"),
+            &options.root.join(&config.exceptions.hard_registry),
             DEFAULT_HARD_REGISTRY,
             options.dry_run,
         )?);
     }
 
     // 3. Agent entrypoints and managed blocks (§FS-002-init.3).
+    let name = project_name(options);
     for relative in resolve_entrypoints(&options.root, &options.agents) {
         outcomes.push(write_managed_block(
             &options.root.join(&relative),
+            &name,
             options.dry_run,
         )?);
     }
@@ -232,6 +240,27 @@ pub fn run(options: &InitOptions) -> Result<Report, InitError> {
         outcomes,
         dry_run: options.dry_run,
     })
+}
+
+/// The project name for a fresh `AGENTS.md` heading: the `--name` value, else the
+/// target directory basename (§FS-002-init.1).
+fn project_name(options: &InitOptions) -> String {
+    if let Some(name) = &options.name {
+        return name.clone();
+    }
+    options
+        .root
+        .canonicalize()
+        .ok()
+        .as_deref()
+        .and_then(Path::file_name)
+        .and_then(|name| name.to_str())
+        .map(str::to_owned)
+        .unwrap_or_else(|| "project".to_owned())
+}
+
+fn is_agents_md(path: &Path) -> bool {
+    path.file_name().and_then(|name| name.to_str()) == Some("AGENTS.md")
 }
 
 /// Decide which entrypoint files to touch (§FS-002-init.3).
@@ -301,7 +330,7 @@ fn write_new_file(path: &Path, contents: &str, dry_run: bool) -> Result<Outcome,
 }
 
 /// Append, replace, or leave the managed block in an entrypoint (§FS-002-init.4).
-fn write_managed_block(path: &Path, dry_run: bool) -> Result<Outcome, InitError> {
+fn write_managed_block(path: &Path, name: &str, dry_run: bool) -> Result<Outcome, InitError> {
     let existing = match fs::read_to_string(path) {
         Ok(text) => Some(text),
         Err(error) if error.kind() == io::ErrorKind::NotFound => None,
@@ -309,6 +338,9 @@ fn write_managed_block(path: &Path, dry_run: bool) -> Result<Outcome, InitError>
     };
 
     let (new_contents, action) = match existing {
+        // A fresh canonical AGENTS.md gets an unmanaged project H1 above the
+        // block; companion entrypoints are block-only (§FS-002-init.4).
+        None if is_agents_md(path) => (format!("# {name}\n\n{MANAGED_BLOCK}\n"), Action::Wrote),
         None => (format!("{MANAGED_BLOCK}\n"), Action::Wrote),
         Some(existing) => apply_managed_block(&existing, path)?,
     };
@@ -386,14 +418,16 @@ fn is_block_heading(line: &str) -> bool {
 
 fn block_version(line: &str) -> Option<u32> {
     let rest = line.trim_end().strip_prefix(BLOCK_HEADING_PREFIX)?;
-    let digits: String = rest.chars().take_while(|character| character.is_ascii_digit()).collect();
+    let digits: String = rest
+        .chars()
+        .take_while(|character| character.is_ascii_digit())
+        .collect();
     digits.parse().ok()
 }
 
 fn is_heading(line: &str) -> bool {
     let trimmed = line.trim_start();
-    (trimmed.starts_with("# ") || trimmed.starts_with("## "))
-        && !trimmed.starts_with("### ")
+    (trimmed.starts_with("# ") || trimmed.starts_with("## ")) && !trimmed.starts_with("### ")
 }
 
 #[cfg(test)]
@@ -405,7 +439,9 @@ mod tests {
     fn default_config_is_valid_and_fully_populated() {
         // The generated config must parse and build a checker (§DF-002).
         let config = Config::parse(DEFAULT_CONFIG).expect("default config parses");
-        config.to_checker().expect("default config builds a checker");
+        config
+            .to_checker()
+            .expect("default config builds a checker");
         // Every default is spelled out: defaults are present, not implied.
         assert!(DEFAULT_CONFIG.contains("respect_gitignore"));
         assert!(DEFAULT_CONFIG.contains("[output]"));
@@ -445,7 +481,10 @@ mod tests {
         let existing = "## Keeping Files Small With fissile (v2)\n\nfuture body\n";
         let error =
             apply_managed_block(existing, Path::new("AGENTS.md")).expect_err("v2 unsupported");
-        assert!(matches!(error, InitError::UnsupportedBlock { version: 2, .. }));
+        assert!(matches!(
+            error,
+            InitError::UnsupportedBlock { version: 2, .. }
+        ));
     }
 
     #[test]

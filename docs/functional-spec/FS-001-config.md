@@ -194,7 +194,7 @@ The supported template variables are `{path}`, `{rule}`, `{severity}`,
 Grund citations are part of the message text, not a separate field, so the
 rendered guidance remains the single source of human context.
 Messages cannot execute code, inspect file contents, or change pass/fail
-behavior (§GOAL-008-architecture-aware-messages).
+behavior (§GOAL-008-remediation-messages).
 
 ## 5. Exceptions
 

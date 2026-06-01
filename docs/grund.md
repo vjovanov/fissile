@@ -35,7 +35,7 @@ flagged file is always the contributor's decision. The name carries the
 contract: a file over budget is *fissile* because it is ready to split under its own
 accumulated mass (§DF-001-tool-name). Each overflow can also carry a short, project-configured
 message suggesting how this repository prefers such a file to be split, but that guidance is
-help layered on top, not the point (§GOAL-008-architecture-aware-messages). The CLI runs in
+help layered on top, not the point (§GOAL-008-remediation-messages). The CLI runs in
 two modes:
 
 - as a **pre-commit hook** that checks staged files and refuses the commit when a hard budget
@@ -71,7 +71,7 @@ human or agent how this repository wants that file split.
 
 The difference is the message. A generic "file too large" check stops a bad commit; `fissile`
 also names the local architectural move — destination module, ownership boundary, extraction
-pattern, or cited rationale — that makes the next commit better (§GOAL-008-architecture-aware-messages).
+pattern, or cited rationale — that makes the next commit better (§GOAL-008-remediation-messages).
 The result is a file budget system with memory: defaults catch obvious bloat, custom rules encode
 local architecture (§FS-001-config), and justified exceptions stay reviewable instead of becoming
 inline ignore comments (§FS-003-exceptions).

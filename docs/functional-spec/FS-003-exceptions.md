@@ -31,7 +31,6 @@ rules = ["fixtures"]
 max_accepted = { value = 300000, unit = "bytes" }
 until = "review after parser fixture generator lands"
 owner = "parser"
-created = "2026-05-26"
 reason = """
 This fixture is intentionally large because it is a golden corpus copied from
 production parser incidents. Retire this exception when the fixture can be
@@ -62,9 +61,11 @@ Optional fields:
 
 - `title`: short human-readable label;
 - `owner`: team, person, or component responsible for retiring the exception;
-- `created`: ISO date when the exception was added;
 - `issue`: tracker URL or ID;
 - `replaces`: prior exception ID when splitting or renaming entries.
+
+There is no `created` field: the date an exception was added is recorded by the
+commit that added it, so duplicating it in the entry would only invite drift.
 
 Unknown fields are errors in version 1 so typos cannot silently weaken the
 registry.

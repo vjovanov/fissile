@@ -5,6 +5,9 @@
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
+use std::fs;
+use std::io;
+use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
@@ -213,6 +216,40 @@ impl Config {
         Ok(config)
     }
 
+    /// The built-in default config (§FS-001-config.0): the same fully-populated
+    /// document `fissile init` writes, used as a fallback when a repo has no
+    /// config of its own.
+    pub fn built_in() -> Config {
+        Config::parse(crate::init::DEFAULT_CONFIG).expect("built-in default config is valid")
+    }
+
+    /// Discover and load the effective config under `root`: an `explicit` path
+    /// must exist; otherwise read `.agents/fissile.toml`, falling back to
+    /// [`Config::built_in`] when absent (§FS-001-config.0, §FS-001-config.2).
+    pub fn load(root: &Path, explicit: Option<&Path>) -> Result<Config, ConfigError> {
+        match explicit {
+            Some(path) => {
+                let full = root.join(path);
+                let text = fs::read_to_string(&full).map_err(|error| ConfigError::Io {
+                    path: full,
+                    reason: error.to_string(),
+                })?;
+                Config::parse(&text)
+            }
+            None => {
+                let full = root.join(".agents/fissile.toml");
+                match fs::read_to_string(&full) {
+                    Ok(text) => Config::parse(&text),
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(Config::built_in()),
+                    Err(error) => Err(ConfigError::Io {
+                        path: full,
+                        reason: error.to_string(),
+                    }),
+                }
+            }
+        }
+    }
+
     /// Build a [`Checker`] from the rules and messages in this config.
     pub fn to_checker(&self) -> Result<Checker, ConfigError> {
         let messages: HashMap<&str, &Message> = self
@@ -229,12 +266,13 @@ impl Config {
                 });
             }
 
-            let message = messages
-                .get(spec.message.as_str())
-                .ok_or_else(|| ConfigError::UnknownMessage {
-                    rule: spec.id.clone(),
-                    message: spec.message.clone(),
-                })?;
+            let message =
+                messages
+                    .get(spec.message.as_str())
+                    .ok_or_else(|| ConfigError::UnknownMessage {
+                        rule: spec.id.clone(),
+                        message: spec.message.clone(),
+                    })?;
 
             let selector = Selector::Glob(spec.include.iter().map(Glob::new).collect());
             let budget = Budget::new(spec.unit.into(), spec.soft, spec.hard);
@@ -254,6 +292,7 @@ impl Config {
 /// A failure while loading a config document.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ConfigError {
+    Io { path: PathBuf, reason: String },
     Parse { reason: String },
     UnsupportedVersion { version: u32 },
     EmptyInclude { rule: String },
@@ -264,6 +303,9 @@ pub enum ConfigError {
 impl fmt::Display for ConfigError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            ConfigError::Io { path, reason } => {
+                write!(f, "cannot read config {}: {reason}", path.display())
+            }
             ConfigError::Parse { reason } => write!(f, "config parse error: {reason}"),
             ConfigError::UnsupportedVersion { version } => write!(
                 f,

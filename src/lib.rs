@@ -9,9 +9,18 @@ use std::error::Error;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
-mod glob;
+pub mod audit;
+pub mod check;
+pub mod cli;
+mod comments;
 pub mod config;
+pub mod exception;
+pub mod exceptions;
+mod glob;
 pub mod init;
+pub mod json;
+pub mod report;
+pub mod scan;
 
 pub use glob::Glob;
 
@@ -165,9 +174,8 @@ pub struct Rule {
     /// Whether blank lines count toward a `lines` budget. Default `false`
     /// (§FS-001-config.3.1).
     pub count_blank_lines: bool,
-    /// Whether comment lines count toward a `lines` budget; default `true`
-    /// (§FS-001-config.3.1). Stored for the future driver (§FS-004-check-audit);
-    /// comment-line exclusion is not applied by [`count_lines`] yet.
+    /// Whether whole-line comments count toward a `lines` budget; default `true`
+    /// (§FS-001-config.3.1). Applied to the per-rule line count in [`Checker::check`].
     pub count_comment_lines: bool,
 }
 
@@ -213,12 +221,39 @@ impl Rule {
     }
 }
 
+/// A physical-line breakdown for one file (§FS-001-config.3.1). `total` is the
+/// physical line count; `blank` and `comment` are the disjoint subsets that a
+/// per-rule policy may exclude from the measured count.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct LineStats {
+    pub total: u64,
+    pub blank: u64,
+    pub comment: u64,
+}
+
+impl LineStats {
+    /// The line count a budget sees: blank lines drop unless `count_blank_lines`,
+    /// whole-line comments drop unless `count_comment_lines` (§FS-001-config.3.1).
+    /// `blank` and `comment` are disjoint, so the subtractions never overlap.
+    pub fn counted(&self, count_blank_lines: bool, count_comment_lines: bool) -> u64 {
+        let mut counted = self.total;
+        if !count_blank_lines {
+            counted -= self.blank;
+        }
+        if !count_comment_lines {
+            counted -= self.comment;
+        }
+        counted
+    }
+}
+
 /// File measurements consumed by the checker.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FileMeasurement {
     pub path: PathBuf,
     pub bytes: u64,
-    pub lines: Option<u64>,
+    /// Physical line breakdown for text files; `None` for binary measurements.
+    pub lines: Option<LineStats>,
     pub tokens: Option<u64>,
 }
 
@@ -232,7 +267,18 @@ impl FileMeasurement {
         }
     }
 
+    /// Set a physical line count with no blank/comment breakdown. The whole count
+    /// is treated as content, so line policy leaves it unchanged.
     pub fn with_lines(mut self, lines: u64) -> Self {
+        self.lines = Some(LineStats {
+            total: lines,
+            blank: 0,
+            comment: 0,
+        });
+        self
+    }
+
+    pub fn with_line_stats(mut self, lines: LineStats) -> Self {
         self.lines = Some(lines);
         self
     }
@@ -242,46 +288,28 @@ impl FileMeasurement {
         self
     }
 
+    /// The measured value for a non-line unit. Line budgets are resolved against
+    /// the rule's policy in [`Checker::check`], not here.
     fn value(&self, unit: Unit) -> Option<u64> {
         match unit {
             Unit::Bytes => Some(self.bytes),
-            Unit::Lines => self.lines,
+            Unit::Lines => self.lines.map(|stats| stats.total),
             Unit::Tokens => self.tokens,
         }
     }
 }
 
-/// Measure UTF-8 text by bytes and logical line count.
+/// Measure UTF-8 text by bytes and a policy-ready line breakdown. Whole-line
+/// comments are classified by file extension (§FS-001-config.3.1).
 pub fn measure_text(path: impl Into<PathBuf>, text: &str) -> FileMeasurement {
-    let lines = if text.is_empty() {
-        0
-    } else {
-        text.as_bytes()
-            .iter()
-            .filter(|byte| **byte == b'\n')
-            .count() as u64
-            + u64::from(!text.ends_with('\n'))
-    };
-
-    FileMeasurement::new(path, text.len() as u64).with_lines(lines)
+    let path = path.into();
+    let stats = comments::classify(&path, text);
+    FileMeasurement::new(path, text.len() as u64).with_line_stats(stats)
 }
 
 /// Measure arbitrary bytes by byte count only.
 pub fn measure_bytes(path: impl Into<PathBuf>, bytes: &[u8]) -> FileMeasurement {
     FileMeasurement::new(path, bytes.len() as u64)
-}
-
-/// Count the logical lines of `text` under a line-counting policy
-/// (§FS-001-config.3.1): blank/whitespace-only lines are skipped when
-/// `count_blank_lines` is false. Comment-line exclusion is not handled here.
-pub fn count_lines(text: &str, count_blank_lines: bool) -> u64 {
-    if text.is_empty() {
-        return 0;
-    }
-
-    text.lines()
-        .filter(|line| count_blank_lines || !line.trim().is_empty())
-        .count() as u64
 }
 
 /// Overflow severity.
@@ -360,26 +388,49 @@ impl Checker {
         &self.rules
     }
 
+    /// Evaluate a file and return the effective rule plus its measured value for
+    /// every rule that applies. Callers that need exception logic and the
+    /// hard-implies-soft rule build findings from this (§FS-004-check-audit).
+    pub fn evaluate<'a>(
+        &'a self,
+        file: &FileMeasurement,
+    ) -> Result<Vec<RuleHit<'a>>, FissileError> {
+        self.effective_rules(file)?
+            .into_iter()
+            .map(|rule| {
+                let actual = self.measured_value(file, rule)?;
+                Ok(RuleHit { rule, actual })
+            })
+            .collect()
+    }
+
+    fn measured_value(&self, file: &FileMeasurement, rule: &Rule) -> Result<u64, FissileError> {
+        let measured = match rule.budget.unit {
+            Unit::Lines => file
+                .lines
+                .map(|stats| stats.counted(rule.count_blank_lines, rule.count_comment_lines)),
+            unit => file.value(unit),
+        };
+        measured.ok_or_else(|| FissileError::MissingMeasurement {
+            path: file.path.clone(),
+            rule_id: rule.id.clone(),
+            unit: rule.budget.unit,
+        })
+    }
+
+    /// The commit-time view: one overflow per rule, hard suppressing soft
+    /// (§GOAL-006-graded-limits). Exception registries are not consulted here.
     pub fn check(&self, file: &FileMeasurement) -> Result<Vec<Overflow>, FissileError> {
         let mut overflows = Vec::new();
-        let rules = self.effective_rules(file)?;
 
-        for rule in rules {
-            let actual =
-                file.value(rule.budget.unit)
-                    .ok_or_else(|| FissileError::MissingMeasurement {
-                        path: file.path.clone(),
-                        rule_id: rule.id.clone(),
-                        unit: rule.budget.unit,
-                    })?;
-
+        for hit in self.evaluate(file)? {
+            let RuleHit { rule, actual } = hit;
             if let Some(hard) = rule.budget.hard
                 && actual >= hard
             {
                 overflows.push(render_overflow(file, rule, Severity::Hard, actual, hard));
                 continue;
             }
-
             if let Some(soft) = rule.budget.soft
                 && actual >= soft
             {
@@ -442,6 +493,14 @@ impl Checker {
             .map(|candidate| candidate.rule)
             .collect())
     }
+}
+
+/// An effective rule paired with the file's measured value for that rule's unit
+/// (§FS-004-check-audit). Produced by [`Checker::evaluate`].
+#[derive(Clone, Copy, Debug)]
+pub struct RuleHit<'a> {
+    pub rule: &'a Rule,
+    pub actual: u64,
 }
 
 struct EffectiveRule<'a> {
@@ -618,242 +677,5 @@ impl fmt::Display for FissileError {
 impl Error for FissileError {}
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn reports_hard_overflow_and_suppresses_soft_for_same_rule() {
-        let checker = Checker::new(vec![Rule::new(
-            "rust",
-            Selector::Extension("rs".to_owned()),
-            Budget::new(Unit::Lines, Some(2), Some(3)),
-            MessageTemplate::new("split-rust", "Split {path}: {actual} {unit}."),
-        )])
-        .expect("valid checker");
-
-        let file = measure_text("src/lib.rs", "a\nb\nc\n");
-        let overflows = checker.check(&file).expect("check succeeds");
-
-        assert_eq!(overflows.len(), 1);
-        assert_eq!(overflows[0].severity, Severity::Hard);
-        assert_eq!(overflows[0].actual, 3);
-        assert_eq!(overflows[0].limit, 3);
-        assert_eq!(
-            overflows[0].finding_line(),
-            "src/lib.rs: 3 lines > 3 lines [hard, rule: rust, message: split-rust]"
-        );
-    }
-
-    #[test]
-    fn renders_message_template_variables() {
-        let checker = Checker::new(vec![Rule::new(
-            "domain",
-            Selector::Prefix("src/domain/".to_owned()),
-            Budget::new(Unit::Bytes, Some(5), None),
-            MessageTemplate::new(
-                "domain-split",
-                "{severity} overflow in {path}; move code toward {rule} (§GOAL-008-architecture-aware-messages).",
-            ),
-        )])
-        .expect("valid checker");
-
-        let file = measure_bytes("src/domain/order.rs", b"abcdef");
-        let overflows = checker.check(&file).expect("check succeeds");
-        let message = &overflows[0].message;
-
-        assert_eq!(overflows[0].severity, Severity::Soft);
-        assert_eq!(
-            message.text,
-            "soft overflow in src/domain/order.rs; move code toward domain (§GOAL-008-architecture-aware-messages)."
-        );
-    }
-
-    #[test]
-    fn validates_budget_order() {
-        let error = Checker::new(vec![Rule::new(
-            "bad",
-            Selector::All,
-            Budget::new(Unit::Lines, Some(10), Some(5)),
-            MessageTemplate::new("bad-message", "Split it."),
-        )])
-        .expect_err("invalid checker");
-
-        assert_eq!(
-            error.to_string(),
-            "invalid budget for rule bad: soft limit cannot be greater than hard limit"
-        );
-    }
-
-    #[test]
-    fn token_rules_require_token_measurements() {
-        let checker = Checker::new(vec![Rule::new(
-            "tokens",
-            Selector::All,
-            Budget::new(Unit::Tokens, Some(100), None),
-            MessageTemplate::new("token-split", "Reduce token load."),
-        )])
-        .expect("valid checker");
-
-        let error = checker
-            .check(&measure_text("README.md", "text"))
-            .expect_err("tokens are missing");
-
-        assert_eq!(
-            error.to_string(),
-            "missing tokens measurement for README.md under rule tokens"
-        );
-    }
-
-    #[test]
-    fn selects_one_effective_rule_per_unit() {
-        let checker = Checker::new(vec![
-            Rule::new(
-                "all-rust",
-                Selector::Extension("rs".to_owned()),
-                Budget::new(Unit::Lines, Some(5), Some(10)),
-                MessageTemplate::new("all", "All rust."),
-            ),
-            Rule::new(
-                "domain-rust",
-                Selector::Prefix("src/domain/".to_owned()),
-                Budget::new(Unit::Lines, Some(100), Some(200)),
-                MessageTemplate::new("domain", "Domain rust."),
-            ),
-        ])
-        .expect("valid checker");
-
-        let file = measure_text("src/domain/order.rs", &"line\n".repeat(50));
-        let overflows = checker.check(&file).expect("check succeeds");
-
-        assert!(overflows.is_empty());
-    }
-
-    #[test]
-    fn keeps_different_units_together() {
-        let checker = Checker::new(vec![
-            Rule::new(
-                "bytes",
-                Selector::All,
-                Budget::new(Unit::Bytes, Some(5), None),
-                MessageTemplate::new("bytes", "Bytes."),
-            ),
-            Rule::new(
-                "lines",
-                Selector::All,
-                Budget::new(Unit::Lines, Some(2), None),
-                MessageTemplate::new("lines", "Lines."),
-            ),
-        ])
-        .expect("valid checker");
-
-        let file = measure_text("README.md", "one\ntwo\nthree\n");
-        let overflows = checker.check(&file).expect("check succeeds");
-
-        assert_eq!(overflows.len(), 2);
-        assert!(
-            overflows
-                .iter()
-                .any(|overflow| overflow.unit == Unit::Bytes)
-        );
-        assert!(
-            overflows
-                .iter()
-                .any(|overflow| overflow.unit == Unit::Lines)
-        );
-    }
-
-    #[test]
-    fn reports_ambiguous_same_unit_rules() {
-        let checker = Checker::new(vec![
-            Rule::new(
-                "first",
-                Selector::All,
-                Budget::new(Unit::Bytes, Some(1), None),
-                MessageTemplate::new("first", "First."),
-            ),
-            Rule::new(
-                "second",
-                Selector::All,
-                Budget::new(Unit::Bytes, Some(2), None),
-                MessageTemplate::new("second", "Second."),
-            ),
-        ])
-        .expect("valid checker");
-
-        let error = checker
-            .check(&measure_bytes("README.md", b"abcdef"))
-            .expect_err("rules are ambiguous");
-
-        assert_eq!(
-            error.to_string(),
-            "ambiguous bytes rules for README.md: first, second"
-        );
-    }
-
-    #[test]
-    fn priority_breaks_specificity_ties() {
-        let checker = Checker::new(vec![
-            Rule::new(
-                "strict",
-                Selector::All,
-                Budget::new(Unit::Bytes, Some(1), None),
-                MessageTemplate::new("strict", "Strict."),
-            ),
-            Rule::new(
-                "relaxed",
-                Selector::All,
-                Budget::new(Unit::Bytes, Some(100), None),
-                MessageTemplate::new("relaxed", "Relaxed."),
-            )
-            .with_priority(10),
-        ])
-        .expect("valid checker");
-
-        let overflows = checker
-            .check(&measure_bytes("README.md", b"abcdef"))
-            .expect("check succeeds");
-
-        assert!(overflows.is_empty());
-    }
-
-    #[test]
-    fn renders_template_values_without_replacing_inserted_placeholders() {
-        let checker = Checker::new(vec![Rule::new(
-            "rust",
-            Selector::Exact("src/{limit}.rs".to_owned()),
-            Budget::new(Unit::Lines, Some(1), None),
-            MessageTemplate::new("split-rust", "Split {path}: limit {limit} {unit}."),
-        )])
-        .expect("valid checker");
-
-        let file = measure_text("src/{limit}.rs", "one\ntwo\n");
-        let overflows = checker.check(&file).expect("check succeeds");
-
-        assert_eq!(
-            overflows[0].message.text,
-            "Split src/{limit}.rs: limit 1 lines."
-        );
-    }
-
-    #[test]
-    fn large_batch_smoke() {
-        let checker = Checker::new(vec![Rule::new(
-            "rust",
-            Selector::Extension("rs".to_owned()),
-            Budget::new(Unit::Lines, Some(200), Some(400)),
-            MessageTemplate::new("split-rust", "Split {path}."),
-        )])
-        .expect("valid checker");
-
-        let overflow_count: usize = (0..10_000)
-            .map(|index| {
-                let line_count = if index % 10 == 0 { 450 } else { 40 };
-                let text = "fn helper() {}\n".repeat(line_count);
-                let file = measure_text(format!("src/module_{index:05}.rs"), &text);
-                checker.check(&file).expect("check succeeds").len()
-            })
-            .sum();
-
-        assert_eq!(overflow_count, 1_000);
-    }
-}
+#[path = "checker_tests.rs"]
+mod tests;

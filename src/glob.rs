@@ -51,6 +51,12 @@ impl Glob {
         let path_segments: Vec<&str> = path.split('/').collect();
         match_segments(&self.segments, &path_segments)
     }
+
+    /// Whether this glob and another glob can match at least one common path.
+    pub fn intersects(&self, other: &Glob) -> bool {
+        let mut memo = std::collections::HashMap::new();
+        segments_intersect(&self.segments, &other.segments, 0, 0, &mut memo)
+    }
 }
 
 impl GlobSpec {
@@ -143,6 +149,96 @@ fn match_within(pattern: &[char], text: &[char]) -> bool {
     }
 }
 
+fn segments_intersect(
+    left: &[String],
+    right: &[String],
+    i: usize,
+    j: usize,
+    memo: &mut std::collections::HashMap<(usize, usize), bool>,
+) -> bool {
+    if let Some(result) = memo.get(&(i, j)) {
+        return *result;
+    }
+
+    let result = match (
+        left.get(i).map(String::as_str),
+        right.get(j).map(String::as_str),
+    ) {
+        (None, None) => true,
+        (Some("**"), None) => segments_intersect(left, right, i + 1, j, memo),
+        (None, Some("**")) => segments_intersect(left, right, i, j + 1, memo),
+        (None, Some(_)) | (Some(_), None) => false,
+        (Some("**"), Some("**")) => {
+            segments_intersect(left, right, i + 1, j, memo)
+                || segments_intersect(left, right, i, j + 1, memo)
+        }
+        (Some("**"), Some(_)) => {
+            segments_intersect(left, right, i + 1, j, memo)
+                || segments_intersect(left, right, i, j + 1, memo)
+        }
+        (Some(_), Some("**")) => {
+            segments_intersect(left, right, i, j + 1, memo)
+                || segments_intersect(left, right, i + 1, j, memo)
+        }
+        (Some(left_segment), Some(right_segment)) => {
+            segment_patterns_intersect(left_segment, right_segment)
+                && segments_intersect(left, right, i + 1, j + 1, memo)
+        }
+    };
+
+    memo.insert((i, j), result);
+    result
+}
+
+fn segment_patterns_intersect(left: &str, right: &str) -> bool {
+    let left: Vec<char> = left.chars().collect();
+    let right: Vec<char> = right.chars().collect();
+    let mut memo = std::collections::HashMap::new();
+    segment_patterns_intersect_at(&left, &right, 0, 0, &mut memo)
+}
+
+fn segment_patterns_intersect_at(
+    left: &[char],
+    right: &[char],
+    i: usize,
+    j: usize,
+    memo: &mut std::collections::HashMap<(usize, usize), bool>,
+) -> bool {
+    if let Some(result) = memo.get(&(i, j)) {
+        return *result;
+    }
+
+    let result = match (left.get(i), right.get(j)) {
+        (None, None) => true,
+        (Some('*'), None) => segment_patterns_intersect_at(left, right, i + 1, j, memo),
+        (None, Some('*')) => segment_patterns_intersect_at(left, right, i, j + 1, memo),
+        (None, Some(_)) | (Some(_), None) => false,
+        (Some('*'), Some('*')) => {
+            segment_patterns_intersect_at(left, right, i + 1, j, memo)
+                || segment_patterns_intersect_at(left, right, i, j + 1, memo)
+        }
+        (Some('*'), Some(_)) => {
+            segment_patterns_intersect_at(left, right, i + 1, j, memo)
+                || segment_patterns_intersect_at(left, right, i, j + 1, memo)
+        }
+        (Some(_), Some('*')) => {
+            segment_patterns_intersect_at(left, right, i, j + 1, memo)
+                || segment_patterns_intersect_at(left, right, i + 1, j, memo)
+        }
+        (Some(left_char), Some(right_char)) if chars_can_match(*left_char, *right_char) => {
+            segment_patterns_intersect_at(left, right, i + 1, j + 1, memo)
+        }
+        _ => false,
+    };
+
+    memo.insert((i, j), result);
+    result
+}
+
+fn chars_can_match(left: char, right: char) -> bool {
+    left == '?' || right == '?' || left == right
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -186,5 +282,14 @@ mod tests {
         let domain = Glob::new("src/domain/**/*.rs").spec();
         assert_eq!(generated.cmp_specificity(&domain), Ordering::Equal);
         assert_eq!(domain.cmp_specificity(&generated), Ordering::Equal);
+    }
+
+    #[test]
+    fn detects_glob_intersections() {
+        assert!(Glob::new("src/**").intersects(&Glob::new("src/**/*.rs")));
+        assert!(Glob::new("src/**/*.rs").intersects(&Glob::new("src/lib.rs")));
+        assert!(Glob::new("src/*.rs").intersects(&Glob::new("src/a?c.*")));
+        assert!(!Glob::new("src/**/*.rs").intersects(&Glob::new("docs/**/*.md")));
+        assert!(!Glob::new("src/*.rs").intersects(&Glob::new("src/*.md")));
     }
 }

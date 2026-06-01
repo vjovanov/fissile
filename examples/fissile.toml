@@ -48,11 +48,11 @@ command = ["token-counter", "--count", "{path}"]
 
 [[messages]]
 id = "split-rust-module"
-text = "Split {path}: move cohesive helpers into a sibling module before adding more code (§GOAL-008-architecture-aware-messages)."
+text = "Split {path}: move cohesive helpers into a sibling module before adding more code (§GOAL-008-remediation-messages)."
 
 [[messages]]
 id = "split-doc"
-text = "Split {path}: keep the declaration focused and move secondary detail into a cited child spec (§GOAL-008-architecture-aware-messages)."
+text = "Split {path}: keep the declaration focused and move secondary detail into a cited child spec (§GOAL-008-remediation-messages)."
 
 [[messages]]
 id = "large-fixture"

@@ -44,7 +44,7 @@ command = ["token-counter", "--count", "{path}"]
 
 [[messages]]
 id = "split-rust-library"
-text = "Split {path}: move cohesive library behavior into smaller modules before adding more surface area (§GOAL-008-architecture-aware-messages)."
+text = "Split {path}: move cohesive library behavior into smaller modules before adding more surface area (§GOAL-008-remediation-messages)."
 
 [[messages]]
 id = "split-rust-benchmark"
@@ -52,7 +52,7 @@ text = "Split {path}: keep benchmark setup and measured cases compact so perform
 
 [[messages]]
 id = "split-spec"
-text = "Split {path}: keep each declaration focused and move secondary detail into a narrower cited spec (§GOAL-008-architecture-aware-messages)."
+text = "Split {path}: keep each declaration focused and move secondary detail into a narrower cited spec (§GOAL-008-remediation-messages)."
 
 [[messages]]
 id = "split-tooling"

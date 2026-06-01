@@ -54,7 +54,6 @@ rules = ["fixtures"]
 max_accepted = { value = 300000, unit = "bytes" }
 until = "review after parser fixture generator lands"
 owner = "parser"
-created = "2026-05-28"
 reason = """
 This fixture is intentionally large because it mirrors production parser
 incidents while the generator is still planned.
@@ -62,8 +61,8 @@ incidents while the generator is still planned.
 ```
 
 If `--id` is omitted, `fissile` derives a slug from `<path>` and picks the next
-unused `EX-NNN-...` ID across both registries. `created` defaults to the current
-local date. Optional flags are omitted from the entry when absent.
+unused `EX-NNN-...` ID across both registries. The entry records no date — the
+commit that adds it carries that — and optional flags are omitted when absent.
 
 If the target registry does not exist, `fissile` creates it with:
 
