@@ -252,7 +252,7 @@ fn parse_registry(
 ) -> Result<Vec<Exception>, ExceptionError> {
     let file: RegistryFile = toml::from_str(text).map_err(|error| ExceptionError::Parse {
         registry: label.to_owned(),
-        reason: error.message().to_owned(),
+        reason: crate::config::format_toml_error(&error, text),
     })?;
 
     if file.fissile_exceptions_version != SUPPORTED_VERSION {

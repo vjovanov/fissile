@@ -12,11 +12,14 @@ The concrete example shape is maintained in `examples/fissile.toml`.
 
 A repo with no config still gets a useful guard:
 
-- scan `src`, `tests`, `benches`, `docs`, and root markdown files when present;
+- scan the whole repository, honoring `exclude` and `.gitignore`, so adoption
+  needs no guess about which layout a repo uses;
 - exclude lockfiles, minified files, vendored directories, build output, VCS
   metadata, and common binary/media assets;
 - apply a conservative byte budget to every non-excluded file;
-- apply language-neutral line budgets to source and markdown files;
+- apply a line budget to common hand-written source extensions and to markdown,
+  wherever those files live, while leaving data and generated formats to the
+  byte budget (§GND-001-fissile);
 - use generic messages that explain how to tune config rather than pretending to
   know the repository's architecture.
 

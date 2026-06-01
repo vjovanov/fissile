@@ -200,11 +200,34 @@ fn default_hard_registry() -> String {
     "docs/file-size-human-exceptions.toml".to_owned()
 }
 
+/// Render a `toml` error compactly: the bare message plus `line`/`column`
+/// derived from the error span, so a malformed config or registry points at the
+/// offending spot without the crate's multi-line snippet (§GOAL-003-friendly-output.1).
+pub(crate) fn format_toml_error(error: &toml::de::Error, source: &str) -> String {
+    match error.span() {
+        Some(span) => {
+            let start = span.start.min(source.len());
+            let mut line = 1usize;
+            let mut column = 1usize;
+            for &byte in &source.as_bytes()[..start] {
+                if byte == b'\n' {
+                    line += 1;
+                    column = 1;
+                } else {
+                    column += 1;
+                }
+            }
+            format!("{} at line {line} column {column}", error.message())
+        }
+        None => error.message().to_owned(),
+    }
+}
+
 impl Config {
     /// Parse and validate a config document.
     pub fn parse(toml_text: &str) -> Result<Self, ConfigError> {
         let config: Config = toml::from_str(toml_text).map_err(|error| ConfigError::Parse {
-            reason: error.message().to_owned(),
+            reason: format_toml_error(&error, toml_text),
         })?;
 
         if config.fissile_config_version != SUPPORTED_VERSION {

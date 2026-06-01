@@ -5,6 +5,7 @@ edition = "2024"
 description = "Steer agents toward leaner files — fewer tokens, architecture intact."
 readme = "README.md"
 license = "MIT OR Apache-2.0"
+repository = "https://github.com/vjovanov/fissile"
 documentation = "https://docs.rs/fissile"
 keywords = ["pre-commit", "architecture", "file-size", "agents"]
 categories = ["development-tools"]

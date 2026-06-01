@@ -59,8 +59,8 @@ A pre-commit hook that says "rejected" is worse than no hook at all. When the ch
 
 ### 1. Hard requirements
 
-- **Errors point at the file.** Every diagnostic is `path: <actual> <unit> exceeds <limit> <unit> (rule: <rule-name>)`. Editors and agents jump to the path unmodified.
-- **The fix is named.** When a limit was crossed, the diagnostic names the config key that controls it (e.g. `[limits.ts] lines = 400`) and the message rule that produced the remediation text.
+- **Errors point at the file.** Every diagnostic leads with the path: `path: <actual> <unit> > <limit> <unit> [<severity>, rule: <id>, message: <id>]` (§FS-004-check-audit). Editors and agents jump to the path unmodified.
+- **The fix is named.** When a limit is crossed, the diagnostic names the rule that owns the budget and the message that produced the remediation text, so the reader can find both in the config without re-running anything.
 - **The configured guidance is present.** An overflow includes whatever message the rule names — which may point at a destination module, ownership boundary, or extraction pattern, or may be deliberately generic ([§GOAL-008-remediation-messages](goals.md#goal-008-remediation-messages-overflows-can-carry-local-remediation-guidance)).
 - **Output is parseable.** A `--format json` flag emits a stable JSON shape, one record per violation for `check`, suitable for LLM consumption and editor integration.
 - **Help is one screen.** `fissile --help` fits in 24 lines; subcommand help includes compact examples.

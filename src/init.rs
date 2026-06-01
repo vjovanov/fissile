@@ -181,7 +181,8 @@ impl Report {
 }
 
 const NEXT_BLOCK: &str = "next:\n\
-1. Review .agents/fissile.toml and tune rule limits.\n\
+1. Review .agents/fissile.toml: the source rule budgets common code extensions; \
+add this repo's languages or tune the limits.\n\
 2. Commit a change to see the pre-commit hook run fissile check --staged.\n\
 3. Run fissile audit once and add justified exceptions with fissile exception add.\n\
 see AGENTS.md for the full workflow.";

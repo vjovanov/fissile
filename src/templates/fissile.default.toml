@@ -9,8 +9,10 @@ fissile_config_version = 1
 
 [scan]
 # `audit` walks these roots; `check --staged` ignores them and takes its file
-# set from git. Both honor `exclude`.
-include = ["src", "tests", "benches", "docs", "README.md"]
+# set from git. Both honor `exclude` and `.gitignore`. The default walks the
+# whole repository so adoption needs no layout guess; narrow it to specific
+# roots once you know which directories are worth auditing.
+include = ["."]
 exclude = [
   "target/**",
   "node_modules/**",
@@ -64,9 +66,21 @@ soft = 524288
 hard = 1048576
 message = "large-file-default"
 
+# Hand-written source, matched by extension so the budget follows the code into
+# whatever layout a repo uses (src/, cmd/, pkg/, lib/, app/, or the root) rather
+# than a guessed set of directories. Data and generated formats (.json, .sql,
+# .csv) are deliberately absent — they fall to the byte catch-all, because a
+# large generated file is not the same problem as a large hand-written module
+# (§GND-001-fissile). Add or drop extensions to match this repository.
 [[rules]]
 id = "source"
-include = ["src/**/*", "tests/**/*", "benches/**/*"]
+include = [
+  "**/*.rs", "**/*.go", "**/*.py", "**/*.rb", "**/*.php",
+  "**/*.java", "**/*.kt", "**/*.kts", "**/*.scala", "**/*.swift", "**/*.cs",
+  "**/*.c", "**/*.h", "**/*.cc", "**/*.cpp", "**/*.cxx", "**/*.hpp",
+  "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs", "**/*.ts", "**/*.tsx",
+  "**/*.vue", "**/*.svelte", "**/*.lua", "**/*.ex", "**/*.exs", "**/*.dart",
+]
 unit = "lines"
 soft = 350
 hard = 550
@@ -76,7 +90,7 @@ message = "split-source"
 
 [[rules]]
 id = "markdown-docs"
-include = ["docs/**/*.md", "README.md"]
+include = ["**/*.md"]
 unit = "lines"
 soft = 250
 hard = 500
