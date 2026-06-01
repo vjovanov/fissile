@@ -1,6 +1,6 @@
-//! `fissile` CLI entry point. Hand-rolled argument parsing keeps the dependency
-//! tree auditable (§GOAL-002-tiny-footprint); it dispatches `init`, `check`,
-//! `audit`, and `exception add` (§FS-002-init, §FS-004-check-audit, §FS-005-exception-add).
+//! `fissile` CLI entry point. Hand-rolled parsing and a tiny dependency tree
+//! (§GOAL-002-tiny-footprint, §DA-003-single-static-binary); dispatches `init`,
+//! `check`, `audit`, `exception add` (§FS-002-init, §FS-004-check-audit, §FS-005-exception-add).
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -11,7 +11,7 @@ use fissile::check::{self, CheckOptions};
 use fissile::cli::Format;
 use fissile::exception::{self, AddOptions};
 use fissile::exceptions::MatchKind;
-use fissile::init::{self, AgentTargets, InitOptions};
+use fissile::init::{self, AgentTargets, HookMode, InitOptions};
 use fissile::{Severity, Unit};
 
 const USAGE: &str = "\
@@ -27,8 +27,8 @@ run `fissile <command> --help` for command options";
 
 const INIT_USAGE: &str = "\
 usage: fissile init [<path>] [--name <name>] [--config <path>] [--exceptions]
-                    [--force] [--dry-run] [--agents-md] [--claude] [--gemini]
-                    [--copilot] [--cursor] [--windsurf] [--zed]
+                    [--hook] [--no-hook] [--force] [--dry-run] [--agents-md]
+                    [--claude] [--gemini] [--copilot] [--cursor] [--windsurf] [--zed]
 
 examples:
   fissile init --exceptions
@@ -114,6 +114,18 @@ fn run_init(args: &[String]) -> ExitCode {
                 Err(message) => return usage_fail("init", &message, INIT_USAGE),
             },
             "--exceptions" => options.exceptions = true,
+            "--hook" => {
+                if options.hook == HookMode::Never {
+                    return usage_fail("init", "--hook conflicts with --no-hook", INIT_USAGE);
+                }
+                options.hook = HookMode::Always;
+            }
+            "--no-hook" => {
+                if options.hook == HookMode::Always {
+                    return usage_fail("init", "--no-hook conflicts with --hook", INIT_USAGE);
+                }
+                options.hook = HookMode::Never;
+            }
             "--force" => options.force = true,
             "--dry-run" => options.dry_run = true,
             "--agents-md" => agents.agents_md = true,

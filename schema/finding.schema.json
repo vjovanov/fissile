@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/vjovanov/fissile/schema/finding.schema.json",
+  "title": "fissile finding record",
+  "description": "One overflow finding emitted by `fissile check` and `fissile audit` (FS-004-check-audit.1). The byte-stable fields a human and an agent both read (GOAL-003-friendly-output.1, GOAL-004-token-thrift.1).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "path",
+    "unit",
+    "actual",
+    "limit",
+    "severity",
+    "rule_id",
+    "message_id",
+    "message"
+  ],
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "Repo-relative path with forward slashes."
+    },
+    "unit": {
+      "type": "string",
+      "enum": ["bytes", "lines", "tokens"],
+      "description": "The unit the matched rule measures in."
+    },
+    "actual": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "The file's measured value in `unit`."
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "The crossed soft or hard limit in `unit`."
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["soft", "hard"],
+      "description": "`hard` fails the commit; `soft` warns (GOAL-006-graded-limits)."
+    },
+    "rule_id": {
+      "type": "string",
+      "description": "The rule that selected the budget and message."
+    },
+    "message_id": {
+      "type": "string",
+      "description": "The stable ID of the configured remediation message."
+    },
+    "message": {
+      "type": "string",
+      "description": "The rendered remediation guidance (GOAL-008-remediation-messages)."
+    },
+    "exception_id": {
+      "type": "string",
+      "description": "Present only on silenced `audit` records: the exception that accepts the file (FS-003-exceptions.5)."
+    },
+    "exception_max": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Present only on silenced `audit` records: the maximum value the exception accepts."
+    }
+  }
+}

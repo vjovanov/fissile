@@ -1,0 +1,3 @@
+args = ["check", "--format", "json"]
+exit = 1
+stdout_equals = '[{"path":"src/big.rs","unit":"lines","actual":5,"limit":4,"severity":"hard","rule_id":"rust","message_id":"m","message":"Split the file."}]'

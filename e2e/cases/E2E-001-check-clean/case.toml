@@ -1,0 +1,3 @@
+args = ["check", "--no-color"]
+exit = 0
+stdout_equals = "ok"

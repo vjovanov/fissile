@@ -1,0 +1,93 @@
+//! The agent-minimize loop (§GOAL-006.2, §GOAL-006.4): a soft warning carries a
+//! byte-stable finding shape that an agent keys off, and shrinking the file it
+//! named clears the warning on the next run. This drives the real `fissile`
+//! binary through warn → shrink → clean, asserting the exact soft-finding line
+//! the managed `AGENTS.md` block tells an agent to pattern-match on.
+
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+/// A rust rule that warns at two lines and blocks at ten, with a named message.
+const CONFIG: &str = "\
+fissile_config_version = 1
+
+[scan]
+include = [\"src\"]
+exclude = []
+respect_gitignore = false
+
+[[messages]]
+id = \"split-source\"
+text = \"Split the file.\"
+
+[[rules]]
+id = \"rust\"
+include = [\"src/**/*.rs\"]
+unit = \"lines\"
+soft = 2
+hard = 10
+message = \"split-source\"
+";
+
+/// The diagnostic shape §GOAL-006.2 fixes so an agent can match without parsing
+/// prose: `path: <actual> <unit> > <soft> <unit> [soft, rule: <name>, message: <id>]`.
+const SOFT_FINDING: &str =
+    "src/grew.rs: 5 lines > 2 lines [soft, rule: rust, message: split-source]";
+
+fn work_dir() -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("fissile-agent-loop-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(dir.join(".agents")).unwrap();
+    fs::create_dir_all(dir.join("src")).unwrap();
+    fs::write(dir.join(".agents/fissile.toml"), CONFIG).unwrap();
+    dir
+}
+
+fn check(root: &Path) -> (i32, String) {
+    let output = Command::new(env!("CARGO_BIN_EXE_fissile"))
+        .current_dir(root)
+        .args(["check", "--no-color"])
+        .output()
+        .expect("fissile runs");
+    (
+        output.status.code().unwrap_or(-1),
+        String::from_utf8_lossy(&output.stdout).into_owned(),
+    )
+}
+
+#[test]
+fn soft_warning_clears_after_the_agent_shrinks_the_file() {
+    let root = work_dir();
+    let file = root.join("src/grew.rs");
+
+    // The agent just grew this file to five lines, over the soft limit of two.
+    fs::write(
+        &file,
+        "fn a() {}\nfn b() {}\nfn c() {}\nfn d() {}\nfn e() {}\n",
+    )
+    .unwrap();
+
+    // First run: the warning is on stdout, the commit is *not* blocked (exit 0),
+    // and the finding line is byte-for-byte what an agent keys off.
+    let (code, stdout) = check(&root);
+    assert_eq!(code, 0, "a soft overflow warns without blocking");
+    assert!(
+        stdout.lines().any(|line| line == SOFT_FINDING),
+        "soft finding shape drifted; got:\n{stdout}"
+    );
+
+    // The agent follows the guidance and brings the file back under the limit.
+    fs::write(&file, "fn a() {}\n").unwrap();
+
+    // Second run: clean. The minimize loop closed without an exception entry.
+    let (code, stdout) = check(&root);
+    assert_eq!(code, 0);
+    assert_eq!(
+        stdout.trim_end(),
+        "ok",
+        "shrinking the file clears the warning"
+    );
+
+    let _ = fs::remove_dir_all(&root);
+}

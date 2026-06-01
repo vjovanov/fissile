@@ -21,7 +21,9 @@ The crate is both a library and a `fissile` binary. The binary provides:
 
 The repository config is documented in `docs/functional-spec/FS-001-config.md`;
 a concrete sample lives at `examples/fissile.toml`. The exception registry
-format is specified in `docs/functional-spec/FS-003-exceptions.md`.
+format is specified in `docs/functional-spec/FS-003-exceptions.md`. The JSON
+shape emitted by `check` and `audit --format json` is published under `schema/`
+(`check.schema.json`, `audit.schema.json`, `finding.schema.json`).
 
 Common CLI flows:
 

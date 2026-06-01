@@ -3,10 +3,11 @@ set -euo pipefail
 
 # Profile-guided-optimization build for the current fissile crate.
 #
-# fissile is currently a library core, not a CLI binary. This script therefore
-# trains on the release test workload and rebuilds the release library artifact
-# with the merged profile. When a CLI target lands, extend the training loop to
-# run the hot subcommands before the final rebuild.
+# Training has two parts, both feeding the same profile (§AR-001-ci.6): the
+# release test workload, plus the `fissile` CLI hot commands (`check`, `audit`)
+# run over this repository so the profile reflects the commit-time path that
+# §GOAL-001-fast-feedback is ordered around. Both run instrumented, then the
+# merged profile drives a final profile-use rebuild of the release artifacts.
 
 cd "$(dirname "$0")/.."
 repo="$PWD"
@@ -36,8 +37,21 @@ pgo_dir_rustc="$(rustc_path "$pgo_dir")"
 profdata_rustc="$(rustc_path "$profdata")"
 
 echo "==> 1/3  run release tests with instrumentation (-Cprofile-generate)"
-RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-Cprofile-generate=$pgo_dir_rustc" \
+gen_flags="${RUSTFLAGS:+$RUSTFLAGS }-Cprofile-generate=$pgo_dir_rustc"
+RUSTFLAGS="$gen_flags" \
   cargo test --release --locked --workspace --all-targets
+
+echo "==> 1b/3 train the CLI hot commands on this repository"
+RUSTFLAGS="$gen_flags" \
+  cargo build --release --locked --bin fissile
+fissile_bin="$repo/target/release/fissile"
+# `check`/`audit` exit non-zero when this repo has overflows; that is expected
+# training output, not a build failure, so the runs are guarded.
+"$fissile_bin" audit --no-color >/dev/null 2>&1 || true
+"$fissile_bin" audit --no-color --top 20 --rule-coverage --stale-exceptions >/dev/null 2>&1 || true
+"$fissile_bin" audit --format json >/dev/null 2>&1 || true
+"$fissile_bin" check --no-color src/*.rs >/dev/null 2>&1 || true
+"$fissile_bin" check --format json src/*.rs >/dev/null 2>&1 || true
 
 shopt -s nullglob
 profraws=("$pgo_dir"/*.profraw)

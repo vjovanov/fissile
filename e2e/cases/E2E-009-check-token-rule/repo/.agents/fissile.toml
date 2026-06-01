@@ -1,0 +1,38 @@
+fissile_config_version = 1
+
+[scan]
+include = ["src"]
+exclude = ["src/**/*.gen.txt"]
+respect_gitignore = false
+
+[tokens]
+# A POSIX shell stub stands in for a real tokenizer (§DA-001-token-external-command):
+# it prints the word count, which the checker reads as the token total.
+enabled = true
+command = ["sh", "tokcount.sh", "{path}"]
+
+[[messages]]
+id = "split-source"
+text = "Split {path} into a sibling module."
+
+[[messages]]
+id = "token-budget"
+text = "Trim {path} to fit the token budget."
+
+# Custom per-extension limit: hand-written rust is measured in lines.
+[[rules]]
+id = "rust"
+include = ["src/**/*.rs"]
+unit = "lines"
+soft = 2
+hard = 4
+message = "split-source"
+
+# Token-unit rule with its own message: prose is measured in tokens.
+[[rules]]
+id = "prose"
+include = ["src/**/*.txt"]
+unit = "tokens"
+soft = 2
+hard = 4
+message = "token-budget"

@@ -73,6 +73,18 @@ impl AgentTargets {
     }
 }
 
+/// Whether `init` installs the managed pre-commit hook (§FS-002-init.6).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum HookMode {
+    /// Install when the target is a git repository; skip silently otherwise.
+    #[default]
+    Auto,
+    /// Always install; error when the target is not a git repository (`--hook`).
+    Always,
+    /// Never install (`--no-hook`).
+    Never,
+}
+
 /// Inputs to an `init` run (§FS-002-init.1).
 #[derive(Clone, Debug)]
 pub struct InitOptions {
@@ -85,6 +97,8 @@ pub struct InitOptions {
     pub force: bool,
     pub dry_run: bool,
     pub agents: AgentTargets,
+    /// Pre-commit hook install policy (§FS-002-init.6).
+    pub hook: HookMode,
 }
 
 impl InitOptions {
@@ -97,6 +111,7 @@ impl InitOptions {
             force: false,
             dry_run: false,
             agents: AgentTargets::default(),
+            hook: HookMode::Auto,
         }
     }
 }
@@ -123,7 +138,7 @@ impl Action {
         }
     }
 
-    fn changed(self) -> bool {
+    pub(crate) fn changed(self) -> bool {
         !matches!(self, Action::Exists)
     }
 }
@@ -167,7 +182,7 @@ impl Report {
 
 const NEXT_BLOCK: &str = "next:\n\
 1. Review .agents/fissile.toml and tune rule limits.\n\
-2. Install the pre-commit hook that runs fissile check --staged.\n\
+2. Commit a change to see the pre-commit hook run fissile check --staged.\n\
 3. Run fissile audit once and add justified exceptions with fissile exception add.\n\
 see AGENTS.md for the full workflow.";
 
@@ -176,6 +191,7 @@ see AGENTS.md for the full workflow.";
 pub enum InitError {
     Io(io::Error),
     UnsupportedBlock { path: PathBuf, version: u32 },
+    NotAGitRepo { root: PathBuf },
 }
 
 impl std::fmt::Display for InitError {
@@ -186,6 +202,11 @@ impl std::fmt::Display for InitError {
                 f,
                 "{} has an unsupported managed block version v{version}; this build writes v{SUPPORTED_BLOCK_VERSION}",
                 path.display()
+            ),
+            InitError::NotAGitRepo { root } => write!(
+                f,
+                "{} is not a git repository; cannot install the pre-commit hook",
+                root.display()
             ),
         }
     }
@@ -234,6 +255,23 @@ pub fn run(options: &InitOptions) -> Result<Report, InitError> {
             &name,
             options.dry_run,
         )?);
+    }
+
+    // 4. Managed pre-commit hook (§FS-002-init.6). Automatic mode installs only
+    //    inside a git repo; `--hook` forces it; `--no-hook` opts out.
+    match options.hook {
+        HookMode::Always if !crate::hook::is_git_repo(&options.root) => {
+            return Err(InitError::NotAGitRepo {
+                root: options.root.clone(),
+            });
+        }
+        HookMode::Always => {
+            outcomes.push(crate::hook::install(&options.root, options.dry_run)?);
+        }
+        HookMode::Auto if crate::hook::is_git_repo(&options.root) => {
+            outcomes.push(crate::hook::install(&options.root, options.dry_run)?);
+        }
+        HookMode::Auto | HookMode::Never => {}
     }
 
     Ok(Report {

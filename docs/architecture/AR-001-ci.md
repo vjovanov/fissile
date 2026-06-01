@@ -57,7 +57,17 @@ keeps the ordinary feedback loop focused on format, build, test, lint,
 grounding, smoke, and instruction counts, while still proving the PGO toolchain
 before a release.
 
-`fissile` is currently a library core, so the PGO script trains on the release
-test workload and rebuilds release library artifacts under `target/release`.
-When a CLI binary lands, the script should grow a CLI hot-command training loop
-before the final profile-use rebuild, matching the benchmarked command surface.
+The PGO script trains on two instrumented workloads before merging one profile:
+the release test suite, and the `fissile` CLI hot commands (`check` and `audit`)
+run over this repository. Training the real commit-time path keeps the profile
+aligned with §GOAL-001-fast-feedback rather than with test scaffolding. The
+merged profile then drives a final profile-use rebuild of the release artifacts
+under `target/release`.
+
+## 7. Binary-size guard
+
+The pre-release workflow strips the release binary and fails if it exceeds a
+documented ceiling, closing the loop on the footprint promise
+(§GOAL-002-tiny-footprint.3). The ceiling is generous relative to the current
+artifact; it exists to catch a dependency or feature that silently inflates the
+single-binary contract, not to police small movements.

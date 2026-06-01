@@ -1,6 +1,6 @@
-//! Minimal JSON emission for machine-readable findings (§GOAL-002-tiny-footprint).
-//! Only the value shapes `fissile` emits are modeled, so no `serde_json` (or any
-//! reflective JSON dependency) is pulled into the binary.
+//! Minimal JSON emission for machine-readable findings (§GOAL-002-tiny-footprint,
+//! §DA-003-single-static-binary). Only the value shapes `fissile` emits are modeled,
+//! so no `serde_json` (or any reflective JSON dependency) is pulled into the binary.
 
 /// A JSON value `fissile` can render. Object key order is preserved so output is
 /// stable and diff-friendly.

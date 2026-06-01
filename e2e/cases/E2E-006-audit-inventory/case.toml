@@ -1,0 +1,9 @@
+args = ["audit", "--no-color", "--top", "3", "--stale-exceptions", "--rule-coverage"]
+exit = 1
+stdout_contains = [
+  "src/big.rs: 5 lines > 4 lines [hard, rule: rust, message: m]",
+  "top lines:",
+  "  5 src/big.rs",
+  "stale exceptions:",
+  "rule coverage:",
+]

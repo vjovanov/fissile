@@ -11,7 +11,7 @@ every choice a flag, and support `--dry-run`.
 
 ```text
 fissile init [<path>] [--name <name>] [--force] [--dry-run]
-             [--config <path>] [--exceptions]
+             [--config <path>] [--exceptions] [--hook] [--no-hook]
              [--agents-md] [--claude] [--gemini] [--copilot]
              [--cursor] [--windsurf] [--zed]
 ```
@@ -24,6 +24,9 @@ fissile init [<path>] [--name <name>] [--force] [--dry-run]
   is `.agents/fissile.toml`.
 - `--exceptions` also creates the configured soft and hard exception registry
   paths when absent.
+- `--hook` forces installation of the managed pre-commit hook (§6) and errors if
+  the target is not a git repository. `--no-hook` suppresses the install that
+  automatic mode would otherwise perform. The two flags are mutually exclusive.
 - `--force` refreshes managed agent blocks and generated starter files. It does
   not overwrite an existing config or any existing exception registries.
 - `--dry-run` reports what would be written, appended, or updated without
@@ -33,7 +36,7 @@ fissile init [<path>] [--name <name>] [--force] [--dry-run]
   `AGENTS.md`.
 
 `init` is non-interactive. It never prompts and never guesses beyond the automatic
-entrypoint selection rules in §3.
+entrypoint selection rules in §3 and the automatic hook install in §6.
 
 ## 2. Files
 
@@ -134,10 +137,40 @@ After a run that wrote, appended, or updated something, stderr prints a short
 ```text
 next:
 1. Review .agents/fissile.toml and tune rule limits.
-2. Install the pre-commit hook that runs fissile check --staged.
+2. Commit a change to see the pre-commit hook run fissile check --staged.
 3. Run fissile audit once and add justified exceptions with fissile exception add.
 see AGENTS.md for the full workflow.
 ```
 
 The `next:` block is suppressed when every selected file already exists with the
 current managed block.
+
+## 6. Pre-commit Hook
+
+The headline use case is a commit-time gate (§GND-001-fissile), so `init`
+installs it rather than only describing it. The hook is a managed block inside
+`<path>/.git/hooks/pre-commit`, delimited by begin/end markers so it composes
+with hooks a project already maintains:
+
+```sh
+# >>> fissile managed block (v1) >>>
+fissile check --staged || exit 1
+# <<< fissile managed block (v1) <<<
+```
+
+- **When it installs.** Automatic mode installs the hook when `<path>/.git` is a
+  directory and skips silently otherwise (no git repository, nothing to hook).
+  `--hook` forces the install and errors when the target is not a git
+  repository; `--no-hook` suppresses the automatic install.
+- **How it edits.** When `pre-commit` is absent, `init` writes it with a
+  `#!/bin/sh` shebang above the block and marks it executable. When it exists
+  without the block, `init` appends the block and preserves prior content. When
+  it exists with a supported block version, `init` replaces only the block,
+  preserving bytes before and after. A newer unsupported block version is a
+  schema error that leaves the file unchanged, exactly as in §4.
+- **Reporting.** The hook path uses the same prefixes as §5
+  (`wrote`/`appended`/`updated`/`exists`) and honors `--dry-run`.
+
+`init` targets `.git/hooks/pre-commit` only. A repository that relocates hooks
+via `core.hooksPath` or drives them through a hook manager should wire
+`fissile check --staged` through that manager instead.

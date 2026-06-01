@@ -1,0 +1,10 @@
+args = [
+  "exception", "add", "src/big.rs",
+  "--severity", "hard",
+  "--rule", "rust",
+  "--reason", "accepted while the split is tracked",
+  "--until", "indefinite",
+]
+exit = 0
+stdout_contains = ["appended", "docs/file-size-human-exceptions.toml"]
+creates = ["docs/file-size-human-exceptions.toml"]

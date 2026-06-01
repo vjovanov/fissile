@@ -1,0 +1,5 @@
+args = ["check", "--no-color"]
+exit = 1
+stdout_equals = """
+src/big.rs: 5 lines > 4 lines [hard, rule: rust, message: m]
+  Split the file."""

@@ -1,0 +1,12 @@
+fissile_exceptions_version = 1
+
+[[exceptions]]
+id = "EX-001-big"
+path = "src/big.rs"
+match = "exact"
+rules = ["rust"]
+max_accepted = { value = 5, unit = "lines" }
+until = "indefinite"
+reason = """
+Accepted while the split into smaller modules is tracked.
+"""

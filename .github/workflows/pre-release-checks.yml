@@ -33,3 +33,20 @@ jobs:
 
       - name: Build PGO release artifacts
         run: bash scripts/pgo-build.sh
+
+      - name: Binary-size guard
+        shell: bash
+        run: |
+          # Strip and measure the release binary, failing past a documented
+          # ceiling (§AR-001-ci.7 / §GOAL-002-tiny-footprint.3). The limit is
+          # generous; it guards the single-binary contract against silent
+          # inflation, not small movements.
+          bin="target/release/fissile"
+          strip "$bin"
+          max_bytes=$((8 * 1024 * 1024))
+          size=$(stat -c %s "$bin")
+          echo "stripped fissile: $size bytes (ceiling $max_bytes)"
+          if [ "$size" -gt "$max_bytes" ]; then
+            echo "::error::fissile binary $size bytes exceeds ${max_bytes}-byte ceiling" >&2
+            exit 1
+          fi

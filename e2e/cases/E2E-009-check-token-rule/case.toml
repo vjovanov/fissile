@@ -1,0 +1,6 @@
+unix_only = true
+args = ["check", "--no-color"]
+exit = 1
+stdout_equals = """
+src/big.txt: 6 tokens > 4 tokens [hard, rule: prose, message: token-budget]
+  Trim src/big.txt to fit the token budget."""

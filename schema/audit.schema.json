@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/vjovanov/fissile/schema/audit.schema.json",
+  "title": "fissile audit output",
+  "description": "`fissile audit --format json` (FS-004-check-audit.2): standing findings plus optional inventory sections. `top`, `stale`, and `coverage` appear only when their flags are passed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["findings", "silenced"],
+  "properties": {
+    "findings": {
+      "type": "array",
+      "description": "Standing findings, same shape as check output.",
+      "items": { "$ref": "finding.schema.json" }
+    },
+    "silenced": {
+      "type": "array",
+      "description": "Overflows accepted by an exception, carried for attribution (FS-003-exceptions.5).",
+      "items": { "$ref": "finding.schema.json" }
+    },
+    "top": {
+      "type": "array",
+      "description": "Largest files per unit (audit --top N).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["unit", "files"],
+        "properties": {
+          "unit": { "type": "string", "enum": ["bytes", "lines", "tokens"] },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["value", "path"],
+              "properties": {
+                "value": { "type": "integer", "minimum": 0 },
+                "path": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "stale": {
+      "type": "array",
+      "description": "Exceptions whose path matches no scanned file (audit --stale-exceptions).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "path"],
+        "properties": {
+          "id": { "type": "string" },
+          "path": { "type": "string" }
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "description": "Rule coverage gaps (audit --rule-coverage).",
+      "additionalProperties": false,
+      "required": ["unmatched_rules", "catch_all_only", "unused_messages"],
+      "properties": {
+        "unmatched_rules": { "type": "array", "items": { "type": "string" } },
+        "catch_all_only": { "type": "array", "items": { "type": "string" } },
+        "unused_messages": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

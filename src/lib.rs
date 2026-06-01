@@ -15,6 +15,7 @@ pub mod config;
 pub mod exception;
 pub mod exceptions;
 mod glob;
+pub mod hook;
 pub mod init;
 pub mod json;
 mod model;

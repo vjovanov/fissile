@@ -3,7 +3,8 @@
 `fissile` uses the same performance measurement shape as `grund`: an
 instruction-counting `cargo bench` harness under Callgrind. Wall-clock targets
 in §GOAL-001-fast-feedback remain the product budget, but instruction counts are
-the CI regression meter because they are stable on shared runners.
+the CI regression meter because they are stable on shared runners
+(§DA-002-instruction-count-benchmarks).
 
 ## 1. What is benched
 

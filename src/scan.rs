@@ -246,7 +246,8 @@ fn filter_gitignored(root: &Path, paths: &mut Vec<String>) {
 }
 
 /// Measure one repo-relative file. UTF-8 files are line-classified; others are
-/// measured by bytes only. Token counts come from the opt-in external command.
+/// measured by bytes only. Token counts come from the opt-in external command
+/// (§DA-001-token-external-command).
 pub fn measure_file(root: &Path, rel: &str, tokens: &Tokens) -> io::Result<FileMeasurement> {
     let bytes = fs::read(root.join(rel))?;
     let mut measurement = measure_content(rel, &bytes);

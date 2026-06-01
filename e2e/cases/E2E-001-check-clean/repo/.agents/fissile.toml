@@ -1,0 +1,18 @@
+fissile_config_version = 1
+
+[scan]
+include = ["src"]
+exclude = []
+respect_gitignore = false
+
+[[messages]]
+id = "m"
+text = "Split the file."
+
+[[rules]]
+id = "rust"
+include = ["src/**/*.rs"]
+unit = "lines"
+soft = 2
+hard = 4
+message = "m"

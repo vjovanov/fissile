@@ -117,7 +117,7 @@ Configurability is the safety valve that lets [§GOAL-001-fast-feedback](goals.m
 
 ### 4. Measurable
 
-An e2e fixture with a non-default config (custom per-extension limits, a glob exclusion, a token-unit rule, and a custom overflow message) passes. The default config — applied implicitly when no config file is present — is checked into the e2e suite and snapshot-tested so a silent change to defaults fails CI.
+An e2e fixture with a non-default config (custom per-extension limits, a glob exclusion, a token-unit rule, and a custom overflow message) passes (§E2E-009-check-token-rule). Because the token-unit rule needs an external counter ([§DA-001-token-external-command](decisions/architectural/DA-001-token-external-command.md#da-001-token-external-command-token-counting-shells-out-no-tokenizer-is-bundled)) and a portable counter stub is not cross-platform, that fixture is Unix-gated — the same Linux-only concession the instruction benchmarks already make ([§DA-002-instruction-count-benchmarks](decisions/architectural/DA-002-instruction-count-benchmarks.md#da-002-instruction-count-benchmarks-ci-meters-performance-in-instructions-not-wall-clock)); token mode itself is cross-platform. The default config — applied implicitly when no config file is present — is checked into the e2e suite and snapshot-tested so a silent change to defaults fails CI.
 
 ## GOAL-006-graded-limits: soft warns, hard blocks, AI minimizes
 
@@ -143,7 +143,7 @@ This is the half of [§GND-001-fissile](grund.md#gnd-001-fissile-steer-agents-to
 
 ### 4. Measurable
 
-E2E fixtures cover all four states per rule: clean, soft-only, hard-only, both. The hard-only case must exit non-zero; the soft-only case must exit zero with the warning on stdout. A fixture that wires the soft warning through a mock agent loop asserts the diagnostic shape an agent would key off.
+E2E fixtures cover all four states per rule: clean, soft-only, hard-only, both. The hard-only case must exit non-zero; the soft-only case must exit zero with the warning on stdout. An integration test drives the real binary through the minimize loop — warn, shrink the named file, re-check clean — and asserts the byte-exact soft-finding line an agent keys off (`tests/agent_loop.rs`).
 
 ## GOAL-007-justified-exceptions: every oversized file has a written reason
 
