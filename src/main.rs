@@ -28,22 +28,38 @@ run `fissile <command> --help` for command options";
 const INIT_USAGE: &str = "\
 usage: fissile init [<path>] [--name <name>] [--config <path>] [--exceptions]
                     [--force] [--dry-run] [--agents-md] [--claude] [--gemini]
-                    [--copilot] [--cursor] [--windsurf] [--zed]";
+                    [--copilot] [--cursor] [--windsurf] [--zed]
+
+examples:
+  fissile init --exceptions
+  fissile init . --agents-md --claude";
 
 const CHECK_USAGE: &str = "\
 usage: fissile check [<paths>...] [--staged] [--config <path>]
-                     [--format text|json] [--no-color]";
+                     [--format text|json] [--no-color]
+
+examples:
+  fissile check --staged
+  fissile check src/lib.rs --format json";
 
 const AUDIT_USAGE: &str = "\
 usage: fissile audit [--config <path>] [--format text|json] [--top <N>]
-                     [--stale-exceptions] [--rule-coverage] [--no-color]";
+                     [--stale-exceptions] [--rule-coverage] [--no-color]
+
+examples:
+  fissile audit --top 10
+  fissile audit --stale-exceptions --rule-coverage";
 
 const EXCEPTION_USAGE: &str = "\
 usage: fissile exception add <path> --severity soft|hard --rule <id>
                  --reason <text> --until <text> [--config <path>]
                  [--match exact|glob] [--id <id>] [--title <text>]
                  [--owner <text>] [--issue <text>] [--replaces <id>]
-                 [--max <N> --unit bytes|lines|tokens] [--dry-run]";
+                 [--max <N> --unit bytes|lines|tokens] [--dry-run]
+
+examples:
+  fissile exception add src/big.rs --severity hard --rule rust --reason \"accepted debt\" --until \"split tracked\"
+  fissile exception add \"tests/fixtures/**\" --match glob --severity soft --rule fixtures --max 300000 --unit bytes --reason \"fixture corpus\" --until indefinite";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();

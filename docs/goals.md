@@ -62,8 +62,8 @@ A pre-commit hook that says "rejected" is worse than no hook at all. When the ch
 - **Errors point at the file.** Every diagnostic is `path: <actual> <unit> exceeds <limit> <unit> (rule: <rule-name>)`. Editors and agents jump to the path unmodified.
 - **The fix is named.** When a limit was crossed, the diagnostic names the config key that controls it (e.g. `[limits.ts] lines = 400`) and the message rule that produced the remediation text.
 - **The configured guidance is present.** An overflow includes whatever message the rule names — which may point at a destination module, ownership boundary, or extraction pattern, or may be deliberately generic ([§GOAL-008-remediation-messages](goals.md#goal-008-remediation-messages-overflows-can-carry-local-remediation-guidance)).
-- **Output is parseable.** A `--format=json` flag emits a stable JSON shape, one record per violation, suitable for LLM consumption and editor integration.
-- **Help is one screen.** `fissile --help` fits in 24 lines and every flag carries a one-line example.
+- **Output is parseable.** A `--format json` flag emits a stable JSON shape, one record per violation for `check`, suitable for LLM consumption and editor integration.
+- **Help is one screen.** `fissile --help` fits in 24 lines; subcommand help includes compact examples.
 - **Explicit success.** A passing text run prints exactly `ok` on stdout; the JSON form stays diagnostics-only.
 
 ### 2. What this rules out
@@ -81,9 +81,9 @@ The whole point of this checker is to lower the token cost of working in the rep
 ### 1. What this requires
 
 - **One compact record per finding.** A violation has one required finding line: `path: <actual> > <limit> [rule, message: <id>]`. Text output may add one configured guidance line; JSON carries the same message fields in the record.
-- **No re-statement of inputs.** The tool does not echo back its configuration or the list of files it scanned unless `--verbose` is passed.
-- **`--format=json` is the agent surface.** Agents are nudged toward JSON; the schema is a flat array of records, one per violation, with no envelope.
-- **The audit summary is a count, not a paragraph.** `audit` ends in a single line: `<N> file(s) over limit`, or nothing if clean.
+- **No re-statement of inputs.** The tool does not echo back its configuration or the list of files it scanned unless the caller asks for inventory sections such as `audit --top`.
+- **`--format json` is the agent surface.** Agents are nudged toward JSON; `check` uses a flat array of records and `audit` uses a compact object for optional inventory sections.
+- **The audit summary is compact.** Default `audit` emits the same finding surface as `check`; optional inventory sections are short lists, not paragraphs.
 - **Stable byte output.** Same `(tree, config)` → same bytes. Findings are sorted deterministically (path, then rule name). An agent that diffs two runs sees only the real change.
 
 ### 2. What this rules out
@@ -143,7 +143,7 @@ This is the half of [§GND-001-fissile](grund.md#gnd-001-fissile-steer-agents-to
 
 ### 4. Measurable
 
-E2E fixtures cover all four states per rule: clean, soft-only, hard-only, both. The hard-only case must exit non-zero; the soft-only case must exit zero with the warning on stderr. A fixture that wires the soft warning through a mock agent loop asserts the diagnostic shape an agent would key off.
+E2E fixtures cover all four states per rule: clean, soft-only, hard-only, both. The hard-only case must exit non-zero; the soft-only case must exit zero with the warning on stdout. A fixture that wires the soft warning through a mock agent loop asserts the diagnostic shape an agent would key off.
 
 ## GOAL-007-justified-exceptions: every oversized file has a written reason
 
@@ -182,8 +182,8 @@ The `EX-` ID is local to `fissile`; the parsing contract lives in
 - `fissile exception add` (§FS-005-exception-add) is the supported way to append
   entries, so users do not need to hand-edit registry TOML for current
   overflows.
-- An exception whose path matches no file under scan is reported by `audit --stale` — dead exceptions rot fast and the tool refuses to pretend they are load-bearing.
-- The diagnostic for a file under exception still names the exception ID on `audit --verbose`, so reviewers can find the rationale without grep.
+- An exception whose path matches no file under scan is reported by `audit --stale-exceptions` — dead exceptions rot fast and the tool refuses to pretend they are load-bearing.
+- `audit` names silenced exception IDs when an exception applies, so reviewers can find the rationale without grep.
 
 ### 3. What this rules out
 
@@ -195,7 +195,7 @@ The `EX-` ID is local to `fissile`; the parsing contract lives in
 
 - [§GOAL-006-graded-limits](goals.md#goal-006-graded-limits-soft-warns-hard-blocks-ai-minimizes) defines what the registries override; this goal defines the shape of the override.
 - [§GOAL-005-configurable.1](goals.md#1-what-is-configurable) separates exclusions (no rationale, for files the tool obviously does not apply to) from exceptions (rationale required, for files the tool applies to but accepts). The split is deliberate — silencing a `.png` and silencing a 4,000-line module are not the same kind of decision and the registry shapes should not let them look the same.
-- [§GOAL-004-token-thrift](goals.md#goal-004-token-thrift-the-tool-itself-spends-as-few-tokens-as-it-saves) holds: a file under exception emits no diagnostic by default, only on `--verbose`.
+- [§GOAL-004-token-thrift](goals.md#goal-004-token-thrift-the-tool-itself-spends-as-few-tokens-as-it-saves) holds: a file under exception emits no blocking diagnostic by default, while `audit` can still attribute accepted debt.
 
 ### 5. Measurable
 

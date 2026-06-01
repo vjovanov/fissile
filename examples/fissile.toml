@@ -1,4 +1,4 @@
-# Proposed fissile configuration shape.
+# Example fissile configuration shape.
 # Copy to the target repository as `.agents/fissile.toml`.
 #
 # Every value is spelled out at its default so the file is editable in place

@@ -37,8 +37,8 @@ JSON output emits one record per overflow with at least:
 - `rule_id`
 - `message_id`
 - `message`
-- `exception_id`, when applicable in verbose output
-- `exception_max`, when an exception is reported in verbose output
+- `exception_id`, when applicable in audit's silenced output
+- `exception_max`, when applicable in audit's silenced output
 
 When no findings are emitted, text output prints exactly `ok`; JSON output emits
 no success envelope.

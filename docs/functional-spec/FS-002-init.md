@@ -1,7 +1,7 @@
 # FS-002-init: fissile init installs config, exceptions, and agent instructions
 
 `fissile init` bootstraps a repository for commit-time file-size discipline. It
-writes the proposed config file, creates the exception registries if requested,
+writes the starter config file, creates the exception registries if requested,
 and adds a versioned managed block to agent instruction files so coding agents
 know how to react to soft and hard overflows. It follows the same non-intrusive shape
 as `grund init`: preserve user-authored content, update only managed blocks, make

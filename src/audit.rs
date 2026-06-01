@@ -110,7 +110,7 @@ fn unit_value(measurement: &FileMeasurement, unit: Unit) -> Option<u64> {
 fn top_files(measurements: &[FileMeasurement], n: usize) -> TopFiles {
     UNITS
         .iter()
-        .map(|&unit| {
+        .filter_map(|&unit| {
             let mut ranked: Vec<(u64, String)> = measurements
                 .iter()
                 .filter_map(|measurement| {
@@ -120,7 +120,7 @@ fn top_files(measurements: &[FileMeasurement], n: usize) -> TopFiles {
                 .collect();
             ranked.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
             ranked.truncate(n);
-            (unit, ranked)
+            (!ranked.is_empty()).then_some((unit, ranked))
         })
         .collect()
 }

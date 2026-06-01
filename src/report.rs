@@ -14,8 +14,8 @@ use crate::{Checker, FileMeasurement, FissileError, Overflow, Severity, render_o
 pub enum Outcome {
     /// A standing finding: no exception silenced it.
     Reported(Overflow),
-    /// An overflow accepted by an exception. Carried for verbose audit
-    /// attribution (§FS-003-exceptions.5); never fails a build.
+    /// An overflow accepted by an exception. Carried for audit attribution
+    /// (§FS-003-exceptions.5); never fails a build.
     Silenced {
         overflow: Overflow,
         exception_id: String,
@@ -160,7 +160,7 @@ pub fn success_marker(marker: &str, color: bool) -> String {
     paint(color, GREEN, marker)
 }
 
-/// The verbose attribution line for a silenced overflow (§FS-003-exceptions.5).
+/// The audit attribution line for a silenced overflow (§FS-003-exceptions.5).
 pub fn silenced_line(overflow: &Overflow, exception_id: &str, exception_max: u64) -> String {
     format!(
         "{}: {} exception {} (accepted up to {} {})",
@@ -173,7 +173,7 @@ pub fn silenced_line(overflow: &Overflow, exception_id: &str, exception_max: u64
 }
 
 /// One JSON finding record (§FS-004-check-audit.1). Exception fields are added
-/// only for verbose silenced records.
+/// only for silenced audit records.
 pub fn overflow_json(outcome: &Outcome) -> Json {
     let overflow = outcome.overflow();
     let mut fields = vec![

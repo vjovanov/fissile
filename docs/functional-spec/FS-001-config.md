@@ -6,7 +6,7 @@ config is data, not code, so it can be read inside a pre-commit hook without
 invoking a plugin system (§GOAL-002-tiny-footprint) while still making limits and
 messages project-owned (§GOAL-005-configurable).
 
-The proposed concrete shape is maintained in `examples/fissile.toml`.
+The concrete example shape is maintained in `examples/fissile.toml`.
 
 ## 0. Built-in Defaults
 

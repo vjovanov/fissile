@@ -210,6 +210,7 @@ fn audit_top_ranks_largest_files() {
     .expect("audit runs");
     assert!(run.failed, "the oversized file is a hard overflow");
     assert!(run.output.contains("top lines:"));
+    assert!(!run.output.contains("top tokens:"));
     assert!(run.output.contains("src/big.rs"));
     assert!(run.output.contains("stale exceptions:"));
     assert!(run.output.contains("rule coverage:"));
@@ -234,6 +235,24 @@ fn audit_uses_configured_format_default() {
 
     assert!(run.output.starts_with('{'));
     assert!(run.output.contains("\"findings\""));
+}
+
+#[test]
+fn audit_json_top_omits_unmeasured_units() {
+    let root = temp_repo();
+    let run = audit::run(&AuditOptions {
+        root,
+        config_path: None,
+        format: Some(Format::Json),
+        no_color: false,
+        top: Some(2),
+        stale_exceptions: false,
+        rule_coverage: false,
+    })
+    .expect("audit runs");
+
+    assert!(run.output.contains("\"unit\":\"lines\""));
+    assert!(!run.output.contains("\"unit\":\"tokens\""));
 }
 
 #[test]
