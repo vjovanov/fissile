@@ -315,15 +315,30 @@ impl Config {
 /// A failure while loading a config document.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ConfigError {
-    Io { path: PathBuf, reason: String },
-    Parse { reason: String },
-    UnsupportedVersion { version: u32 },
-    EmptyInclude { rule: String },
-    UnknownMessage { rule: String, message: String },
+    Io {
+        path: PathBuf,
+        reason: String,
+    },
+    Parse {
+        reason: String,
+    },
+    UnsupportedVersion {
+        version: u32,
+    },
+    EmptyInclude {
+        rule: String,
+    },
+    UnknownMessage {
+        rule: String,
+        message: String,
+    },
     Engine(FissileError),
     /// A load-time error tagged with the document it came from
     /// (§FS-001-config.1): `Config::load` wraps, `Config::parse` stays pathless.
-    InFile { path: PathBuf, error: Box<ConfigError> },
+    InFile {
+        path: PathBuf,
+        error: Box<ConfigError>,
+    },
 }
 
 impl ConfigError {

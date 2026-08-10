@@ -213,7 +213,10 @@ pub fn staged_files(root: &Path, scan: &Scan) -> io::Result<Vec<String>> {
                 root.display()
             )));
         }
-        return Err(io::Error::other(git_failure("git diff --cached", &output.stderr)));
+        return Err(io::Error::other(git_failure(
+            "git diff --cached",
+            &output.stderr,
+        )));
     }
 
     let exclude = compile_globs(&scan.exclude);
@@ -232,7 +235,12 @@ pub fn staged_files(root: &Path, scan: &Scan) -> io::Result<Vec<String>> {
 /// `<command> failed` plus git's first stderr line, when there is one.
 fn git_failure(command: &str, stderr: &[u8]) -> String {
     let detail = String::from_utf8_lossy(stderr);
-    match detail.lines().next().map(str::trim).filter(|s| !s.is_empty()) {
+    match detail
+        .lines()
+        .next()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         Some(line) => format!("{command} failed: {line}"),
         None => format!("{command} failed"),
     }
