@@ -254,15 +254,15 @@ impl Config {
             Some(path) => {
                 let full = root.join(path);
                 let text = fs::read_to_string(&full).map_err(|error| ConfigError::Io {
-                    path: full,
+                    path: full.clone(),
                     reason: error.to_string(),
                 })?;
-                Config::parse(&text)
+                Config::parse(&text).map_err(|error| error.in_file(full))
             }
             None => {
                 let full = root.join(".agents/fissile.toml");
                 match fs::read_to_string(&full) {
-                    Ok(text) => Config::parse(&text),
+                    Ok(text) => Config::parse(&text).map_err(|error| error.in_file(full)),
                     Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(Config::built_in()),
                     Err(error) => Err(ConfigError::Io {
                         path: full,
@@ -321,6 +321,22 @@ pub enum ConfigError {
     EmptyInclude { rule: String },
     UnknownMessage { rule: String, message: String },
     Engine(FissileError),
+    /// A load-time error tagged with the document it came from
+    /// (§FS-001-config.1): `Config::load` wraps, `Config::parse` stays pathless.
+    InFile { path: PathBuf, error: Box<ConfigError> },
+}
+
+impl ConfigError {
+    fn in_file(self, path: PathBuf) -> ConfigError {
+        match self {
+            // Io already names its path; don't say it twice.
+            error @ ConfigError::Io { .. } => error,
+            error => ConfigError::InFile {
+                path,
+                error: Box::new(error),
+            },
+        }
+    }
 }
 
 impl fmt::Display for ConfigError {
@@ -328,6 +344,9 @@ impl fmt::Display for ConfigError {
         match self {
             ConfigError::Io { path, reason } => {
                 write!(f, "cannot read config {}: {reason}", path.display())
+            }
+            ConfigError::InFile { path, error } => {
+                write!(f, "{}: {error}", path.display())
             }
             ConfigError::Parse { reason } => write!(f, "config parse error: {reason}"),
             ConfigError::UnsupportedVersion { version } => write!(
@@ -400,6 +419,22 @@ message = "split-rust"
         assert_eq!(overflows.len(), 1);
         assert_eq!(overflows[0].severity, Severity::Hard);
         assert_eq!(overflows[0].rule_id, "rust");
+    }
+
+    #[test]
+    fn load_names_the_file_in_parse_errors() {
+        // §FS-001-config.1: every config diagnostic names its document.
+        let root = std::env::temp_dir().join(format!("fissile-config-{}", std::process::id()));
+        std::fs::create_dir_all(root.join(".agents")).unwrap();
+        let text = "fissile_config_version = 1\nbogus = 1\n";
+        std::fs::write(root.join(".agents/fissile.toml"), text).unwrap();
+        let error = Config::load(&root, None).expect_err("parse error");
+        let rendered = error.to_string();
+        assert!(
+            rendered.contains(".agents/fissile.toml") && rendered.contains("config parse error"),
+            "diagnostic must name the file: {rendered}"
+        );
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

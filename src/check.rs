@@ -22,11 +22,13 @@ pub struct CheckOptions {
     pub paths: Vec<String>,
 }
 
-/// The result of a `check` run: the rendered output and whether it should fail
-/// the build (a standing hard overflow).
+/// The result of a `check` run: the rendered output, whether it should fail
+/// the build (a standing hard overflow), and the file-level errors that must
+/// force exit 2 without hiding the other findings (§FS-004-check-audit.5).
 pub struct Run {
     pub output: String,
     pub failed: bool,
+    pub errors: Vec<String>,
 }
 
 pub fn run(options: &CheckOptions) -> Result<Run, CommandError> {
@@ -37,28 +39,38 @@ pub fn run(options: &CheckOptions) -> Result<Run, CommandError> {
         .unwrap_or_else(|| loaded.config.output.format.into());
 
     let mut outcomes = Vec::new();
+    let mut errors = Vec::new();
     for rel in files {
         let measurement = if options.staged {
-            scan::measure_staged_file(&loaded.root, &rel, &loaded.config.tokens)?
+            scan::measure_staged_file(&loaded.root, &rel, &loaded.config.tokens)
         } else {
-            scan::measure_file(&loaded.root, &rel, &loaded.config.tokens)?
+            scan::measure_file(&loaded.root, &rel, &loaded.config.tokens)
         };
-        outcomes.extend(report::evaluate_file(
-            &loaded.checker,
-            &loaded.registries,
-            &measurement,
-        )?);
+        // A path that cannot be measured is skipped, not fatal: one odd file
+        // must not hide every other finding (§FS-004-check-audit.5).
+        match measurement {
+            Ok(measurement) => outcomes.extend(report::evaluate_file(
+                &loaded.checker,
+                &loaded.registries,
+                &measurement,
+            )?),
+            Err(error) => errors.push(scan::measure_error_line(&rel, &error)),
+        }
     }
 
     let failed = report::has_hard_failure(&outcomes);
     let output = match format {
         Format::Text => {
             let color = cli::use_color(loaded.config.output.color, options.no_color, format);
-            render_text(&outcomes, &loaded.config.output.success, color)
+            render_text(&outcomes, &loaded.config.output.success, color, &errors)
         }
         Format::Json => render_json(&outcomes),
     };
-    Ok(Run { output, failed })
+    Ok(Run {
+        output,
+        failed,
+        errors,
+    })
 }
 
 fn collect_files(options: &CheckOptions, loaded: &Loaded) -> Result<Vec<String>, CommandError> {
@@ -78,14 +90,20 @@ fn collect_files(options: &CheckOptions, loaded: &Loaded) -> Result<Vec<String>,
     Ok(scan::walk_scope(&loaded.root, &loaded.config.scan)?)
 }
 
-fn render_text(outcomes: &[Outcome], success: &str, color: bool) -> String {
+fn render_text(outcomes: &[Outcome], success: &str, color: bool, errors: &[String]) -> String {
     let blocks: Vec<String> = outcomes
         .iter()
         .filter(|outcome| outcome.is_reported())
         .map(|outcome| report::finding_block(outcome.overflow(), color))
         .collect();
     if blocks.is_empty() {
-        report::success_marker(success, color)
+        // The marker is withheld when a file could not be measured: `ok` next
+        // to an exit-2 diagnostic would be a lie (§FS-004-check-audit.5).
+        if errors.is_empty() {
+            report::success_marker(success, color)
+        } else {
+            String::new()
+        }
     } else {
         blocks.join("\n")
     }

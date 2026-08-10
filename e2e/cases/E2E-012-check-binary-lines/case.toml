@@ -1,0 +1,3 @@
+args = ["check", "src/big.rs", "--no-color"]
+exit = 1
+stdout_contains = ["src/big.rs: 600 lines > 550 lines [hard, rule: rust, message: m]"]

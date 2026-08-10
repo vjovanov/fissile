@@ -8,7 +8,7 @@ resolution, exclusions, messages, and exception registries.
 ## 1. Check
 
 ```text
-fissile check [--staged] [--config <path>] [--format text|json] [--no-color]
+fissile check [<paths>...] [--staged] [--config <path>] [--format text|json] [--no-color]
 ```
 
 `check --staged` receives the file set from git and applies `[scan].exclude`.
@@ -92,3 +92,31 @@ message = "split-api-doc"
 
 Names must be stable because exception entries, JSON consumers, and agent
 guidance all key off them.
+
+## 5. Errors
+
+Failures split by scope. A **run-level** failure — an unreadable or invalid
+config, an invalid exception registry, a failed `git diff --cached`, an
+ambiguous rule overlap — aborts before findings and exits `2` with a single
+`fissile <command>:` diagnostic on stderr. When the failing document is a file,
+the diagnostic names it (`.agents/fissile.toml: config parse error: … at line
+100`), and a failed git invocation appends git's own first stderr line so
+"not a git repository" is visible verbatim.
+
+A **file-level** failure — one path that cannot be read or measured (missing,
+unreadable, a directory) — does not abort the run: one odd path must not hide
+every other finding. The path is skipped, every other file is still measured,
+findings print normally on stdout, and each skipped path adds one stderr line
+that names it:
+
+```text
+fissile check: cannot measure src/gone.rs: No such file or directory (os error 2)
+```
+
+A run with file-level failures exits `2` even when no finding stands — silently
+passing an unmeasurable file would make the gate unsound — and the text success
+marker is withheld. JSON output never carries error records: stdout keeps the
+stable findings shape (§GOAL-003-friendly-output.1) and stderr owns diagnostics.
+
+Non-UTF-8 content is not an error: line budgets measure physical lines from raw
+bytes (§FS-001-config.3.1).

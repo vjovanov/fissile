@@ -155,6 +155,9 @@ pub struct Outcome {
 pub struct Report {
     pub outcomes: Vec<Outcome>,
     pub dry_run: bool,
+    /// Automatic hook install found no git repository (§FS-002-init.6); the
+    /// `next:` block must not promise a hook that was not written (§FS-002-init.5).
+    pub hook_skipped_not_git: bool,
 }
 
 impl Report {
@@ -174,18 +177,28 @@ impl Report {
             ));
         }
         if self.changed_anything() {
-            lines.push(NEXT_BLOCK.to_owned());
+            let hook_step = if self.hook_skipped_not_git {
+                NEXT_HOOK_STEP_NO_GIT
+            } else {
+                NEXT_HOOK_STEP
+            };
+            lines.push(format!(
+                "next:\n\
+                 1. Review .agents/fissile.toml: the source rule budgets common code extensions; \
+                 add this repo's languages or tune the limits.\n\
+                 2. {hook_step}\n\
+                 3. Run fissile audit once and add justified exceptions with fissile exception add.\n\
+                 see AGENTS.md for the full workflow."
+            ));
         }
         lines.join("\n")
     }
 }
 
-const NEXT_BLOCK: &str = "next:\n\
-1. Review .agents/fissile.toml: the source rule budgets common code extensions; \
-add this repo's languages or tune the limits.\n\
-2. Commit a change to see the pre-commit hook run fissile check --staged.\n\
-3. Run fissile audit once and add justified exceptions with fissile exception add.\n\
-see AGENTS.md for the full workflow.";
+const NEXT_HOOK_STEP: &str =
+    "Commit a change to see the pre-commit hook run fissile check --staged.";
+const NEXT_HOOK_STEP_NO_GIT: &str = "Run git init && fissile init to install the pre-commit hook, \
+    or wire fissile check --staged into your commit flow.";
 
 /// A failure during `init`.
 #[derive(Debug)]
@@ -260,6 +273,7 @@ pub fn run(options: &InitOptions) -> Result<Report, InitError> {
 
     // 4. Managed pre-commit hook (§FS-002-init.6). Automatic mode installs only
     //    inside a git repo; `--hook` forces it; `--no-hook` opts out.
+    let mut hook_skipped_not_git = false;
     match options.hook {
         HookMode::Always if !crate::hook::is_git_repo(&options.root) => {
             return Err(InitError::NotAGitRepo {
@@ -272,12 +286,14 @@ pub fn run(options: &InitOptions) -> Result<Report, InitError> {
         HookMode::Auto if crate::hook::is_git_repo(&options.root) => {
             outcomes.push(crate::hook::install(&options.root, options.dry_run)?);
         }
-        HookMode::Auto | HookMode::Never => {}
+        HookMode::Auto => hook_skipped_not_git = true,
+        HookMode::Never => {}
     }
 
     Ok(Report {
         outcomes,
         dry_run: options.dry_run,
+        hook_skipped_not_git,
     })
 }
 

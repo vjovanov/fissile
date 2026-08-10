@@ -1,0 +1,8 @@
+# No `git = true`: the target directory is deliberately not a repository.
+args = ["init"]
+exit = 0
+stderr_contains = [
+  "wrote ./.agents/fissile.toml",
+  "Run git init && fissile init to install the pre-commit hook",
+]
+creates = [".agents/fissile.toml", "AGENTS.md"]

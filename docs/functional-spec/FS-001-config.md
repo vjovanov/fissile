@@ -45,6 +45,11 @@ fissile_config_version = 1
 Unknown major versions are a schema error. Version 1 is additive: unknown keys
 inside known tables are errors, so a typo cannot silently disable a rule.
 
+Every config diagnostic — parse error, unsupported version, schema error —
+names the file it came from (`.agents/fissile.toml: config parse error: … at
+line 100`), so a run driven by `--config` or an editor never leaves the reader
+guessing which document broke (§GOAL-003-friendly-output.1).
+
 ## 2. Scan scope
 
 `[scan]` controls whole-repo audit traversal:
@@ -93,6 +98,12 @@ and token cost. Projects may flip either field: set `count_blank_lines = true`
 to measure raw physical file size, or `count_comment_lines = false` for a
 code-only budget. The policy is per rule because generated docs, tests, and
 source files often need different treatment.
+
+Blank- and comment-line classification applies to UTF-8 text. Non-UTF-8 content
+still gets a line measurement — physical lines counted from raw bytes, every
+line counting as content — so a stray encoding never turns the commit gate into
+an error (§FS-004-check-audit.5); the byte catch-all remains the guard that
+actually protects against binary blobs (§FS-004-check-audit.3).
 
 ### 3.2 Overlapping Rules
 

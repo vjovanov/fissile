@@ -1,0 +1,4 @@
+args = ["check", "src/missing.rs", "src/big.rs", "--no-color"]
+exit = 2
+stdout_contains = ["src/big.rs: 5 lines > 4 lines [hard, rule: rust, message: m]"]
+stderr_contains = ["cannot measure src/missing.rs"]

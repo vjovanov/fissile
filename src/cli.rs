@@ -62,8 +62,10 @@ pub fn load(root: &Path, config_path: Option<&Path>) -> Result<Loaded, CommandEr
 
     let soft_registry = PathBuf::from(&config.exceptions.soft_registry);
     let hard_registry = PathBuf::from(&config.exceptions.hard_registry);
-    let soft_text = read_optional(&root.join(&soft_registry))?;
-    let hard_text = read_optional(&root.join(&hard_registry))?;
+    let soft_text =
+        read_optional(&root.join(&soft_registry)).map_err(|e| named(&soft_registry, e))?;
+    let hard_text =
+        read_optional(&root.join(&hard_registry)).map_err(|e| named(&hard_registry, e))?;
     let registries = Registries::load(soft_text.as_deref(), hard_text.as_deref())?;
     registries.validate_against(checker.rules())?;
 
@@ -75,6 +77,11 @@ pub fn load(root: &Path, config_path: Option<&Path>) -> Result<Loaded, CommandEr
         soft_registry,
         hard_registry,
     })
+}
+
+/// Tag a registry read failure with the file it came from (§FS-004-check-audit.5).
+fn named(path: &Path, error: io::Error) -> io::Error {
+    io::Error::new(error.kind(), format!("{}: {error}", path.display()))
 }
 
 /// Read a file, mapping a missing file to `None` (§FS-003-exceptions: an absent

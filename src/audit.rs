@@ -26,6 +26,8 @@ pub struct AuditOptions {
 pub struct Run {
     pub output: String,
     pub failed: bool,
+    /// File-level measurement errors; force exit 2 (§FS-004-check-audit.5).
+    pub errors: Vec<String>,
 }
 
 const UNITS: [Unit; 3] = [Unit::Bytes, Unit::Lines, Unit::Tokens];
@@ -42,12 +44,13 @@ pub fn run(options: &AuditOptions) -> Result<Run, CommandError> {
         .unwrap_or_else(|| loaded.config.output.format.into());
 
     let mut measurements = Vec::with_capacity(files.len());
+    let mut errors = Vec::new();
     for rel in &files {
-        measurements.push(scan::measure_file(
-            &loaded.root,
-            rel,
-            &loaded.config.tokens,
-        )?);
+        // Skip what cannot be measured; the walk goes on (§FS-004-check-audit.5).
+        match scan::measure_file(&loaded.root, rel, &loaded.config.tokens) {
+            Ok(measurement) => measurements.push(measurement),
+            Err(error) => errors.push(scan::measure_error_line(rel, &error)),
+        }
     }
 
     let mut outcomes = Vec::new();
@@ -91,11 +94,16 @@ pub fn run(options: &AuditOptions) -> Result<Run, CommandError> {
                 stale.as_ref(),
                 coverage.as_ref(),
                 color,
+                &errors,
             )
         }
         Format::Json => render_json(&outcomes, top.as_ref(), stale.as_ref(), coverage.as_ref()),
     };
-    Ok(Run { output, failed })
+    Ok(Run {
+        output,
+        failed,
+        errors,
+    })
 }
 
 fn unit_value(measurement: &FileMeasurement, unit: Unit) -> Option<u64> {
@@ -196,6 +204,7 @@ fn render_text(
     stale: Option<&Vec<(String, String)>>,
     coverage: Option<&Coverage>,
     color: bool,
+    errors: &[String],
 ) -> String {
     let mut sections = Vec::new();
 
@@ -204,11 +213,14 @@ fn render_text(
         .filter(|outcome| outcome.is_reported())
         .map(|outcome| report::finding_block(outcome.overflow(), color))
         .collect();
-    sections.push(if reported.is_empty() {
-        report::success_marker(&loaded.config.output.success, color)
+    if reported.is_empty() {
+        // Withheld when a file could not be measured (§FS-004-check-audit.5).
+        if errors.is_empty() {
+            sections.push(report::success_marker(&loaded.config.output.success, color));
+        }
     } else {
-        reported.join("\n")
-    });
+        sections.push(reported.join("\n"));
+    }
 
     let silenced: Vec<String> = outcomes
         .iter()

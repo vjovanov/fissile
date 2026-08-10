@@ -145,6 +145,11 @@ see AGENTS.md for the full workflow.
 The `next:` block is suppressed when every selected file already exists with the
 current managed block.
 
+The block must not promise machinery the run did not install: when the
+pre-commit hook was skipped because the target is not a git repository (§6),
+step 2 instead points at the repair — `Run git init && fissile init to install
+the pre-commit hook, or wire fissile check --staged into your commit flow.`
+
 ## 6. Pre-commit Hook
 
 The headline use case is a commit-time gate (§GND-001-fissile), so `init`

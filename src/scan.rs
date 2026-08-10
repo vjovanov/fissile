@@ -149,7 +149,9 @@ pub fn normalize_repo_path(root: &Path, raw: &str) -> io::Result<String> {
         } else {
             root.join(path)
         }
-        .canonicalize()?;
+        .canonicalize()
+        // Name the argument: the caller may have passed several (§FS-004-check-audit.5).
+        .map_err(|error| io::Error::new(error.kind(), format!("{raw}: {error}")))?;
         return relative(&root, &full).ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -195,7 +197,23 @@ pub fn staged_files(root: &Path, scan: &Scan) -> io::Result<Vec<String>> {
         .args(["diff", "--cached", "--name-only", "--diff-filter=ACMR"])
         .output()?;
     if !output.status.success() {
-        return Err(io::Error::other("git diff --cached failed"));
+        // Outside a repository `git diff` falls into no-index mode and blames
+        // the `--cached` flag; probe for the real cause so the diagnostic says
+        // "not a git repository" instead (§FS-004-check-audit.5).
+        let in_repo = Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(["rev-parse", "--is-inside-work-tree"])
+            .output()
+            .map(|probe| probe.status.success())
+            .unwrap_or(false);
+        if !in_repo {
+            return Err(io::Error::other(format!(
+                "not a git repository: {} (run inside a repo, or pass paths)",
+                root.display()
+            )));
+        }
+        return Err(io::Error::other(git_failure("git diff --cached", &output.stderr)));
     }
 
     let exclude = compile_globs(&scan.exclude);
@@ -209,6 +227,15 @@ pub fn staged_files(root: &Path, scan: &Scan) -> io::Result<Vec<String>> {
     out.sort();
     out.dedup();
     Ok(out)
+}
+
+/// `<command> failed` plus git's first stderr line, when there is one.
+fn git_failure(command: &str, stderr: &[u8]) -> String {
+    let detail = String::from_utf8_lossy(stderr);
+    match detail.lines().next().map(str::trim).filter(|s| !s.is_empty()) {
+        Some(line) => format!("{command} failed: {line}"),
+        None => format!("{command} failed"),
+    }
 }
 
 fn filter_gitignored(root: &Path, paths: &mut Vec<String>) {
@@ -268,7 +295,7 @@ pub fn measure_staged_file(root: &Path, rel: &str, tokens: &Tokens) -> io::Resul
         .arg(format!(":{rel}"))
         .output()?;
     if !output.status.success() {
-        return Err(io::Error::other(format!("git show failed for {rel}")));
+        return Err(io::Error::other(git_failure("git show", &output.stderr)));
     }
     let mut measurement = measure_content(rel, &output.stdout);
     if tokens.enabled
@@ -283,8 +310,30 @@ pub fn measure_staged_file(root: &Path, rel: &str, tokens: &Tokens) -> io::Resul
 fn measure_content(rel: &str, bytes: &[u8]) -> FileMeasurement {
     match std::str::from_utf8(bytes) {
         Ok(text) => measure_text(rel, text),
-        Err(_) => measure_bytes(rel, bytes),
+        // Non-UTF-8 content still measures lines — raw physical lines, all
+        // counted as content — so a stray encoding never errors the commit
+        // gate (§FS-001-config.3.1, §FS-004-check-audit.5).
+        Err(_) => measure_bytes(rel, bytes).with_lines(count_raw_lines(bytes)),
     }
+}
+
+/// Physical lines in arbitrary bytes: `\n` count plus an unterminated tail.
+fn count_raw_lines(bytes: &[u8]) -> u64 {
+    let newlines = bytes.iter().filter(|&&byte| byte == b'\n').count() as u64;
+    match bytes.last() {
+        None => 0,
+        Some(b'\n') => newlines,
+        Some(_) => newlines + 1,
+    }
+}
+
+/// The one-line diagnostic for a path that could not be measured
+/// (§FS-004-check-audit.5). Directories get a hint instead of a bare OS error.
+pub fn measure_error_line(rel: &str, error: &io::Error) -> String {
+    if error.kind() == io::ErrorKind::IsADirectory {
+        return format!("cannot measure {rel}: is a directory (pass files, or run fissile audit)");
+    }
+    format!("cannot measure {rel}: {error}")
 }
 
 /// Run `[tokens].command` with `{path}` substituted and parse one integer
@@ -363,6 +412,31 @@ mod tests {
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
         let n = COUNTER.fetch_add(1, Ordering::Relaxed);
         std::env::temp_dir().join(format!("fissile-scan-{}-{n}", std::process::id()))
+    }
+
+    #[test]
+    fn binary_content_measures_raw_lines() {
+        // §FS-001-config.3.1: non-UTF-8 bytes still get a physical line count.
+        let measurement = measure_content("src/odd.rs", b"a\xff\nb\xfe\nc");
+        let lines = measurement.lines.expect("lines are measured");
+        assert_eq!(lines.total, 3);
+        assert_eq!((lines.blank, lines.comment), (0, 0));
+        assert_eq!(count_raw_lines(b""), 0);
+        assert_eq!(count_raw_lines(b"x\n"), 1);
+    }
+
+    #[test]
+    fn measure_error_lines_name_the_path() {
+        // §FS-004-check-audit.5: the diagnostic carries the path, and a
+        // directory gets a hint instead of a bare OS error.
+        let missing = io::Error::from(io::ErrorKind::NotFound);
+        let line = measure_error_line("src/gone.rs", &missing);
+        assert!(line.starts_with("cannot measure src/gone.rs:"));
+        let dir = io::Error::from(io::ErrorKind::IsADirectory);
+        assert_eq!(
+            measure_error_line("src", &dir),
+            "cannot measure src: is a directory (pass files, or run fissile audit)"
+        );
     }
 
     #[test]
