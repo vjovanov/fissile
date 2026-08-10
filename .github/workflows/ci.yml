@@ -49,6 +49,11 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
+      # Compiling is not part of the runtime budget, and the release profile is
+      # LTO + codegen-units=1, so the build happens before the clock starts.
+      - name: build performance smoke test
+        run: cargo test --locked --release large_batch_smoke --no-run
+
       - name: fissile performance smoke
         shell: bash
         run: |

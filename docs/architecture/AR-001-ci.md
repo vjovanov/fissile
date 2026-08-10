@@ -36,6 +36,11 @@ budget itself is much tighter than that; this guard is for catastrophic
 regressions such as an accidental quadratic path or a repeated scan over every
 file. The precise per-commit meter is the benchmark job in §5.
 
+The test binary is compiled in a separate step before the timed one, so the
+clock measures the scan and not the compiler: the release profile is LTO with a
+single codegen unit, and a link that grows with the dependency tree would
+otherwise register as a runtime regression it is not.
+
 ## 5. Benchmark job
 
 A separate Linux-only `bench` job runs the instruction-counting harness
@@ -100,3 +105,27 @@ landed since the last tag and CI on the tip is green, and `release-minor.yml`
 (manual) does the same for a minor bump. Both update `Cargo.toml`, the
 version-pinned e2e case (§FS-006-cli.3), and the changelog via the same script,
 then dispatch `release.yml`.
+
+### 8.1 What the automation needs
+
+Releases are meant to run without a human in the loop, so the standing state a
+release depends on is recorded here rather than in someone's memory:
+
+- **`CARGO_REGISTRY_TOKEN`** — a crates.io API token scoped to publish-update
+  (and publish-new for the first release). `release.yml` fails fast when it is
+  missing rather than after the build matrix.
+- **`RELEASE_PAT`** — a fine-grained GitHub token with *Contents: read+write*
+  and *Actions: read+write* on this repository. The bump workflows push the
+  version commit straight to `main` and dispatch `release.yml`; the default
+  `GITHUB_TOKEN` can do neither, because `main` requires pull requests and a
+  `GITHUB_TOKEN` push never triggers another workflow. It expires — a silently
+  failing Monday bump is the symptom.
+- **Repository rulesets** — `main protection` (pull requests, linear history,
+  the three `cargo test` matrix jobs as required checks) and `release tags`
+  (`v*.*.*` cannot be deleted or force-moved). Both list the repository-admin
+  role as a bypass actor, which is what lets the `RELEASE_PAT` push land.
+
+The scheduled bump derives the next version from the latest `v*.*.*` tag, so a
+repository with no tag yet cannot bootstrap itself: the first release is cut by
+pushing `v<version>` (or dispatching `release.yml` with the version). Every
+release after that is automatic.

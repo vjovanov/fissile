@@ -1,8 +1,11 @@
 # No `git = true`: the target directory is deliberately not a repository.
 args = ["init"]
 exit = 0
+# Path spelling is platform-dependent (Windows renders the joined root as
+# `.\.agents/fissile.toml`), so assert the parts that carry the behavior.
 stderr_contains = [
-  "wrote ./.agents/fissile.toml",
+  "wrote",
+  "fissile.toml",
   "Run git init && fissile init to install the pre-commit hook",
 ]
 creates = [".agents/fissile.toml", "AGENTS.md"]
