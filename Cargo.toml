@@ -2,13 +2,32 @@
 name = "fissile"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.85"
 description = "Steer agents toward leaner files — fewer tokens, architecture intact."
 readme = "README.md"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 repository = "https://github.com/vjovanov/fissile"
+homepage = "https://github.com/vjovanov/fissile"
 documentation = "https://docs.rs/fissile"
 keywords = ["pre-commit", "architecture", "file-size", "agents"]
 categories = ["development-tools"]
+# The published crate is the library + binary, not the repo: specs, e2e
+# fixtures, and workflows stay on GitHub (§GOAL-002-tiny-footprint).
+include = [
+  "src/**",
+  "benches/**",
+  "schema/**",
+  "/Cargo.toml",
+  "/README.md",
+  "/LICENSE",
+]
+
+[profile.release]
+# Distributed release binaries are additionally profile-guided-optimized via
+# `scripts/pgo-build.sh` (§AR-001-ci.6); a plain `cargo build --release` (and
+# `cargo install fissile`) is LTO-only and behaviour-identical.
+lto = true
+codegen-units = 1
 
 [lib]
 name = "fissile"
