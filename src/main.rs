@@ -1,6 +1,6 @@
-//! `fissile` CLI entry point. Hand-rolled parsing and a tiny dependency tree
-//! (§GOAL-002-tiny-footprint, §DA-003-single-static-binary); dispatches `init`,
-//! `check`, `audit`, `exception add` (§FS-002-init, §FS-004-check-audit, §FS-005-exception-add).
+//! `fissile` CLI entry point (§FS-006-cli): hand-rolled parsing, tiny
+//! dependency tree (§GOAL-002-tiny-footprint, §DA-003-single-static-binary);
+//! dispatches the commands (§FS-002-init, §FS-004-check-audit, §FS-005-exception-add).
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -23,7 +23,8 @@ commands:
   audit                inventory the whole repo against its budgets
   exception add <path> record a justified oversized-file exception
 
-run `fissile <command> --help` for command options";
+run `fissile <command> --help` for command options
+`--version`/`-V` prints the version";
 
 const INIT_USAGE: &str = "\
 usage: fissile init [<path>] [--name <name>] [--config <path>] [--exceptions]
@@ -58,7 +59,7 @@ usage: fissile exception add <path> --severity soft|hard --rule <id>
                  [--max <N> --unit bytes|lines|tokens] [--dry-run]
 
 examples:
-  fissile exception add src/big.rs --severity hard --rule rust --reason \"accepted debt\" --until \"split tracked\"
+  fissile exception add src/big.rs --severity hard --rule source --reason \"accepted debt\" --until \"split tracked\"
   fissile exception add \"tests/fixtures/**\" --match glob --severity soft --rule fixtures --max 300000 --unit bytes --reason \"fixture corpus\" --until indefinite";
 
 fn main() -> ExitCode {
@@ -70,6 +71,11 @@ fn main() -> ExitCode {
         Some("exception") => run_exception(&args[1..]),
         Some("--help" | "-h") | None => {
             println!("{USAGE}");
+            ExitCode::SUCCESS
+        }
+        // One stable line, no banner (§FS-006-cli.3).
+        Some("--version" | "-V") => {
+            println!("fissile {}", env!("CARGO_PKG_VERSION"));
             ExitCode::SUCCESS
         }
         Some(other) => {
@@ -190,18 +196,30 @@ fn run_check(args: &[String]) -> ExitCode {
     }
 
     match check::run(&options) {
-        Ok(run) => {
-            println!("{}", run.output);
-            if run.failed {
-                ExitCode::FAILURE
-            } else {
-                ExitCode::SUCCESS
-            }
-        }
+        Ok(run) => finish_run("check", &run.output, run.failed, &run.errors),
         Err(error) => {
             eprintln!("fissile check: {error}");
             ExitCode::from(2)
         }
+    }
+}
+
+/// Print a run's findings and its file-level errors, then map them to the exit
+/// code: errors exit 2 even without a standing hard finding, because silently
+/// passing an unmeasurable file would make the gate unsound (§FS-004-check-audit.5).
+fn finish_run(command: &str, output: &str, failed: bool, errors: &[String]) -> ExitCode {
+    if !output.is_empty() {
+        println!("{output}");
+    }
+    for error in errors {
+        eprintln!("fissile {command}: {error}");
+    }
+    if !errors.is_empty() {
+        ExitCode::from(2)
+    } else if failed {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
     }
 }
 
@@ -247,14 +265,7 @@ fn run_audit(args: &[String]) -> ExitCode {
     }
 
     match audit::run(&options) {
-        Ok(run) => {
-            println!("{}", run.output);
-            if run.failed {
-                ExitCode::FAILURE
-            } else {
-                ExitCode::SUCCESS
-            }
-        }
+        Ok(run) => finish_run("audit", &run.output, run.failed, &run.errors),
         Err(error) => {
             eprintln!("fissile audit: {error}");
             ExitCode::from(2)

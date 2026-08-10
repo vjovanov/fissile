@@ -1,0 +1,6 @@
+# The exact bytes are pinned so the release pipeline can assert this line
+# against the version being released (§FS-006-cli.3, §AR-001-ci.8). The
+# version-bump workflows rewrite this expectation alongside Cargo.toml.
+args = ["--version"]
+exit = 0
+stdout_equals = "fissile 0.1.0"
