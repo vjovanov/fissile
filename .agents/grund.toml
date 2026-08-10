@@ -61,7 +61,9 @@ title = "Planned milestones and sequencing"
 
 [scan]
 include = ["docs", "e2e", "src"]
-exclude = ["target", "node_modules", ".git", "dist", "build", ".venv"]
+# `repo` prunes the e2e fixture working trees: they are scenario inputs, not
+# project docs, and the E2E-012 fixture is deliberately non-UTF-8.
+exclude = ["target", "node_modules", ".git", "dist", "build", ".venv", "repo"]
 extensions = ["md", "rs", "go", "java", "kt", "ts", "tsx", "js", "py", "c", "cpp", "swift", "scala", "rb", "php", "cs"]
 comment_prefixes = ["//", "#", ";", "--", "*", "/*"]
 docstring_python = true
