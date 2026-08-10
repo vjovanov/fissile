@@ -79,7 +79,7 @@ jobs:
 
       - name: Install grund
         if: matrix.os == 'ubuntu-latest'
-        run: RUSTFLAGS= cargo install grund --version 0.4.0 --locked
+        run: RUSTFLAGS= cargo install grund --version 0.7.0 --locked
 
       - name: grund check
         if: matrix.os == 'ubuntu-latest'

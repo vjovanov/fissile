@@ -37,11 +37,18 @@ The difference is the message. A generic "file too large" stops a bad commit;
 ## Install
 
 ```sh
-cargo install --git https://github.com/vjovanov/fissile
+cargo install fissile
 ```
 
 One small static binary, no runtime, no Python/Node toolchain. Prebuilt
-per-platform binaries are on the roadmap.
+per-platform binaries (Linux x86_64/aarch64, macOS Intel/Apple silicon,
+Windows x86_64/aarch64) ship with every
+[GitHub release](https://github.com/vjovanov/fissile/releases), each archive
+with a `.sha256` beside it. To run the unreleased tip:
+
+```sh
+cargo install --git https://github.com/vjovanov/fissile
+```
 
 ## Quickstart
 

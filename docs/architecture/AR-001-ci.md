@@ -71,3 +71,32 @@ documented ceiling, closing the loop on the footprint promise
 (§GOAL-002-tiny-footprint.3). The ceiling is generous relative to the current
 artifact; it exists to catch a dependency or feature that silently inflates the
 single-binary contract, not to police small movements.
+
+## 8. Release workflow
+
+Releases are a workflow, not a checklist. `release.yml` runs on a `v*.*.*` tag
+push or a manual dispatch that names the version, and it publishes everything a
+consumer can install (§GOAL-002-tiny-footprint.1):
+
+- **Verify.** The requested version must match `Cargo.toml` exactly, and when
+  crates.io publishing is requested the registry token must be present before
+  any long build starts.
+- **Build.** PGO release binaries (§6) for six targets: `x86_64` and `aarch64`
+  Linux built inside pinned manylinux2014 containers so the glibc baseline
+  cannot drift, plus native macOS (Intel and Apple silicon) and Windows
+  (`x86_64` required, `aarch64` with an LTO fallback when PGO training fails on
+  hosted runners). Every binary must answer `fissile --version` with the version
+  being released before it is packaged (§FS-006-cli.3), and every artifact is
+  measured against the §7 size ceiling.
+- **Publish.** `cargo publish` runs only after all binaries built, and skips
+  silently when the exact `fissile@<version>` already exists so a re-run after a
+  partial failure is safe. The GitHub release uploads one archive plus a
+  `.sha256` per target and takes its notes verbatim from the released section of
+  `docs/changelog.md` via `scripts/prepare_changelog_release.py`.
+
+Two helper workflows prepare versions but never publish by themselves:
+`auto-bump.yml` (scheduled) proposes a patch bump when substantive commits have
+landed since the last tag and CI on the tip is green, and `release-minor.yml`
+(manual) does the same for a minor bump. Both update `Cargo.toml`, the
+version-pinned e2e case (§FS-006-cli.3), and the changelog via the same script,
+then dispatch `release.yml`.

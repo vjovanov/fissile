@@ -1,0 +1,11 @@
+fissile_exceptions_version = 1
+[[exceptions]]
+id = "EX-001-release-yml"
+path = ".github/workflows/release.yml"
+match = "exact"
+rules = ["tooling"]
+max_accepted = { value = 303, unit = "lines" }
+until = "revisit when the job graph itself changes"
+reason = """
+GitHub requires the release job graph in one workflow file; the extractable shell already lives in scripts/release/ and the hard budget still caps growth
+"""

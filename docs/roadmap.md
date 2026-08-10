@@ -66,8 +66,10 @@ contributor to hand-wire git plumbing.
 
 This is the current focus. The managed pre-commit hook ships and is covered by
 §E2E-007-init-installs-hook; the binary-size guard runs in the pre-release
-workflow (§AR-001-ci.7). Prebuilt per-platform binaries (§RM-004-scale-and-reach)
-remain the open step before adoption needs no Rust toolchain.
+workflow and against every release artifact (§AR-001-ci.7). The release
+pipeline (§AR-001-ci.8) builds prebuilt binaries for six targets and publishes
+the crate; cutting and verifying the first tagged release is the open step
+before adoption needs no Rust toolchain.
 
 ## RM-004-scale-and-reach: big repos, more surfaces
 
@@ -75,7 +77,8 @@ Once the contract is trustworthy and adoption is one step, widen reach.
 
 - Parallel scan via `rayon` once the single-threaded walk stops winning on real
   repos, held to the whole-repo budget (§GOAL-001-fast-feedback.1).
-- Prebuilt per-platform binaries and a `cargo-binstall` / install-script path so
-  adoption needs no Rust toolchain (§GOAL-002-tiny-footprint.1).
+- Prebuilt per-platform binaries ship from the release workflow (§AR-001-ci.8);
+  a `cargo-binstall` / install-script path on top of those artifacts is the
+  remaining piece (§GOAL-002-tiny-footprint.1).
 - A thin GitHub Action wrapper so the same check runs in CI without bespoke
   glue, reusing the existing JSON surface.
