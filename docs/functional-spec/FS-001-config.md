@@ -82,11 +82,14 @@ Rules are declared as `[[rules]]` entries. Each rule has:
 - `soft`: optional warning threshold;
 - `hard`: optional blocking threshold;
 - `priority`: optional integer tie-breaker, default `0`;
-- `message`: the ID of a `[[messages]]` template.
+- `message`: the ID of a `[[messages]]` template, used for both severities;
+- `soft_message`, `hard_message`: optional per-severity overrides of `message`.
 
 At least one of `soft` or `hard` is required. If both are present, `soft <= hard`
-is required. A file above the hard limit reports only the hard overflow; the
-soft overflow is implied (§GOAL-006-graded-limits).
+is required. Every declared threshold must resolve a message — from its own
+severity field or from `message` — or the config is invalid. A file above the
+hard limit reports only the hard overflow; the soft overflow is implied
+(§GOAL-006-graded-limits).
 
 Rule IDs are user-facing names, not incidental labels. They should read like
 bundle-size entries: `rust-source`, `api-docs`, `fixtures`, `generated-rust`.
@@ -218,6 +221,19 @@ Grund citations are part of the message text, not a separate field, so the
 rendered guidance remains the single source of human context.
 Messages cannot execute code, inspect file contents, or change pass/fail
 behavior (§GOAL-008-remediation-messages).
+
+A rule may carry a different message per severity, because "should split" and
+"must split" are different instructions with different next steps and different
+escape hatches (§DF-003-severity-guidance). Guidance that interpolates a
+per-file variable renders differently for every file and so is never grouped in
+text output (§FS-004-check-audit.1); the built-in defaults use none, and name
+the paths nowhere but the finding lines.
+
+Default message text travels into other repositories through `fissile init`, so
+it carries no `§` citation: an ID declared in fissile's own docs resolves
+nowhere in the repository that installed it. The generated config marks the slot
+where a project adds a citation into its own architecture
+(§DF-003-severity-guidance.1).
 
 ## 5. Exceptions
 

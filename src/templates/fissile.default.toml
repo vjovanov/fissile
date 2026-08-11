@@ -46,17 +46,68 @@ stale = "warn" # warn | error | ignore
 enabled = false
 command = ["token-counter", "--count", "{path}"]
 
-[[messages]]
-id = "split-source"
-text = "Split {path}: move cohesive helpers into a sibling module before adding more code (§GOAL-008-remediation-messages)."
+# Messages are the part of this file worth rewriting first: they are what the
+# check teaches when it fires. The defaults below are deliberately generic —
+# they know nothing about this repository's layout. Replace them with guidance
+# that names real destinations ("move transport code under src/api/"), and, if
+# this project keeps architecture docs with stable IDs, point at the one that
+# decides where extracted code belongs. Cite only IDs declared in *this*
+# repository; an ID borrowed from another project resolves nowhere here.
+#
+# Soft and hard are separate messages on purpose: a warning asks for a split
+# next time the file is touched, a block has to say what to do when no safe
+# split exists. Keep both escape hatches in the text — a rule that only ever
+# says "split this" gets satisfied by bad splits.
+#
+# `{path}` and `{actual}` differ per file, so a message using either is printed
+# once per file instead of once per group. `{rule}`, `{severity}`, `{limit}`,
+# and `{unit}` are constant within a group and stay grouped.
 
 [[messages]]
-id = "split-doc"
-text = "Split {path}: keep the declaration focused and move secondary detail into a cited child spec (§GOAL-008-remediation-messages)."
+id = "split-source-soft"
+text = """
+Should split, next time you are in one of these files: move a cohesive group of items into a sibling module. Split along a responsibility seam, never at the line count, and never break apart code that belongs together.
+If no split leaves the design better than it is now, keep the file and record the debt instead of forcing one — a written reason and a revisit trigger, not a silent ignore:
+fissile exception add <path> --severity soft --rule {rule}
+"""
 
 [[messages]]
-id = "large-file-default"
-text = "Large file {path}: exclude generated/binary assets, or add a narrower rule with local guidance (§FS-001-config.3.3)."
+id = "split-source-hard"
+text = """
+Must split before more code lands here: move cohesive groups of items into sibling modules along seams that already exist. Do not invent an abstraction, flatten a boundary, or shuffle lines to get under the limit — a worse design under budget is not the goal.
+If you cannot see a split that leaves the architecture intact, stop and ask a human. The only other way past this gate is a human-reviewed exception:
+fissile exception add <path> --severity hard --rule {rule}
+"""
+
+[[messages]]
+id = "split-doc-soft"
+text = """
+Should split, next time you edit one of these documents: keep one focused subject per file and move secondary detail into a child document the parent links.
+If the document has to be read whole, record it rather than cutting it up — with a written reason and a revisit trigger:
+fissile exception add <path> --severity soft --rule {rule}
+"""
+
+[[messages]]
+id = "split-doc-hard"
+text = """
+Must split before adding more: move secondary detail into child documents the parent links, leaving one focused subject per file.
+If no split keeps the document coherent, ask a human rather than cutting at an arbitrary heading; a human-reviewed exception is the alternative:
+fissile exception add <path> --severity hard --rule {rule}
+"""
+
+[[messages]]
+id = "large-file-soft"
+text = """
+Large for a hand-written file. If it is generated, vendored, or binary, add it to [scan].exclude — the budget system should not reason about it at all. If it is real content, give it a rule of its own with a limit and guidance that fit it.
+"""
+
+[[messages]]
+id = "large-file-hard"
+text = """
+Very large file. Exclude it in [scan].exclude if it is generated, vendored, or binary; give it its own rule if this file type is simply bigger than the catch-all assumes.
+If it is hand-written content that has to stay this size, that is a human's call:
+fissile exception add <path> --severity hard --rule {rule}
+"""
 
 [[rules]]
 id = "large-file-default"
@@ -64,7 +115,8 @@ include = ["**/*"]
 unit = "bytes"
 soft = 524288
 hard = 1048576
-message = "large-file-default"
+soft_message = "large-file-soft"
+hard_message = "large-file-hard"
 
 # Hand-written source, matched by extension so the budget follows the code into
 # whatever layout a repo uses (src/, cmd/, pkg/, lib/, app/, or the root) rather
@@ -86,7 +138,8 @@ soft = 350
 hard = 550
 count_blank_lines = false
 count_comment_lines = true
-message = "split-source"
+soft_message = "split-source-soft"
+hard_message = "split-source-hard"
 
 [[rules]]
 id = "markdown-docs"
@@ -96,4 +149,5 @@ soft = 250
 hard = 500
 count_blank_lines = false
 count_comment_lines = true
-message = "split-doc"
+soft_message = "split-doc-soft"
+hard_message = "split-doc-hard"

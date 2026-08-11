@@ -81,34 +81,55 @@ Every rule carries two limits, because one threshold is a false economy:
 - **hard** — *blocks, exit 1.* No override flag, no `# fissile: allow` comment.
   The only way past is a justified exception (below).
 
+They also say different things. A rule carries a message per severity, so a
+warning can ask for a split *next time you are in the file* while a block says
+what has to happen *before more code lands* — and each names its own way out
+when no honest split exists (§DF-003-severity-guidance).
+
 ## Example output
 
-A hard overflow fails the commit:
+Findings are grouped: the guidance is printed once, and the files it applies to
+are listed under it, largest first.
 
 ```text
-$ fissile check src/orders.rs
-src/orders.rs: 620 lines > 550 lines [hard, rule: source, message: split-source]
-  Split src/orders.rs: move cohesive helpers into a sibling module before adding more code (§GOAL-008-remediation-messages).
+$ fissile check
+hard: 1 file over the 550-line budget [rule: source, message: split-source-hard]
+  Must split before more code lands here: move cohesive groups of items into
+  sibling modules along seams that already exist. Do not invent an abstraction,
+  flatten a boundary, or shuffle lines to get under the limit — a worse design
+  under budget is not the goal.
+  If you cannot see a split that leaves the architecture intact, stop and ask a
+  human. The only other way past this gate is a human-reviewed exception:
+  fissile exception add <path> --severity hard --rule source
+    src/orders.rs: 620 lines
+
+soft: 2 files over the 350-line budget [rule: source, message: split-source-soft]
+  Should split, next time you are in one of these files: move a cohesive group
+  of items into a sibling module. Split along a responsibility seam, never at
+  the line count, and never break apart code that belongs together.
+  If no split leaves the design better than it is now, keep the file and record
+  the debt instead of forcing one — a written reason and a revisit trigger, not
+  a silent ignore:
+  fissile exception add <path> --severity soft --rule source
+    src/util.rs: 410 lines
+    src/billing.rs: 372 lines
 # exit 1
 ```
 
-A soft overflow warns but lets the commit through:
+The header states the severity, the crossed limit, and the rule and message that
+own the budget; every file line leads with the path, so editors and agents jump
+straight to it. Twelve files under one rule cost one copy of the guidance, not
+twelve. A passing run prints exactly `ok`.
 
-```text
-$ fissile check src/util.rs
-src/util.rs: 410 lines > 350 lines [soft, rule: source, message: split-source]
-  Split src/util.rs: move cohesive helpers into a sibling module before adding more code (§GOAL-008-remediation-messages).
-# exit 0
-```
+The shipped messages are deliberately generic and carry no citation — they know
+nothing about your layout, and an ID from *fissile's* docs would resolve nowhere
+in your repo. Rewriting them to name real destinations, and to cite your own
+architecture, is the first edit worth making.
 
-Every finding leads with the path (editors and agents jump straight to it),
-states the measured size against the limit, and names the rule and message that
-own the budget. A passing run prints exactly `ok`.
-
-`--format json` is the agent surface — one flat record per finding:
+`--format json` is the agent surface — one flat record per finding, ungrouped:
 
 ```json
-[{"path":"src/orders.rs","unit":"lines","actual":620,"limit":550,"severity":"hard","rule_id":"source","message_id":"split-source","message":"Split src/orders.rs: move cohesive helpers into a sibling module before adding more code (§GOAL-008-remediation-messages)."}]
+[{"path":"src/orders.rs","unit":"lines","actual":620,"limit":550,"severity":"hard","rule_id":"source","message_id":"split-source-hard","message":"Must split before more code lands here: ..."}]
 ```
 
 The schema is published under `schema/` and validated against emitted output.
@@ -120,10 +141,14 @@ blocking anyone, so you can see the surface before turning the hook on:
 
 ```text
 $ fissile audit --top 5
-src/orders.rs: 620 lines > 550 lines [hard, rule: source, message: split-source]
-  Split src/orders.rs: move cohesive helpers into a sibling module before adding more code (§GOAL-008-remediation-messages).
-src/util.rs: 410 lines > 350 lines [soft, rule: source, message: split-source]
-  Split src/util.rs: move cohesive helpers into a sibling module before adding more code (§GOAL-008-remediation-messages).
+hard: 1 file over the 550-line budget [rule: source, message: split-source-hard]
+  Must split before more code lands here: ...
+    src/orders.rs: 620 lines
+
+soft: 2 files over the 350-line budget [rule: source, message: split-source-soft]
+  Should split, next time you are in one of these files: ...
+    src/util.rs: 410 lines
+    src/billing.rs: 372 lines
 
 top lines:
   620 src/orders.rs

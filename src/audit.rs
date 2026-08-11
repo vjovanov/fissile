@@ -185,7 +185,8 @@ fn coverage(loaded: &Loaded, measurements: &[FileMeasurement]) -> Coverage {
                 .config
                 .rules
                 .iter()
-                .any(|rule| rule.message == message.id)
+                .flat_map(|rule| rule.message_ids())
+                .any(|id| id == message.id)
         })
         .map(|message| message.id.clone())
         .collect();
@@ -208,18 +209,16 @@ fn render_text(
 ) -> String {
     let mut sections = Vec::new();
 
-    let reported: Vec<String> = outcomes
-        .iter()
-        .filter(|outcome| outcome.is_reported())
-        .map(|outcome| report::finding_block(outcome.overflow(), color))
-        .collect();
+    // Each grouped block is its own section, so the blank-line separation is the
+    // same between blocks as between audit sections (§FS-004-check-audit.1).
+    let reported = report::finding_blocks(outcomes, color);
     if reported.is_empty() {
         // Withheld when a file could not be measured (§FS-004-check-audit.5).
         if errors.is_empty() {
             sections.push(report::success_marker(&loaded.config.output.success, color));
         }
     } else {
-        sections.push(reported.join("\n"));
+        sections.extend(reported);
     }
 
     let silenced: Vec<String> = outcomes

@@ -1,4 +1,7 @@
 args = ["check", "src/missing.rs", "src/big.rs", "--no-color"]
 exit = 2
-stdout_contains = ["src/big.rs: 5 lines > 4 lines [hard, rule: rust, message: m]"]
+stdout_contains = [
+  "hard: 1 file over the 4-line budget [rule: rust, message: m]",
+  "    src/big.rs: 5 lines",
+]
 stderr_contains = ["cannot measure src/missing.rs"]

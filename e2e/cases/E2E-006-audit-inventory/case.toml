@@ -1,7 +1,8 @@
 args = ["audit", "--no-color", "--top", "3", "--stale-exceptions", "--rule-coverage"]
 exit = 1
 stdout_contains = [
-  "src/big.rs: 5 lines > 4 lines [hard, rule: rust, message: m]",
+  "hard: 1 file over the 4-line budget [rule: rust, message: m]",
+  "    src/big.rs: 5 lines",
   "top lines:",
   "  5 src/big.rs",
   "stale exceptions:",

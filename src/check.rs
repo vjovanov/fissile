@@ -91,11 +91,7 @@ fn collect_files(options: &CheckOptions, loaded: &Loaded) -> Result<Vec<String>,
 }
 
 fn render_text(outcomes: &[Outcome], success: &str, color: bool, errors: &[String]) -> String {
-    let blocks: Vec<String> = outcomes
-        .iter()
-        .filter(|outcome| outcome.is_reported())
-        .map(|outcome| report::finding_block(outcome.overflow(), color))
-        .collect();
+    let blocks = report::finding_blocks(outcomes, color);
     if blocks.is_empty() {
         // The marker is withheld when a file could not be measured: `ok` next
         // to an exit-2 diagnostic would be a lie (§FS-004-check-audit.5).
@@ -105,7 +101,8 @@ fn render_text(outcomes: &[Outcome], success: &str, color: bool, errors: &[Strin
             String::new()
         }
     } else {
-        blocks.join("\n")
+        // Blocks are separated by a blank line (§FS-004-check-audit.1).
+        blocks.join("\n\n")
     }
 }
 

@@ -155,7 +155,12 @@ pub struct Rule {
     pub id: String,
     pub selector: Selector,
     pub budget: Budget,
-    pub message: MessageTemplate,
+    /// Guidance for a soft overflow: what to do the next time the file is
+    /// touched, and when to record the file instead (§DF-003-severity-guidance.1).
+    pub soft_message: MessageTemplate,
+    /// Guidance for a hard overflow: what has to happen before more code lands,
+    /// and who to escalate to (§DF-003-severity-guidance.1).
+    pub hard_message: MessageTemplate,
     pub priority: i32,
     /// Whether blank lines count toward a `lines` budget. Default `false`
     /// (§FS-001-config.3.1).
@@ -166,6 +171,8 @@ pub struct Rule {
 }
 
 impl Rule {
+    /// A rule whose guidance is the same at both severities. Use
+    /// [`Rule::with_message`] to give one severity its own wording.
     pub fn new(
         id: impl Into<String>,
         selector: Selector,
@@ -176,10 +183,32 @@ impl Rule {
             id: id.into(),
             selector,
             budget,
-            message,
+            soft_message: message.clone(),
+            hard_message: message,
             priority: 0,
             count_blank_lines: false,
             count_comment_lines: true,
+        }
+    }
+
+    /// Override the guidance for one severity (§FS-001-config.4).
+    pub fn with_message(mut self, severity: Severity, message: MessageTemplate) -> Self {
+        *self.message_mut(severity) = message;
+        self
+    }
+
+    /// The guidance rendered when this rule overflows at `severity`.
+    pub fn message(&self, severity: Severity) -> &MessageTemplate {
+        match severity {
+            Severity::Soft => &self.soft_message,
+            Severity::Hard => &self.hard_message,
+        }
+    }
+
+    fn message_mut(&mut self, severity: Severity) -> &mut MessageTemplate {
+        match severity {
+            Severity::Soft => &mut self.soft_message,
+            Severity::Hard => &mut self.hard_message,
         }
     }
 
@@ -203,7 +232,8 @@ impl Rule {
         }
 
         self.budget.validate(&self.id)?;
-        self.message.validate(&self.id)
+        self.soft_message.validate(&self.id)?;
+        self.hard_message.validate(&self.id)
     }
 }
 
@@ -441,7 +471,7 @@ fn render_overflow(
         unit: rule.budget.unit,
         actual,
         limit,
-        message: rule.message.render(&context),
+        message: rule.message(severity).render(&context),
     }
 }
 

@@ -30,10 +30,13 @@ hard = 10
 message = \"split-source\"
 ";
 
-/// The diagnostic shape §GOAL-006.2 fixes so an agent can match without parsing
-/// prose: `path: <actual> <unit> > <soft> <unit> [soft, rule: <name>, message: <id>]`.
-const SOFT_FINDING: &str =
-    "src/grew.rs: 5 lines > 2 lines [soft, rule: rust, message: split-source]";
+/// The block header §GOAL-006.2 fixes so an agent can match without parsing
+/// prose: `<severity>: <n> files over the <soft>-<unit> budget [rule: <name>,
+/// message: <id>]`.
+const SOFT_HEADER: &str = "soft: 1 file over the 2-line budget [rule: rust, message: split-source]";
+
+/// The per-file line inside that block: `<path>: <actual> <unit>`, indented four.
+const SOFT_FILE: &str = "    src/grew.rs: 5 lines";
 
 fn work_dir() -> PathBuf {
     let dir = std::env::temp_dir().join(format!("fissile-agent-loop-{}", std::process::id()));
@@ -73,7 +76,8 @@ fn soft_warning_clears_after_the_agent_shrinks_the_file() {
     let (code, stdout) = check(&root);
     assert_eq!(code, 0, "a soft overflow warns without blocking");
     assert!(
-        stdout.lines().any(|line| line == SOFT_FINDING),
+        stdout.lines().any(|line| line == SOFT_HEADER)
+            && stdout.lines().any(|line| line == SOFT_FILE),
         "soft finding shape drifted; got:\n{stdout}"
     );
 

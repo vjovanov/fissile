@@ -79,7 +79,8 @@ fn check_reports_hard_overflow_and_fails() {
     let run = check::run(&check_options(&root)).expect("check runs");
     assert!(run.failed, "a 250-line file crosses the hard limit");
     assert!(run.output.contains("src/big.rs"));
-    assert!(run.output.contains("[hard, rule: rust"));
+    assert!(run.output.contains("hard: 1 file over the"));
+    assert!(run.output.contains("[rule: rust, message:"));
 }
 
 /// Spec: `docs/functional-spec/FS-004-check-audit.md#1-check`.
@@ -95,7 +96,8 @@ fn check_normalizes_explicit_paths_to_repo_relative_form() {
         let run = check::run(&options).expect("check runs");
         assert!(run.failed);
         assert!(run.output.contains("src/big.rs"));
-        assert!(run.output.contains("[hard, rule: rust"));
+        assert!(run.output.contains("hard: 1 file over the"));
+        assert!(run.output.contains("[rule: rust, message:"));
     }
 }
 
@@ -114,7 +116,8 @@ fn staged_check_measures_the_staged_blob() {
 
     assert!(run.failed);
     assert!(run.output.contains("src/big.rs"));
-    assert!(run.output.contains("[hard, rule: rust"));
+    assert!(run.output.contains("hard: 1 file over the"));
+    assert!(run.output.contains("[rule: rust, message:"));
 }
 
 #[test]
@@ -148,7 +151,8 @@ fn hard_exception_silences_hard_but_keeps_soft() {
     let run = check::run(&check_options(&root)).expect("check runs");
     assert!(!run.failed, "hard overflow is now accepted");
     // The soft finding survives so agents keep minimizing (§FS-003-exceptions.3).
-    assert!(run.output.contains("[soft, rule: rust"));
+    assert!(run.output.contains("soft: 1 file over the"));
+    assert!(run.output.contains("[rule: rust, message:"));
 }
 
 #[test]

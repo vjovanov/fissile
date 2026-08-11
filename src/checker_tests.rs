@@ -270,3 +270,32 @@ fn large_batch_smoke() {
 
     assert_eq!(overflow_count, 1_000);
 }
+
+#[test]
+fn each_severity_renders_its_own_guidance() {
+    let checker = Checker::new(vec![
+        Rule::new(
+            "rust",
+            Selector::Extension("rs".to_owned()),
+            Budget::new(Unit::Lines, Some(2), Some(3)),
+            MessageTemplate::new("must-split", "Must split; ask a human if unsure."),
+        )
+        .with_message(
+            Severity::Soft,
+            MessageTemplate::new("should-split", "Should split when you are next here."),
+        ),
+    ])
+    .expect("valid checker");
+
+    let soft = checker
+        .check(&measure_text("src/soft.rs", "a\nb\n"))
+        .expect("check succeeds");
+    assert_eq!(soft[0].message.id, "should-split");
+    assert_eq!(soft[0].message.text, "Should split when you are next here.");
+
+    let hard = checker
+        .check(&measure_text("src/hard.rs", "a\nb\nc\n"))
+        .expect("check succeeds");
+    assert_eq!(hard[0].message.id, "must-split");
+    assert_eq!(hard[0].message.text, "Must split; ask a human if unsure.");
+}
