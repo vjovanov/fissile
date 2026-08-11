@@ -210,6 +210,8 @@ fn unmigrated_registry_is_refused_with_both_edits_named() {
     ] {
         assert!(message.contains(clause), "missing `{clause}`: {message}");
     }
+}
+
 /// §FS-003-exceptions.3: a `structural` hard entry silences the soft finding too.
 /// Splitting the file is illegal, so the warning names work nobody may do, and no
 /// amount of work can clear it — the whole file goes quiet on one entry.
@@ -239,7 +241,12 @@ fn structural_hard_exception_also_silences_soft() {
         rule_coverage: false,
     })
     .expect("audit runs");
-    assert!(audited.output.contains("src/big.rs: hard exception EX-"));
+    // Attribution names no id since version 2 removed it (§DF-005-exception-identity).
+    assert!(
+        audited
+            .output
+            .contains("src/big.rs: hard exception (accepted up to")
+    );
     assert!(!audited.output.contains("soft: "), "{}", audited.output);
     assert!(audited.output.contains("structural (never expires): 1"));
 }
