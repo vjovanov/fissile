@@ -18,6 +18,19 @@ and exits `0`.
 prints that command's usage with compact examples. Every help screen fits in 24
 lines (§GOAL-003-friendly-output.1) and the bound is enforced by a test.
 
+The top-level screen carries one short paragraph above the command list saying
+what `fissile` is for and how to work with it: the two tiers, the
+`check --staged` habit, and the rule that a budget is never met by damaging the
+design. It closes by pointing at `fissile init --dry-run` for the full agent
+instructions.
+
+The paragraph is deliberately short, so the pointer carries the rest. A
+repository that installs `fissile` may not carry the managed agent block — the
+block is one `init` target among several, and an agent may be reading an
+entrypoint that never received it — so the usage screen is the one surface
+guaranteed to be present, and it must lead somewhere complete. A test pins its
+load-bearing clauses.
+
 ## 3. Version
 
 `fissile --version` (alias `-V`) prints exactly one line to stdout and exits `0`:

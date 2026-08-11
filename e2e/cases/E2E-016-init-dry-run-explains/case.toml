@@ -1,0 +1,11 @@
+args = ["init", "--dry-run"]
+exit = 0
+git = true
+stdout_contains = [
+  "## Keeping Files Small With fissile (v1)",
+  "Run `fissile check --staged` before claiming work is done.",
+  "A **soft** overflow means *should split*",
+  "A **hard** overflow means *must split*",
+  "`--severity hard` is theirs to add, not yours.",
+]
+stderr_contains = ["would-write", "AGENTS.md"]

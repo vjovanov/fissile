@@ -120,6 +120,14 @@ The canonical v1 block teaches:
 
 An example rendered block lives at `examples/AGENTS.fissile.md`.
 
+`--dry-run` prints that block to stdout, under the planned writes. A dry run is
+the one way to read the instructions without changing a file, so it is where
+`fissile --help` sends a reader who wants more than the usage paragraph
+(§FS-006-cli.2) — and it answers the question an agent in an adopted repository
+actually has, which is what this tool expects of it, not which files `init`
+would touch. The text is the same constant `init` installs, so the printed and
+the written instructions cannot drift.
+
 ## 5. Reporting
 
 On success, stderr reports one path per line:

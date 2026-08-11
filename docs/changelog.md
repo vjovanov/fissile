@@ -30,6 +30,19 @@ with a migration note.
 
 ## Unreleased
 
+### Added
+
+- §FS-006-cli.2: the usage screen opens with a short paragraph — what `fissile`
+  is for, the two tiers, the `check --staged` habit, and the rule that a budget
+  is never met by damaging the design — closing with a pointer to
+  `fissile init --dry-run` for the full agent instructions. A repository can
+  install `fissile` without the managed block reaching the entrypoint an agent
+  actually reads; the usage screen is the one surface guaranteed to be there.
+- §FS-002-init.4: `fissile init --dry-run` prints the managed agent block on
+  stdout, with the planned writes still on stderr, so the instructions can be
+  read without touching the working tree. It prints the same constant `init`
+  installs, so the printed and the written instructions cannot drift.
+
 ## 2. [0.2.0] — 2026-08-11
 
 ### Added

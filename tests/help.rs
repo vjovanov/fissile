@@ -39,3 +39,22 @@ fn subcommand_help_fits_one_screen_and_shows_examples() {
         );
     }
 }
+
+/// §FS-006-cli.2: the usage screen says what fissile is for, how to work with
+/// it, and where the full instructions are. It is the one surface guaranteed to
+/// exist in a repository whose agent entrypoint never received the block.
+#[test]
+fn top_level_help_states_the_workflow_and_points_at_the_instructions() {
+    let text = help(&["--help"]);
+    for clause in [
+        "soft warns",
+        "hard fails the commit",
+        "fissile check --staged",
+        "fissile init --dry-run",
+    ] {
+        assert!(
+            text.contains(clause),
+            "usage screen should state `{clause}`"
+        );
+    }
+}

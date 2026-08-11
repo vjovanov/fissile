@@ -306,3 +306,26 @@ fn exception_add_rejects_overlapping_path_matchers() {
 
     assert!(error.to_string().contains("already accepts src/big.rs"));
 }
+
+/// §FS-002-init.4: a dry run prints the managed block on stdout, so an agent can
+/// read what the repository expects of it without writing a file. The text is
+/// the constant `init` installs, so printed and written cannot drift.
+#[test]
+fn init_dry_run_prints_the_managed_block() {
+    let root = temp_repo();
+    let output = Command::new(env!("CARGO_BIN_EXE_fissile"))
+        .args(["init", ".", "--dry-run"])
+        .current_dir(&root)
+        .output()
+        .expect("fissile runs");
+
+    let stdout = String::from_utf8(output.stdout).expect("stdout is utf-8");
+    let stderr = String::from_utf8(output.stderr).expect("stderr is utf-8");
+
+    assert!(output.status.success());
+    assert_eq!(stdout.trim_end(), fissile::init::MANAGED_BLOCK.trim_end());
+    // Planned writes stay on stderr, so the two are separable.
+    assert!(stderr.contains("would-write"));
+    assert!(!stdout.contains("would-write"));
+    assert!(!root.join("AGENTS.md").exists(), "a dry run writes nothing");
+}

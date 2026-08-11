@@ -17,6 +17,12 @@ use fissile::{Severity, Unit};
 const USAGE: &str = "\
 usage: fissile <command> [options]
 
+fissile keeps files small so readers — human and agent — spend less to
+understand them, without letting a budget damage the design. Every rule has two
+limits: soft warns, hard fails the commit. Run `fissile check --staged` before
+calling work done, and split what it names along a seam the code already has.
+For the full agent instructions, run `fissile init --dry-run`.
+
 commands:
   init [<path>]        install config, registries, and agent instructions
   check [<paths>...]   enforce file budgets on a file set or the scan scope
@@ -149,9 +155,16 @@ fn run_init(args: &[String]) -> ExitCode {
     }
 
     options.agents = agents;
+    let dry_run = options.dry_run;
     match init::run(&options) {
         Ok(report) => {
             eprintln!("{}", report.render());
+            // A dry run is the one way to read the instructions without writing
+            // a file, so it prints them — on stdout, keeping the planned writes
+            // on stderr separable (§FS-002-init.4, §FS-006-cli.2).
+            if dry_run {
+                println!("{}", init::MANAGED_BLOCK.trim_end());
+            }
             ExitCode::SUCCESS
         }
         Err(error) => {
