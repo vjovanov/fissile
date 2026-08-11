@@ -1,0 +1,14 @@
+fissile_exceptions_version = 1
+
+[[exceptions]]
+id = "EX-001-big"
+path = "src/big.rs"
+match = "exact"
+rules = ["rust"]
+kind = "structural"
+max_accepted = { value = 5, unit = "lines" }
+until = "indefinite"
+reason = """
+A generated dispatch table the snapshot test asserts byte-identical; splitting it
+across modules breaks the byte comparison the test exists to make.
+"""

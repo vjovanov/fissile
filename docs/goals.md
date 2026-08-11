@@ -127,7 +127,7 @@ A single threshold is a false economy. Set it low and the tool nags constantly u
 
 - **Soft limit.** A file at or above the soft limit emits a warning. The commit is not blocked. The diagnostic names the file, the size, the soft limit, and the rule. An AI agent reading the output is expected to attempt to reduce the file — split it, extract a helper, prune dead code — before claiming the task done. A human can ignore it; the friction is intentional but bounded.
 - **Hard limit.** A file at or above the hard limit fails the commit. There is no override flag and no severity knob ([§GOAL-003-friendly-output.2](goals.md#2-what-this-rules-out)). The only way past it is the structured hard exception registry of [§GOAL-007-justified-exceptions](goals.md#goal-007-justified-exceptions-every-oversized-file-has-a-written-reason).
-- **Order.** A file above the hard limit reports only the hard violation; the soft warning is implied. If a hard exception silences that hard violation, the soft warning may still appear unless the soft registry also accepts it.
+- **Order.** A file above the hard limit reports only the hard violation; the soft warning is implied. If a hard exception silences that hard violation, the soft warning appears again unless the soft registry also accepts it — or unless the accepting entry is `structural`, which says the split is illegal and there is therefore nothing left to ask for (§FS-003-exceptions.3).
 
 ### 2. The AI-minimize contract
 
@@ -184,6 +184,7 @@ The parsing contract lives in §FS-003-exceptions.
 
 - On startup the checker loads both registries, parses each `[[exceptions]]` entry, extracts the path or glob from the structured fields, and builds a path → exception index per severity.
 - A file matched by a soft-registry exception is silenced for soft findings at or below the entry's `max_accepted` value. A file matched by a hard-registry exception is silenced for hard findings at or below the entry's `max_accepted` value.
+- A silenced hard finding leaves the soft warning to the accepting entry's kind (§FS-003-exceptions.3). A `deferred` entry keeps the warning, because that is debt someone is expected to retire. A `structural` entry silences it as well: the split is illegal, so the warning asks for work nobody may do, and the only way to quiet it before the kind existed was a second entry saying the same thing in the other registry.
 - If the file grows past `max_accepted`, the finding appears again even though the path still has an exception entry.
 - `fissile exception add` (§FS-005-exception-add) is the supported way to append
   entries, so users do not need to hand-edit registry TOML for current
@@ -207,7 +208,7 @@ The parsing contract lives in §FS-003-exceptions.
 
 ### 5. Measurable
 
-E2E fixtures cover: `fissile exception add` appending soft and hard entries; a hard registry with a single exception silencing a hard violation; a soft registry with a single exception silencing a soft warning; a file that outgrows its exception's maximum accepted size and reports again; a registry whose exception names a path that no longer exists (audit must flag it stale); and a registry entry whose rationale is empty (parse error). Kind coverage adds: `exception add` refusing a `structural` entry with a dated `until` and a `deferred` entry with an `indefinite` one, an entry that omits `kind` still loading and counting as deferred, and `audit` reporting the two counts. A registry that has not been migrated to version 2 is refused with both edits named (§E2E-020-registry-version-2). A snapshot test on the default registry paths and the parse rules guards against silent schema changes.
+E2E fixtures cover: `fissile exception add` appending soft and hard entries; a hard registry with a single exception silencing a hard violation; a soft registry with a single exception silencing a soft warning; a file that outgrows its exception's maximum accepted size and reports again; a registry whose exception names a path that no longer exists (audit must flag it stale); and a registry entry whose rationale is empty (parse error). Kind coverage adds: `exception add` refusing a `structural` entry with a dated `until` and a `deferred` entry with an `indefinite` one, an entry that omits `kind` still loading and counting as deferred, `audit` reporting the two counts, and the same fixture going quiet under a `structural` hard entry where a `deferred` one keeps warning (§E2E-019-structural-silences-soft). A registry that has not been migrated to version 2 is refused with both edits named (§E2E-020-registry-version-2). A snapshot test on the default registry paths and the parse rules guards against silent schema changes.
 
 ## GOAL-008-remediation-messages: overflows can carry local remediation guidance
 
