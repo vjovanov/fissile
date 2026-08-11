@@ -10,8 +10,9 @@ use serde::Deserialize;
 use crate::config::UnitSpec;
 use crate::{Glob, Rule, Severity, Unit};
 
-/// The only supported registry version (§FS-003-exceptions.1).
-pub const SUPPORTED_VERSION: u32 = 1;
+/// The only supported registry version (§FS-003-exceptions.1). Version 2 removed
+/// the `id` and `replaces` keys (§FS-003-exceptions.2.2).
+pub const SUPPORTED_VERSION: u32 = 2;
 
 /// Whether an entry's `path` is an exact repo-relative path or a glob.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
@@ -40,7 +41,7 @@ pub enum Kind {
     /// An architectural constraint makes the split illegal. Never expires.
     Structural,
     /// No constraint; a boundary is missing. `until` names what retires it.
-    /// The default for an entry written before the field existed.
+    /// The default for an entry that declares no kind.
     #[default]
     Deferred,
 }
@@ -91,10 +92,17 @@ struct RegistryFile {
     exceptions: Vec<RawException>,
 }
 
+/// Just the version line, read leniently. A version-1 registry fails the strict
+/// parse on its `id` keys before the version is ever looked at, and the version
+/// is the error that leads to the fix (§FS-003-exceptions.2.2).
+#[derive(Debug, Deserialize)]
+struct RegistryHeader {
+    fissile_exceptions_version: u32,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawException {
-    id: String,
     path: String,
     #[serde(rename = "match")]
     match_kind: MatchKind,
@@ -102,9 +110,8 @@ struct RawException {
     max_accepted: MaxAccepted,
     until: String,
     reason: String,
-    /// Absent in registries written before the field existed; read as
-    /// `Deferred`, and the `until` agreement is not checked
-    /// (§FS-003-exceptions.2.1).
+    /// Optional: an entry that omits it reads as `Deferred`, and the `until`
+    /// agreement is not checked (§FS-003-exceptions.2.1).
     #[serde(default)]
     kind: Option<Kind>,
     #[serde(default)]
@@ -113,14 +120,14 @@ struct RawException {
     owner: Option<String>,
     #[serde(default)]
     issue: Option<String>,
-    #[serde(default)]
-    replaces: Option<String>,
 }
 
 /// A parsed, structurally-valid exception entry with a compiled path matcher.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Exception {
-    pub id: String,
+    /// The registry file this entry came from, so a diagnostic can name the
+    /// file whose line the reader edits (§DF-005-exception-identity).
+    pub registry: String,
     pub severity: Severity,
     pub path: String,
     pub match_kind: MatchKind,
@@ -135,7 +142,6 @@ pub struct Exception {
     pub title: Option<String>,
     pub owner: Option<String>,
     pub issue: Option<String>,
-    pub replaces: Option<String>,
     matcher: Matcher,
 }
 
@@ -146,6 +152,14 @@ enum Matcher {
 }
 
 impl Exception {
+    /// Where a diagnostic about this entry points (§FS-003-exceptions.4).
+    pub fn site(&self) -> EntrySite {
+        EntrySite {
+            registry: self.registry.clone(),
+            path: self.path.clone(),
+        }
+    }
+
     /// Whether the entry's `["*"]` wildcard or explicit list covers `rule_id`.
     pub fn applies_to_rule(&self, rule_id: &str) -> bool {
         self.rules.iter().any(|r| r == "*" || r == rule_id)
@@ -171,6 +185,21 @@ pub enum Verdict<'a> {
     Exceeded(&'a Exception),
 }
 
+/// One registry document to load: where it lives and what it says. The path is
+/// what diagnostics name, because it is the file whose line a reader has to edit
+/// (§DF-005-exception-identity).
+#[derive(Clone, Copy, Debug)]
+pub struct RegistrySource<'a> {
+    pub path: &'a str,
+    pub text: &'a str,
+}
+
+impl<'a> RegistrySource<'a> {
+    pub fn new(path: &'a str, text: &'a str) -> Self {
+        Self { path, text }
+    }
+}
+
 /// Both severity registries, loaded and structurally validated.
 #[derive(Clone, Debug, Default)]
 pub struct Registries {
@@ -179,32 +208,16 @@ pub struct Registries {
 }
 
 impl Registries {
-    /// Parse the soft and hard registry documents. A `None` text means the
+    /// Parse the soft and hard registry documents. A `None` source means the
     /// registry file is absent, which is treated as empty.
-    pub fn load(soft: Option<&str>, hard: Option<&str>) -> Result<Self, ExceptionError> {
-        let soft = match soft {
-            Some(text) => parse_registry(text, Severity::Soft, "soft")?,
-            None => Vec::new(),
-        };
-        let hard = match hard {
-            Some(text) => parse_registry(text, Severity::Hard, "hard")?,
-            None => Vec::new(),
-        };
-        let registries = Self { soft, hard };
-        registries.check_unique_ids()?;
-        Ok(registries)
-    }
-
-    fn check_unique_ids(&self) -> Result<(), ExceptionError> {
-        let mut seen = std::collections::HashSet::new();
-        for entry in self.all() {
-            if !seen.insert(entry.id.as_str()) {
-                return Err(ExceptionError::DuplicateId {
-                    id: entry.id.clone(),
-                });
-            }
-        }
-        Ok(())
+    pub fn load(
+        soft: Option<RegistrySource<'_>>,
+        hard: Option<RegistrySource<'_>>,
+    ) -> Result<Self, ExceptionError> {
+        Ok(Self {
+            soft: parse_registry(soft, Severity::Soft)?,
+            hard: parse_registry(hard, Severity::Hard)?,
+        })
     }
 
     /// Every entry across both registries.
@@ -232,13 +245,13 @@ impl Registries {
                 }
                 let Some(rule) = rules.iter().find(|r| &r.id == rule_id) else {
                     return Err(ExceptionError::UnknownRule {
-                        id: entry.id.clone(),
+                        site: entry.site(),
                         rule: rule_id.clone(),
                     });
                 };
                 if rule.budget.unit != entry.max_unit {
                     return Err(ExceptionError::UnitMismatch {
-                        id: entry.id.clone(),
+                        site: entry.site(),
                         rule: rule_id.clone(),
                     });
                 }
@@ -248,14 +261,14 @@ impl Registries {
                 };
                 let Some(limit) = limit else {
                     return Err(ExceptionError::NoSeverityLimit {
-                        id: entry.id.clone(),
+                        site: entry.site(),
                         rule: rule_id.clone(),
                         severity: entry.severity,
                     });
                 };
                 if entry.max_value < limit {
                     return Err(ExceptionError::BelowLimit {
-                        id: entry.id.clone(),
+                        site: entry.site(),
                         rule: rule_id.clone(),
                         max: entry.max_value,
                         limit,
@@ -283,6 +296,7 @@ impl Registries {
             {
                 if matched.is_some() {
                     return Err(ExceptionError::MultipleMatches {
+                        registry: entry.registry.clone(),
                         path: path.to_owned(),
                         rule: rule_id.to_owned(),
                         unit,
@@ -321,47 +335,78 @@ impl Registries {
 }
 
 fn parse_registry(
-    text: &str,
+    source: Option<RegistrySource<'_>>,
     severity: Severity,
-    label: &str,
 ) -> Result<Vec<Exception>, ExceptionError> {
-    let file: RegistryFile = toml::from_str(text).map_err(|error| ExceptionError::Parse {
-        registry: label.to_owned(),
-        reason: crate::config::format_toml_error(&error, text),
-    })?;
+    let Some(source) = source else {
+        return Ok(Vec::new());
+    };
+    let unsupported = |version| ExceptionError::UnsupportedVersion {
+        registry: source.path.to_owned(),
+        version,
+    };
+    let file: RegistryFile = match toml::from_str(source.text) {
+        Ok(file) => file,
+        // The version outranks whatever else the parse tripped on: an
+        // unmigrated registry fails on a key the fix removes anyway, and the
+        // version error is the one that names the fix (§FS-003-exceptions.2.2).
+        Err(error) => {
+            return Err(match declared_version(source.text) {
+                Some(version) if version != SUPPORTED_VERSION => unsupported(version),
+                _ => ExceptionError::Parse {
+                    registry: source.path.to_owned(),
+                    reason: crate::config::format_toml_error(&error, source.text),
+                },
+            });
+        }
+    };
 
     if file.fissile_exceptions_version != SUPPORTED_VERSION {
-        return Err(ExceptionError::UnsupportedVersion {
-            registry: label.to_owned(),
-            version: file.fissile_exceptions_version,
-        });
+        return Err(unsupported(file.fissile_exceptions_version));
     }
 
     file.exceptions
         .into_iter()
-        .map(|raw| build_exception(raw, severity))
+        .map(|raw| build_exception(raw, severity, source.path))
         .collect()
 }
 
-fn build_exception(raw: RawException, severity: Severity) -> Result<Exception, ExceptionError> {
+/// The declared version of a document the strict parse rejected, when it has one.
+fn declared_version(text: &str) -> Option<u32> {
+    toml::from_str::<RegistryHeader>(text)
+        .ok()
+        .map(|header| header.fissile_exceptions_version)
+}
+
+fn build_exception(
+    raw: RawException,
+    severity: Severity,
+    registry: &str,
+) -> Result<Exception, ExceptionError> {
+    // An entry has no name, so every diagnostic locates it: registry file plus
+    // the entry's own `path` (§DF-005-exception-identity).
+    let site = || EntrySite {
+        registry: registry.to_owned(),
+        path: raw.path.clone(),
+    };
     if raw.reason.trim().is_empty() {
-        return Err(ExceptionError::EmptyReason { id: raw.id });
+        return Err(ExceptionError::EmptyReason { site: site() });
     }
     if raw.until.trim().is_empty() {
-        return Err(ExceptionError::EmptyUntil { id: raw.id });
+        return Err(ExceptionError::EmptyUntil { site: site() });
     }
     if raw.max_accepted.value == 0 {
-        return Err(ExceptionError::NonPositiveMax { id: raw.id });
+        return Err(ExceptionError::NonPositiveMax { site: site() });
     }
     if raw.rules.is_empty() {
-        return Err(ExceptionError::NoRules { id: raw.id });
+        return Err(ExceptionError::NoRules { site: site() });
     }
-    // Checked only when the entry declares a kind, so a registry written before
-    // the field existed keeps loading (§FS-003-exceptions.2.1).
+    // Checked only when the entry declares a kind, so an entry that omits one
+    // keeps loading (§FS-003-exceptions.2.1).
     if let Some(kind) = raw.kind
         && (kind == Kind::Structural) != is_indefinite(&raw.until)
     {
-        return Err(ExceptionError::KindUntilMismatch { id: raw.id, kind });
+        return Err(ExceptionError::KindUntilMismatch { site: site(), kind });
     }
 
     let matcher = match raw.match_kind {
@@ -370,7 +415,7 @@ fn build_exception(raw: RawException, severity: Severity) -> Result<Exception, E
     };
 
     Ok(Exception {
-        id: raw.id,
+        registry: registry.to_owned(),
         severity,
         path: raw.path,
         match_kind: raw.match_kind,
@@ -383,9 +428,23 @@ fn build_exception(raw: RawException, severity: Severity) -> Result<Exception, E
         title: raw.title,
         owner: raw.owner,
         issue: raw.issue,
-        replaces: raw.replaces,
         matcher,
     })
+}
+
+/// Where one entry lives: the registry file and the entry's `path`. Diagnostics
+/// lead with the pair because it is the line the reader has to edit — an entry
+/// has no name to quote (§FS-003-exceptions.4, §DF-005-exception-identity).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EntrySite {
+    pub registry: String,
+    pub path: String,
+}
+
+impl fmt::Display for EntrySite {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}: {}", self.registry, self.path)
+    }
 }
 
 /// A failure while loading or validating an exception registry.
@@ -400,44 +459,42 @@ pub enum ExceptionError {
         version: u32,
     },
     EmptyReason {
-        id: String,
+        site: EntrySite,
     },
     EmptyUntil {
-        id: String,
+        site: EntrySite,
     },
     KindUntilMismatch {
-        id: String,
+        site: EntrySite,
         kind: Kind,
     },
     NonPositiveMax {
-        id: String,
+        site: EntrySite,
     },
     NoRules {
-        id: String,
-    },
-    DuplicateId {
-        id: String,
+        site: EntrySite,
     },
     UnknownRule {
-        id: String,
+        site: EntrySite,
         rule: String,
     },
     UnitMismatch {
-        id: String,
+        site: EntrySite,
         rule: String,
     },
     NoSeverityLimit {
-        id: String,
+        site: EntrySite,
         rule: String,
         severity: Severity,
     },
     BelowLimit {
-        id: String,
+        site: EntrySite,
         rule: String,
         max: u64,
         limit: u64,
     },
     MultipleMatches {
+        registry: String,
         path: String,
         rule: String,
         unit: Unit,
@@ -448,70 +505,80 @@ impl fmt::Display for ExceptionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ExceptionError::Parse { registry, reason } => {
-                write!(f, "{registry} exception registry parse error: {reason}")
+                write!(f, "{registry}: exception registry parse error: {reason}")
             }
+            // Every adopter meets this once, on upgrade, so it names both edits
+            // rather than stating a fact (§FS-003-exceptions.2.2).
+            ExceptionError::UnsupportedVersion { registry, version } if *version == 1 => write!(
+                f,
+                "{registry}: exception registry version 1 is unsupported; this build supports {SUPPORTED_VERSION}\n\
+                 to migrate this file: set fissile_exceptions_version = {SUPPORTED_VERSION}, and delete every id and replaces line — version {SUPPORTED_VERSION} removed both, because an entry is identified by the registry it lives in and what it accepts"
+            ),
             ExceptionError::UnsupportedVersion { registry, version } => write!(
                 f,
-                "{registry} exception registry version {version} is unsupported; this build supports {SUPPORTED_VERSION}"
+                "{registry}: exception registry version {version} is unsupported; this build supports {SUPPORTED_VERSION}"
             ),
-            ExceptionError::EmptyReason { id } => {
-                write!(f, "exception {id} has an empty reason")
+            ExceptionError::EmptyReason { site } => {
+                write!(f, "{site} has an empty reason")
             }
-            ExceptionError::EmptyUntil { id } => {
-                write!(f, "exception {id} has an empty until")
+            ExceptionError::EmptyUntil { site } => {
+                write!(f, "{site} has an empty until")
             }
             // The message names the distinction rather than the rule it broke:
             // the fix is usually the other kind, not a different `until`
             // (§DF-004-exception-kind.1).
             ExceptionError::KindUntilMismatch {
-                id,
+                site,
                 kind: Kind::Structural,
             } => write!(
                 f,
-                "exception {id} is structural, so until must be \"{INDEFINITE}\"; if something would retire it, no constraint makes the split illegal and the entry is deferred"
+                "{site} is structural, so until must be \"{INDEFINITE}\"; if something would retire it, no constraint makes the split illegal and the entry is deferred"
             ),
             ExceptionError::KindUntilMismatch {
-                id,
+                site,
                 kind: Kind::Deferred,
             } => write!(
                 f,
-                "exception {id} is deferred, so until must name what retires it, not \"{INDEFINITE}\"; use kind = \"structural\" if splitting the file is genuinely illegal"
+                "{site} is deferred, so until must name what retires it, not \"{INDEFINITE}\"; use kind = \"structural\" if splitting the file is genuinely illegal"
             ),
-            ExceptionError::NonPositiveMax { id } => {
-                write!(
-                    f,
-                    "exception {id} max_accepted.value must be a positive integer"
-                )
+            ExceptionError::NonPositiveMax { site } => {
+                write!(f, "{site} max_accepted.value must be a positive integer")
             }
-            ExceptionError::NoRules { id } => {
-                write!(f, "exception {id} must list at least one rule id")
+            ExceptionError::NoRules { site } => {
+                write!(f, "{site} must list at least one rule id")
             }
-            ExceptionError::DuplicateId { id } => {
-                write!(f, "exception id {id} is declared more than once")
+            ExceptionError::UnknownRule { site, rule } => {
+                write!(f, "{site} references unknown rule id {rule}")
             }
-            ExceptionError::UnknownRule { id, rule } => {
-                write!(f, "exception {id} references unknown rule id {rule}")
-            }
-            ExceptionError::UnitMismatch { id, rule } => write!(
+            ExceptionError::UnitMismatch { site, rule } => write!(
                 f,
-                "exception {id} max_accepted.unit does not match the unit of rule {rule}"
+                "{site} max_accepted.unit does not match the unit of rule {rule}"
             ),
-            ExceptionError::NoSeverityLimit { id, rule, severity } => write!(
+            ExceptionError::NoSeverityLimit {
+                site,
+                rule,
+                severity,
+            } => write!(
                 f,
-                "exception {id} targets rule {rule}, which has no {severity} limit to accept"
+                "{site} targets rule {rule}, which has no {severity} limit to accept"
             ),
             ExceptionError::BelowLimit {
-                id,
+                site,
                 rule,
                 max,
                 limit,
             } => write!(
                 f,
-                "exception {id} max_accepted.value {max} is below rule {rule} limit {limit}"
+                "{site} max_accepted.value {max} is below rule {rule} limit {limit}"
             ),
-            ExceptionError::MultipleMatches { path, rule, unit } => write!(
+            ExceptionError::MultipleMatches {
+                registry,
+                path,
+                rule,
+                unit,
+            } => write!(
                 f,
-                "more than one exception in the same registry matches {path} for {unit} rule {rule}"
+                "{registry}: more than one exception matches {path} for {unit} rule {rule}"
             ),
         }
     }

@@ -59,7 +59,6 @@ JSON output emits one record per overflow with at least:
 - `rule_id`
 - `message_id`
 - `message`
-- `exception_id`, when applicable in audit's silenced output
 - `exception_max`, when applicable in audit's silenced output
 
 When no findings are emitted, text output prints exactly `ok`; JSON output emits
@@ -92,8 +91,9 @@ state. It is for adoption and maintenance, not just pass/fail.
   "this build does not report them".
 - `--top <N>` reports the largest measured files per unit, after exclusions,
   even when they are under limit.
-- `--stale-exceptions` reports exception entries whose path or glob matches no
-  scanned file.
+- `--stale-exceptions` reports every exception entry whose path or glob matches
+  no scanned file, each named by its registry and its `path` (§FS-003-exceptions.4)
+  — the list spans both registries, and the same path can be stale in each.
 - `--rule-coverage` reports which rules matched zero files, which files matched
   only built-in catch-all rules, and which rule/message pairs are unused.
 

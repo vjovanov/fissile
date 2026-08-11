@@ -1,7 +1,6 @@
-fissile_exceptions_version = 1
+fissile_exceptions_version = 2
 
 [[exceptions]]
-id = "EX-001-big"
 path = "src/big.rs"
 match = "exact"
 rules = ["rust"]
@@ -13,10 +12,9 @@ A generated table the snapshot test asserts byte-identical; splitting it would
 break the byte comparison the test exists to make.
 """
 
-# Written before `kind` existed: it still loads, and counts as deferred
-# (§FS-003-exceptions.2.1).
+# No `kind`: the entry counts as deferred, and the kind/until agreement is not
+# applied to it (§FS-003-exceptions.2.1).
 [[exceptions]]
-id = "EX-002-gone"
 path = "src/retired.rs"
 match = "exact"
 rules = ["rust"]

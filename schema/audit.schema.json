@@ -53,13 +53,13 @@
     },
     "stale": {
       "type": "array",
-      "description": "Exceptions whose path matches no scanned file (audit --stale-exceptions).",
+      "description": "Exceptions whose path matches no scanned file (audit --stale-exceptions). An entry is identified by the registry it lives in and the path it accepts, since the list spans both registries (DF-005-exception-identity).",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "path"],
+        "required": ["registry", "path"],
         "properties": {
-          "id": { "type": "string" },
+          "registry": { "type": "string" },
           "path": { "type": "string" }
         }
       }

@@ -133,11 +133,9 @@ fn hard_exception_silences_hard_but_keeps_soft() {
         reason: "no module owns the generated cases yet".to_owned(),
         until: Some("the case-builder module lands".to_owned()),
         match_kind: MatchKind::Exact,
-        id: None,
         title: None,
         owner: None,
         issue: None,
-        replaces: None,
         max: None,
         unit: None,
         dry_run: false,
@@ -155,6 +153,63 @@ fn hard_exception_silences_hard_but_keeps_soft() {
     // The soft finding survives so agents keep minimizing (§FS-003-exceptions.3).
     assert!(run.output.contains("soft: 1 file over the"));
     assert!(run.output.contains("[rule: rust, message:"));
+}
+
+/// §FS-005-exception-add.3: a created registry declares version 2, and the entry
+/// carries no name — it is identified by this registry and what it accepts
+/// (§DF-005-exception-identity).
+#[test]
+fn exception_add_writes_a_version_2_registry_and_no_name() {
+    let root = temp_repo();
+    let run = exception::run(&add_options(
+        &root,
+        Kind::Deferred,
+        Some("the parser lands"),
+    ))
+    .expect("exception add runs");
+    assert!(run.output.contains("appended src/big.rs to"));
+
+    let registry = fs::read_to_string(root.join("docs/file-size-human-exceptions.toml")).unwrap();
+    assert!(registry.starts_with("fissile_exceptions_version = 2"));
+    assert!(!registry.contains("id = "), "{registry}");
+    assert!(!registry.contains("replaces = "), "{registry}");
+}
+
+/// §FS-003-exceptions.2.2: an unmigrated registry is refused, and the message
+/// names both edits rather than only the version this build supports. The `id`
+/// keys are what the strict parse would trip on first, so this also pins that
+/// the version outranks them.
+#[test]
+fn unmigrated_registry_is_refused_with_both_edits_named() {
+    let root = temp_repo();
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(
+        root.join("docs/file-size-human-exceptions.toml"),
+        "fissile_exceptions_version = 1\n\n\
+         [[exceptions]]\n\
+         id = \"EX-001-big\"\n\
+         replaces = \"EX-000-big\"\n\
+         path = \"src/big.rs\"\n\
+         match = \"exact\"\n\
+         rules = [\"rust\"]\n\
+         kind = \"structural\"\n\
+         max_accepted = { value = 250, unit = \"lines\" }\n\
+         until = \"indefinite\"\n\
+         reason = \"asserted byte-identical by the snapshot test\"\n",
+    )
+    .unwrap();
+
+    let message = match check::run(&check_options(&root)) {
+        Ok(_) => panic!("a version 1 registry must be refused"),
+        Err(error) => error.to_string(),
+    };
+    for clause in [
+        "docs/file-size-human-exceptions.toml: exception registry version 1 is unsupported",
+        "set fissile_exceptions_version = 2",
+        "delete every id and replaces line",
+    ] {
+        assert!(message.contains(clause), "missing `{clause}`: {message}");
+    }
 }
 
 #[test]
@@ -274,11 +329,9 @@ fn exception_add_rejects_overlapping_path_matchers() {
         reason: "generated tree asserted byte-identical by the snapshot test".to_owned(),
         until: None,
         match_kind: MatchKind::Glob,
-        id: Some("EX-001-src".to_owned()),
         title: None,
         owner: None,
         issue: None,
-        replaces: None,
         max: Some(300),
         unit: Some(Unit::Lines),
         dry_run: false,
@@ -295,11 +348,9 @@ fn exception_add_rejects_overlapping_path_matchers() {
         reason: "accepted exact file".to_owned(),
         until: Some("the case-builder module lands".to_owned()),
         match_kind: MatchKind::Exact,
-        id: Some("EX-002-big".to_owned()),
         title: None,
         owner: None,
         issue: None,
-        replaces: None,
         max: None,
         unit: None,
         dry_run: false,
@@ -308,7 +359,13 @@ fn exception_add_rejects_overlapping_path_matchers() {
         Err(error) => error,
     };
 
-    assert!(error.to_string().contains("already accepts src/big.rs"));
+    // The blocking entry is named by where it lives and what it matches, so the
+    // reader can go edit that entry (§FS-005-exception-add.4).
+    assert_eq!(
+        error.to_string(),
+        "docs/file-size-human-exceptions.toml: src/** already accepts src/big.rs \
+         for this unit and rule"
+    );
 }
 
 fn add_options(root: &Path, kind: Kind, until: Option<&str>) -> AddOptions {
@@ -322,11 +379,9 @@ fn add_options(root: &Path, kind: Kind, until: Option<&str>) -> AddOptions {
         reason: "a reason".to_owned(),
         until: until.map(str::to_owned),
         match_kind: MatchKind::Exact,
-        id: None,
         title: None,
         owner: None,
         issue: None,
-        replaces: None,
         max: None,
         unit: None,
         dry_run: false,
@@ -366,7 +421,7 @@ fn exception_add_reconciles_kind_with_until() {
 }
 
 /// §FS-004-check-audit.2: accepted-permanently and carrying-debt are two numbers,
-/// and an entry written before `kind` existed counts as deferred
+/// and an entry that omits `kind` counts as deferred
 /// (§FS-003-exceptions.2.1).
 #[test]
 fn audit_counts_exceptions_by_kind() {
@@ -374,9 +429,8 @@ fn audit_counts_exceptions_by_kind() {
     fs::create_dir_all(root.join("docs")).unwrap();
     fs::write(
         root.join("docs/file-size-human-exceptions.toml"),
-        "fissile_exceptions_version = 1\n\n\
+        "fissile_exceptions_version = 2\n\n\
          [[exceptions]]\n\
-         id = \"EX-001-big\"\n\
          path = \"src/big.rs\"\n\
          match = \"exact\"\n\
          rules = [\"rust\"]\n\
@@ -385,13 +439,12 @@ fn audit_counts_exceptions_by_kind() {
          until = \"indefinite\"\n\
          reason = \"asserted byte-identical by the snapshot test\"\n\n\
          [[exceptions]]\n\
-         id = \"EX-002-ok\"\n\
          path = \"src/ok.rs\"\n\
          match = \"exact\"\n\
          rules = [\"rust\"]\n\
          max_accepted = { value = 250, unit = \"lines\" }\n\
          until = \"the reader module lands\"\n\
-         reason = \"written before the kind field existed\"\n",
+         reason = \"omits kind, so it counts as deferred\"\n",
     )
     .unwrap();
 
@@ -409,6 +462,64 @@ fn audit_counts_exceptions_by_kind() {
     assert!(run.output.contains("exceptions:"));
     assert!(run.output.contains("structural (never expires): 1"));
     assert!(run.output.contains("deferred (carrying debt): 1"));
+}
+
+/// §FS-004-check-audit.2: the stale list spans both registries, so each entry is
+/// named by its registry and its `path` — the same path can be stale in each,
+/// and two bare paths would not say which file to edit (§FS-003-exceptions.4).
+#[test]
+fn stale_exceptions_name_the_registry_they_live_in() {
+    let root = temp_repo();
+    fs::create_dir_all(root.join("docs")).unwrap();
+    for (registry, max) in [
+        ("docs/file-size-agent-exceptions.toml", 150),
+        ("docs/file-size-human-exceptions.toml", 250),
+    ] {
+        fs::write(
+            root.join(registry),
+            format!(
+                "fissile_exceptions_version = 2\n\n\
+                 [[exceptions]]\n\
+                 path = \"src/gone.rs\"\n\
+                 match = \"exact\"\n\
+                 rules = [\"rust\"]\n\
+                 kind = \"deferred\"\n\
+                 max_accepted = {{ value = {max}, unit = \"lines\" }}\n\
+                 until = \"the module lands\"\n\
+                 reason = \"no module owns it yet\"\n"
+            ),
+        )
+        .unwrap();
+    }
+
+    let options = AuditOptions {
+        root,
+        config_path: None,
+        format: Some(Format::Text),
+        no_color: false,
+        top: None,
+        stale_exceptions: true,
+        rule_coverage: false,
+    };
+    let text = audit::run(&options).expect("audit runs").output;
+    assert!(
+        text.contains("  docs/file-size-agent-exceptions.toml: src/gone.rs")
+            && text.contains("  docs/file-size-human-exceptions.toml: src/gone.rs"),
+        "{text}"
+    );
+
+    let json = audit::run(&AuditOptions {
+        format: Some(Format::Json),
+        ..options
+    })
+    .expect("audit runs")
+    .output;
+    assert!(
+        json.contains(
+            "{\"registry\":\"docs/file-size-agent-exceptions.toml\",\"path\":\"src/gone.rs\"}"
+        ),
+        "{json}"
+    );
 }
 
 /// §FS-002-init.4: a dry run prints the managed block on stdout, so an agent can

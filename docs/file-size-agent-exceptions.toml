@@ -1,6 +1,5 @@
-fissile_exceptions_version = 1
+fissile_exceptions_version = 2
 [[exceptions]]
-id = "EX-001-release-yml"
 path = ".github/workflows/release.yml"
 match = "exact"
 rules = ["tooling"]

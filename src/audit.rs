@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use crate::cli::{self, CommandError, Format, Loaded};
 use crate::config::Stale;
-use crate::exceptions::KindCounts;
+use crate::exceptions::{EntrySite, Exception, KindCounts};
 use crate::json::Json;
 use crate::report::{self, Outcome};
 use crate::{FileMeasurement, Selector, Unit, scan};
@@ -42,7 +42,7 @@ type TopFiles = Vec<(Unit, Vec<(u64, String)>)>;
 /// emptiness.
 struct Inventory {
     top: Option<TopFiles>,
-    stale: Option<Vec<(String, String)>>,
+    stale: Option<Vec<EntrySite>>,
     coverage: Option<Coverage>,
     kinds: KindCounts,
 }
@@ -76,11 +76,13 @@ pub fn run(options: &AuditOptions) -> Result<Run, CommandError> {
     let mut failed = report::has_hard_failure(&outcomes);
 
     let stale = options.stale_exceptions.then(|| {
-        let entries: Vec<(String, String)> = loaded
+        // Registry plus the entry's own `path`: the list spans both registries,
+        // and the same path can be stale in each (§FS-003-exceptions.4).
+        let entries: Vec<EntrySite> = loaded
             .registries
             .stale(&files)
             .iter()
-            .map(|entry| (entry.id.clone(), entry.path.clone()))
+            .map(|entry| Exception::site(entry))
             .collect();
         if !entries.is_empty() && loaded.config.exceptions.stale == Stale::Error {
             failed = true;
@@ -233,13 +235,8 @@ fn render_text(
         .filter_map(|outcome| match outcome {
             Outcome::Silenced {
                 overflow,
-                exception_id,
                 exception_max,
-            } => Some(report::silenced_line(
-                overflow,
-                exception_id,
-                *exception_max,
-            )),
+            } => Some(report::silenced_line(overflow, *exception_max)),
             Outcome::Reported(_) => None,
         })
         .collect();
@@ -272,8 +269,8 @@ fn render_text(
         if stale.is_empty() {
             lines.push("  none".to_owned());
         }
-        for (id, path) in stale {
-            lines.push(format!("  {id} ({path})"));
+        for site in stale {
+            lines.push(format!("  {site}"));
         }
         sections.push(lines.join("\n"));
     }
@@ -362,10 +359,10 @@ fn render_json(outcomes: &[Outcome], inventory: &Inventory) -> String {
     if let Some(stale) = &inventory.stale {
         let entries = stale
             .iter()
-            .map(|(id, path)| {
+            .map(|site| {
                 Json::Object(vec![
-                    ("id", Json::str(id.clone())),
-                    ("path", Json::str(path.clone())),
+                    ("registry", Json::str(site.registry.clone())),
+                    ("path", Json::str(site.path.clone())),
                 ])
             })
             .collect();

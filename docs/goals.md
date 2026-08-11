@@ -147,7 +147,7 @@ E2E fixtures cover all four states per rule: clean, soft-only, hard-only, both. 
 
 ## GOAL-007-justified-exceptions: every oversized file has a written reason
 
-The hard limit ([§GOAL-006-graded-limits](goals.md#goal-006-graded-limits-soft-warns-hard-blocks-ai-minimizes)) has no override flag. It does have one escape hatch — a structured hard exceptions registry where each oversized file is declared with a written rationale and a maximum accepted measurement. Soft warnings have a parallel soft exceptions registry for agent-facing debt that the repository has deliberately accepted. The registries are the paper trail: every accepted oversized file has, somewhere in the repo, a paragraph explaining why, and that paragraph carries a stable local ID for output and review.
+The hard limit ([§GOAL-006-graded-limits](goals.md#goal-006-graded-limits-soft-warns-hard-blocks-ai-minimizes)) has no override flag. It does have one escape hatch — a structured hard exceptions registry where each oversized file is declared with a written rationale and a maximum accepted measurement. Soft warnings have a parallel soft exceptions registry for agent-facing debt that the repository has deliberately accepted. The registries are the paper trail: every accepted oversized file has, somewhere in the repo, a paragraph explaining why, filed under the path it accepts in the registry whose severity it waives ([§DF-005-exception-identity](decisions/functional/DF-005-exception-identity.md)).
 
 This is the contract that lets [§GND-001-fissile](grund.md#gnd-001-fissile-steer-agents-toward-leaner-files--fewer-tokens-architecture-intact) hold under real-world adoption. A team turning the tool on for the first time will have files over the soft and hard limits on day one; the registries are how they accept the current state without disabling the guard, and how the next reviewer or agent can tell "this file is large for a reason" from "this file is large because nobody noticed."
 
@@ -156,10 +156,9 @@ This is the contract that lets [§GND-001-fissile](grund.md#gnd-001-fissile-stee
 Two TOML files at configured paths in the target repo hold one structured entry per exempted file. The soft registry defaults to `docs/file-size-agent-exceptions.toml`; the hard registry defaults to `docs/file-size-human-exceptions.toml`. Each entry looks like:
 
 ```toml
-fissile_exceptions_version = 1
+fissile_exceptions_version = 2
 
 [[exceptions]]
-id = "EX-NNN-slug"
 path = "path/to/file.ts"
 match = "exact"
 rules = ["rule-id"]
@@ -175,8 +174,11 @@ what has to exist before the split is possible.
 
 An entry declares which of two claims it is making, because they are not the same claim and they do not expire the same way: `kind = "structural"` says the split is illegal and nothing retires the entry; `kind = "deferred"` says the boundary is simply missing and `until` names what retires it ([§DF-004-exception-kind](decisions/functional/DF-004-exception-kind.md)). Demanding one phrasing for both is what produces fabricated justifications for ordinary debt.
 
-The `EX-` ID is local to `fissile`; the parsing contract lives in
-§FS-003-exceptions.
+An entry has no name of its own. What identifies it is the registry it lives in
+and what it accepts — path matcher, rules, unit — so a diagnostic names the
+registry file and the entry's `path`, which is the line a reader has to edit
+([§DF-005-exception-identity](decisions/functional/DF-005-exception-identity.md)).
+The parsing contract lives in §FS-003-exceptions.
 
 ### 2. How the checker uses it
 
@@ -187,13 +189,14 @@ The `EX-` ID is local to `fissile`; the parsing contract lives in
   entries, so users do not need to hand-edit registry TOML for current
   overflows.
 - An exception whose path matches no file under scan is reported by `audit --stale-exceptions` — dead exceptions rot fast and the tool refuses to pretend they are load-bearing.
-- `audit` names silenced exception IDs when an exception applies, so reviewers can find the rationale without grep, and counts the registries by kind so accepted-permanently and carrying-debt are two numbers rather than one total (§FS-004-check-audit.2).
+- `audit` names the accepted file and the ceiling that accepts it when an exception applies, so a reviewer looks the rationale up under the path already on the line, and counts the registries by kind so accepted-permanently and carrying-debt are two numbers rather than one total (§FS-004-check-audit.2).
 
 ### 3. What this rules out
 
 - **An exception without a rationale.** The schema requires the prose paragraph; an entry with empty body is a parse error. Silent override is exactly what [§GOAL-003-friendly-output](goals.md#goal-003-friendly-output-tell-the-user-exactly-what-broke-and-how-to-fix-it) refuses.
 - **An unstated question.** A reason is not free-form prose about the file. The entry's kind fixes what the paragraph must establish, and the shipped guidance says so rather than only demanding that *some* reason exist — "a written reason and a revisit trigger" reads as satisfied by any sentence, which is how a registry fills with descriptions of file contents ([§DF-004-exception-kind](decisions/functional/DF-004-exception-kind.md)).
 - **A flag-based override.** No `--allow path/to/file`, no `# fissile: allow` magic comment. The registries are the only escape hatch, because they are the only form that survives review and shows up in history.
+- **A name for the entry that is not what it accepts.** No `EX-NNN` id to allocate, keep unique by hand, and re-point when one entry becomes two. An entry is already identified by the registry it lives in and the condition it accepts, and that pair — unlike a slug — is the line the reader has to edit ([§DF-005-exception-identity](decisions/functional/DF-005-exception-identity.md)).
 - **An exception that lives next to its file.** Centralizing the registries is what makes the inventory legible: one file lists soft agent debt and one file lists hard human debt. A scattered "exemption per file" cannot answer "show me everything we have given up on."
 
 ### 4. Composition with the other goals
@@ -204,7 +207,7 @@ The `EX-` ID is local to `fissile`; the parsing contract lives in
 
 ### 5. Measurable
 
-E2E fixtures cover: `fissile exception add` appending soft and hard entries; a hard registry with a single exception silencing a hard violation; a soft registry with a single exception silencing a soft warning; a file that outgrows its exception's maximum accepted size and reports again; a registry whose exception names a path that no longer exists (audit must flag it stale); and a registry entry whose rationale is empty (parse error). Kind coverage adds: `exception add` refusing a `structural` entry with a dated `until` and a `deferred` entry with an `indefinite` one, a pre-`kind` registry still loading, and `audit` reporting the two counts. A snapshot test on the default registry paths and the parse rules guards against silent schema changes.
+E2E fixtures cover: `fissile exception add` appending soft and hard entries; a hard registry with a single exception silencing a hard violation; a soft registry with a single exception silencing a soft warning; a file that outgrows its exception's maximum accepted size and reports again; a registry whose exception names a path that no longer exists (audit must flag it stale); and a registry entry whose rationale is empty (parse error). Kind coverage adds: `exception add` refusing a `structural` entry with a dated `until` and a `deferred` entry with an `indefinite` one, an entry that omits `kind` still loading and counting as deferred, and `audit` reporting the two counts. A registry that has not been migrated to version 2 is refused with both edits named (§E2E-020-registry-version-2). A snapshot test on the default registry paths and the parse rules guards against silent schema changes.
 
 ## GOAL-008-remediation-messages: overflows can carry local remediation guidance
 

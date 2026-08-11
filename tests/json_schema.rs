@@ -24,8 +24,9 @@ const REQUIRED: &[&str] = &[
     "message_id",
     "message",
 ];
-/// Extra keys only silenced `audit` records carry (§FS-003-exceptions.5).
-const SILENCED_EXTRA: &[&str] = &["exception_id", "exception_max"];
+/// Extra keys only silenced `audit` records carry (§FS-003-exceptions.5). The
+/// accepting entry is not named: it has no name (§DF-005-exception-identity).
+const SILENCED_EXTRA: &[&str] = &["exception_max"];
 
 // Values in the fixture are free of `,` and `:` so a flat object splits cleanly.
 const CONFIG: &str = r#"
@@ -146,11 +147,9 @@ fn audit_silenced_records_carry_documented_exception_fields() {
         reason: "no module owns the staged-blob reader yet".to_owned(),
         until: Some("the reader module lands".to_owned()),
         match_kind: MatchKind::Exact,
-        id: None,
         title: None,
         owner: None,
         issue: None,
-        replaces: None,
         max: None,
         unit: None,
         dry_run: false,

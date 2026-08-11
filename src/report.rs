@@ -18,7 +18,6 @@ pub enum Outcome {
     /// (§FS-003-exceptions.5); never fails a build.
     Silenced {
         overflow: Overflow,
-        exception_id: String,
         exception_max: u64,
     },
 }
@@ -97,7 +96,6 @@ pub fn evaluate_file(
                 }
                 Verdict::Silenced(entry) => outcomes.push(Outcome::Silenced {
                     overflow: render_overflow(file, rule, Severity::Hard, actual, hard),
-                    exception_id: entry.id.clone(),
                     exception_max: entry.max_value,
                 }),
             }
@@ -110,7 +108,6 @@ pub fn evaluate_file(
                 )),
                 Verdict::Silenced(entry) => outcomes.push(Outcome::Silenced {
                     overflow: render_overflow(file, rule, Severity::Soft, actual, soft),
-                    exception_id: entry.id.clone(),
                     exception_max: entry.max_value,
                 }),
             }
@@ -273,12 +270,13 @@ pub fn success_marker(marker: &str, color: bool) -> String {
 }
 
 /// The audit attribution line for a silenced overflow (§FS-003-exceptions.5).
-pub fn silenced_line(overflow: &Overflow, exception_id: &str, exception_max: u64) -> String {
+/// Path plus severity locate the entry — the registry the severity names, under
+/// this path — so there is no id to quote (§DF-005-exception-identity).
+pub fn silenced_line(overflow: &Overflow, exception_max: u64) -> String {
     format!(
-        "{}: {} exception {} (accepted up to {} {})",
+        "{}: {} exception (accepted up to {} {})",
         overflow.path.display(),
         overflow.severity,
-        exception_id,
         exception_max,
         overflow.unit,
     )
@@ -298,13 +296,7 @@ pub fn overflow_json(outcome: &Outcome) -> Json {
         ("message_id", Json::str(overflow.message.id.clone())),
         ("message", Json::str(overflow.message.text.clone())),
     ];
-    if let Outcome::Silenced {
-        exception_id,
-        exception_max,
-        ..
-    } = outcome
-    {
-        fields.push(("exception_id", Json::str(exception_id.clone())));
+    if let Outcome::Silenced { exception_max, .. } = outcome {
         fields.push(("exception_max", Json::UInt(*exception_max)));
     }
     Json::Object(fields)

@@ -52,6 +52,25 @@ fn files_sharing_guidance_are_listed_under_one_copy_of_it() {
     );
 }
 
+/// §FS-003-exceptions.5: the attribution line names the file, the severity that
+/// says which registry accepted it, and the ceiling. There is no entry id to
+/// quote — an entry has none (§DF-005-exception-identity).
+#[test]
+fn a_silenced_overflow_is_attributed_by_path_and_ceiling() {
+    let outcome = reported(
+        "src/orders.rs",
+        "source",
+        Severity::Hard,
+        620,
+        "Must split.",
+    );
+
+    assert_eq!(
+        silenced_line(outcome.overflow(), 620),
+        "src/orders.rs: hard exception (accepted up to 620 lines)"
+    );
+}
+
 /// §FS-001-config.4: guidance that names a file cannot stand for another file,
 /// so a `{path}` template still renders one block per file.
 #[test]

@@ -51,7 +51,7 @@ Default `fissile init` writes:
 With `--exceptions`, it also writes the configured exception registries, default
 `docs/file-size-agent-exceptions.toml` and
 `docs/file-size-human-exceptions.toml`, when absent. Each starter registry
-contains `fissile_exceptions_version = 1`, explanatory comments, and no
+contains `fissile_exceptions_version = 2`, explanatory comments, and no
 exception entries.
 
 Existing `.agents/fissile.toml` and existing exception registries are

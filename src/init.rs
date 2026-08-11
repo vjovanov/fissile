@@ -521,8 +521,8 @@ mod tests {
 
     #[test]
     fn starter_registries_parse() {
-        assert!(DEFAULT_SOFT_REGISTRY.contains("fissile_exceptions_version = 1"));
-        assert!(DEFAULT_HARD_REGISTRY.contains("fissile_exceptions_version = 1"));
+        assert!(DEFAULT_SOFT_REGISTRY.contains("fissile_exceptions_version = 2"));
+        assert!(DEFAULT_HARD_REGISTRY.contains("fissile_exceptions_version = 2"));
     }
 
     fn report_for(entrypoints: &[&str]) -> Report {

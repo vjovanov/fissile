@@ -1,0 +1,18 @@
+fissile_exceptions_version = 1
+
+# A registry written against version 1: it declares the old version and names its
+# entry. Version 2 removed both the version and the name, and the load fails with
+# the two edits that fix this file (§FS-003-exceptions.2.2).
+[[exceptions]]
+id = "EX-001-big"
+replaces = "EX-000-big"
+path = "src/big.rs"
+match = "exact"
+rules = ["rust"]
+kind = "structural"
+max_accepted = { value = 5, unit = "lines" }
+until = "indefinite"
+reason = """
+A generated table the snapshot test asserts byte-identical; splitting it would
+break the byte comparison the test exists to make.
+"""

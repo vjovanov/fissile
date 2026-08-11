@@ -30,6 +30,55 @@ with a migration note.
 
 ## Unreleased
 
+### Changed
+
+- §FS-003-exceptions.1: the exception registry schema is now
+  `fissile_exceptions_version = 2`. **Breaking: every existing registry must be
+  edited before this build will read it.** Version 2 removes the `id` and
+  `replaces` keys (§FS-003-exceptions.2.2, §DF-005-exception-identity), and the
+  removal is a break rather than a tolerated leftover — a version-1 registry is
+  refused, and a version-2 entry that kept an `id` fails on the unknown key, so
+  no file is left carrying a field that silently means nothing. The version
+  error names both edits instead of only the version this build supports.
+  Migrating both registries is one command:
+
+  ```sh
+  sed -i -E -e '/^[[:space:]]*(id|replaces) = /d' \
+    -e 's/^fissile_exceptions_version = 1$/fissile_exceptions_version = 2/' \
+    docs/file-size-agent-exceptions.toml docs/file-size-human-exceptions.toml
+  ```
+
+  BSD `sed`, as on macOS, needs `sed -i ''` in place of `sed -i`. It edits by
+  line, so read the diff — and anything it missed is a named error on the next
+  `fissile check`, not a silent pass. Nothing else about an entry changes, and
+  `fissile exception add` writes version-2 registries. Install the new binary
+  *before* committing the migration: the pre-commit hook (§FS-002-init.6) runs
+  whatever `fissile` is on `PATH`, and an older one refuses the migrated
+  registry, blocking the very commit that fixes it.
+- §FS-003-exceptions.4: a diagnostic about one entry leads with the registry file
+  and the entry's `path` — `docs/file-size-human-exceptions.toml: src/orders.rs
+  has an empty reason` — rather than naming an id. That pair is the line the
+  reader has to edit, and it stays unambiguous when the same path appears in both
+  registries. `exception add` names the blocking entry the same way when it
+  refuses an overlapping one.
+- §FS-004-check-audit.1: **breaking for JSON consumers.** A silenced `audit`
+  record no longer carries `exception_id`, and `audit --stale-exceptions` items
+  are now `{ "registry", "path" }` in place of `{ "id", "path" }` — the list
+  spans both registries, so the registry is what disambiguates a path stale in
+  each. The text attribution drops the id too: `src/orders.rs: hard exception
+  (accepted up to 620 lines)`, and a stale line reads
+  `docs/file-size-human-exceptions.toml: src/gone.rs`.
+
+### Removed
+
+- §FS-005-exception-add.1: `--id` and `--replaces`, with the `EX-NNN` allocator,
+  the slug derivation, and the cross-registry id uniqueness check behind them. An
+  entry is already identified by the registry it lives in and what it accepts —
+  path matcher, rules, unit — and `fissile` already refuses two entries matching
+  one overflow in one registry (§FS-003-exceptions.3), so the id was a second
+  name for a tuple the tool computes, and the second name is the one that can be
+  wrong (§DF-005-exception-identity).
+
 ## 2. [0.4.0] — 2026-08-11
 
 ### Added
