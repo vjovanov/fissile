@@ -15,10 +15,9 @@
 #
 # Neither is answered by describing what the file contains.
 
-fissile_exceptions_version = 1
+fissile_exceptions_version = 2
 
 # [[exceptions]]
-# id = "EX-001-example"
 # path = "path/to/large-file"
 # match = "exact"               # exact | glob
 # rules = ["*"]                 # rule ids this applies to, or ["*"] for all

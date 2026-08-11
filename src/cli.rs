@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 
 use crate::Checker;
 use crate::config::{Color, Config, ConfigError, Format as ConfigFormat};
-use crate::exceptions::{ExceptionError, Registries};
+use crate::exceptions::{ExceptionError, Registries, RegistrySource};
 use crate::report::EvalError;
 
 /// Output format for a finding stream (§FS-001-config.6).
@@ -66,7 +66,16 @@ pub fn load(root: &Path, config_path: Option<&Path>) -> Result<Loaded, CommandEr
         read_optional(&root.join(&soft_registry)).map_err(|e| named(&soft_registry, e))?;
     let hard_text =
         read_optional(&root.join(&hard_registry)).map_err(|e| named(&hard_registry, e))?;
-    let registries = Registries::load(soft_text.as_deref(), hard_text.as_deref())?;
+    // The configured path travels with the text: a registry diagnostic names the
+    // file whose line the reader has to edit (§DF-005-exception-identity).
+    let registries = Registries::load(
+        soft_text
+            .as_deref()
+            .map(|text| RegistrySource::new(&config.exceptions.soft_registry, text)),
+        hard_text
+            .as_deref()
+            .map(|text| RegistrySource::new(&config.exceptions.hard_registry, text)),
+    )?;
     registries.validate_against(checker.rules())?;
 
     Ok(Loaded {

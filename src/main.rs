@@ -60,10 +60,9 @@ examples:
 const EXCEPTION_USAGE: &str = "\
 usage: fissile exception add <path> --severity soft|hard --rule <id>
                  --kind structural|deferred --reason <text> [--until <text>]
-                 [--config <path>] [--match exact|glob] [--id <id>]
-                 [--title <text>] [--owner <text>] [--issue <text>]
-                 [--replaces <id>] [--max <N> --unit bytes|lines|tokens]
-                 [--dry-run]
+                 [--config <path>] [--match exact|glob] [--title <text>]
+                 [--owner <text>] [--issue <text>] [--dry-run]
+                 [--max <N> --unit bytes|lines|tokens]
 
 --kind says what --reason has to establish. Describing the file does not:
   structural  splitting is illegal — name the constraint. Never expires.
@@ -333,11 +332,9 @@ fn run_exception_add(args: &[String]) -> ExitCode {
             "--until" => value(&mut iter, "--until").map(|v| builder.until = Some(v)),
             "--config" => value(&mut iter, "--config").map(|v| builder.config = Some(v)),
             "--match" => value(&mut iter, "--match").and_then(|v| builder.set_match(&v)),
-            "--id" => value(&mut iter, "--id").map(|v| builder.id = Some(v)),
             "--title" => value(&mut iter, "--title").map(|v| builder.title = Some(v)),
             "--owner" => value(&mut iter, "--owner").map(|v| builder.owner = Some(v)),
             "--issue" => value(&mut iter, "--issue").map(|v| builder.issue = Some(v)),
-            "--replaces" => value(&mut iter, "--replaces").map(|v| builder.replaces = Some(v)),
             "--max" => value(&mut iter, "--max")
                 .and_then(|v| {
                     v.parse()
@@ -379,11 +376,9 @@ struct AddBuilder {
     reason: Option<String>,
     until: Option<String>,
     match_kind: Option<MatchKind>,
-    id: Option<String>,
     title: Option<String>,
     owner: Option<String>,
     issue: Option<String>,
-    replaces: Option<String>,
     max: Option<u64>,
     unit: Option<Unit>,
     config: Option<String>,
@@ -453,11 +448,9 @@ impl AddBuilder {
             reason: self.reason.ok_or("--reason is required")?,
             until: self.until,
             match_kind: self.match_kind.unwrap_or(MatchKind::Exact),
-            id: self.id,
             title: self.title,
             owner: self.owner,
             issue: self.issue,
-            replaces: self.replaces,
             max: self.max,
             unit: self.unit,
             dry_run: self.dry_run,

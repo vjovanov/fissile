@@ -10,8 +10,7 @@ common case of accepting a current overflow.
 fissile exception add <path> --severity soft|hard --rule <id>
                       --kind structural|deferred --reason <text>
                       [--until <text>] [--config <path>] [--match exact|glob]
-                      [--id <id>] [--title <text>] [--owner <text>]
-                      [--issue <text>] [--replaces <id>]
+                      [--title <text>] [--owner <text>] [--issue <text>]
                       [--max <N> --unit bytes|lines|tokens]
                       [--dry-run]
 ```
@@ -62,7 +61,6 @@ The command appends one `[[exceptions]]` table to the selected registry:
 
 ```toml
 [[exceptions]]
-id = "EX-001-generated-parser-fixture"
 title = "generated parser fixture"
 path = "tests/fixtures/parser/large-corpus.json"
 match = "exact"
@@ -82,14 +80,16 @@ split loses the incident-to-case mapping the fixture exists to preserve.
 the `indefinite` default, so a registry entry never depends on a reader knowing
 the command's defaults (§DF-002-explicit-config).
 
-If `--id` is omitted, `fissile` derives a slug from `<path>` and picks the next
-unused `EX-NNN-...` ID across both registries. The entry records no date — the
-commit that adds it carries that — and optional flags are omitted when absent.
+The entry gets no name of its own: it is identified by the registry it is written
+to and what it accepts (§FS-003-exceptions.2.2, §DF-005-exception-identity), and
+the command never writes the removed `id` or `replaces` keys. The entry records
+no date — the commit that adds it carries that — and optional flags are omitted
+when absent.
 
 If the target registry does not exist, `fissile` creates it with:
 
 ```toml
-fissile_exceptions_version = 1
+fissile_exceptions_version = 2
 ```
 
 Existing registry comments and entry order are preserved. New entries append at
@@ -104,9 +104,9 @@ modifying files when:
 - the selected rule does not exist;
 - selected rules use different units;
 - `--kind` is absent, or `--until` disagrees with it (§1);
-- the generated ID already exists;
 - another exception in the same severity registry already matches the same
-  `(path, rule, unit)` condition;
+  `(path, rule, unit)` condition — the rejection names that registry and the
+  `path` of the entry already accepting it, which is the entry to edit instead;
 - `--max` would make the exception invalid or smaller than the current exact-path
   measurement;
 - the registry contains unrelated schema errors.

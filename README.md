@@ -184,7 +184,6 @@ here. Splitting today just moves private helpers behind a new file."
 
 ```toml
 [[exceptions]]
-id = "EX-001-orders-rs"
 path = "src/orders.rs"
 match = "exact"
 rules = ["source"]

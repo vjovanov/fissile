@@ -1,7 +1,7 @@
 # FS-003-exceptions: oversized files are accepted through configured registries
 
 Exception registries are TOML documents that record every file or glob accepted
-above a configured limit. Version 1 uses two registries with configurable paths:
+above a configured limit. Version 2 uses two registries with configurable paths:
 
 - the soft registry, default `docs/file-size-agent-exceptions.toml`, accepts
   agent-facing soft-limit warning debt;
@@ -20,10 +20,9 @@ exception starts reporting again if the file keeps growing.
 The file is a versioned TOML document:
 
 ```toml
-fissile_exceptions_version = 1
+fissile_exceptions_version = 2
 
 [[exceptions]]
-id = "EX-001-generated-parser-fixture"
 title = "generated parser fixture"
 path = "tests/fixtures/parser/large-corpus.json"
 match = "exact"
@@ -39,15 +38,16 @@ split loses the incident-to-case mapping the fixture exists to preserve.
 """
 ```
 
-`fissile_exceptions_version` is required and must be `1`. Unknown keys are
-errors. The `id` uses the `EX-` prefix and is local to `fissile`; exception files
-are parsed only according to this functional spec.
+`fissile_exceptions_version` is required and must be `2`; version 2 removed the
+`id` and `replaces` keys version 1 carried (§2.2). Unknown keys are errors. An
+entry has no name of its own: it is identified by the registry it lives in and
+what it accepts (§DF-005-exception-identity). Exception files are parsed only
+according to this functional spec.
 
 ## 2. Fields
 
 Required fields:
 
-- `id`: stable local exception ID with the `EX-` prefix;
 - `path`: repo-relative path or glob being accepted;
 - `match`: `exact` or `glob`;
 - `rules`: array of rule IDs, or `["*"]` for every matching rule;
@@ -63,14 +63,13 @@ Optional fields:
   `deferred`;
 - `title`: short human-readable label;
 - `owner`: team, person, or component responsible for retiring the exception;
-- `issue`: tracker URL or ID;
-- `replaces`: prior exception ID when splitting or renaming entries.
+- `issue`: tracker URL or ID.
 
 There is no `created` field: the date an exception was added is recorded by the
 commit that added it, so duplicating it in the entry would only invite drift.
 
-Unknown fields are errors in version 1 so typos cannot silently weaken the
-registry.
+Unknown fields are errors so typos cannot silently weaken the registry. That is
+also what makes a leftover `id` a named error rather than a silent no-op (§2.2).
 
 ### 2.1 Kind, And What A Reason Must Establish
 
@@ -88,13 +87,38 @@ which is what the finding already reported.
   possible. `until` carries the retirement condition and may not be `indefinite`.
 
 An entry that omits `kind` is read as `deferred` for reporting, and the
-`kind`/`until` agreement above is checked only on entries that declare a `kind`.
-Registries written before the field existed therefore keep loading unchanged;
-`fissile exception add` always writes the field explicitly
+`kind`/`until` agreement above is checked only on entries that declare a `kind`
+— so an entry carried over from a registry written before the field existed
+still loads. `fissile exception add` always writes the field explicitly
 (§FS-005-exception-add.3).
 
 `indefinite` is matched case-insensitively after trimming, so `Indefinite` and
 `indefinite ` are the same value.
+
+### 2.2 What Version 2 Removed, And How To Migrate
+
+A version-1 entry carried a required `id` (`EX-NNN-slug`) and an optional
+`replaces` naming another entry's id. Version 2 removes both: what identifies an
+entry is the registry it lives in and the condition it accepts, and a second name
+for that is a name that can be wrong (§DF-005-exception-identity).
+
+The removal is a break, not a tolerated leftover. A registry declaring version 1
+is rejected, and a version-2 registry that still carries `id` fails on the
+unknown key (§2) — so no file is left holding a field that silently means
+nothing. Migrating one registry is two edits:
+
+1. set `fissile_exceptions_version = 2`;
+2. delete every `id` and `replaces` line.
+
+Nothing else about an entry changes. The version error names both edits, because
+every adopter meets it once, on upgrade, and a message that only states the
+version leaves the remedy to be guessed (§GOAL-003-friendly-output.1). An
+unmigrated registry breaks both rules at once — it declares version 1 *and*
+carries `id` keys — and the version error is the one reported, because it is the
+one that names the whole fix.
+
+`fissile exception add` writes version-2 registries and never writes either key
+(§FS-005-exception-add.3).
 
 ## 3. Matching
 
@@ -119,7 +143,6 @@ multiple rules only when all listed rules use the same unit.
 
 `fissile` validates both registries before evaluating overflows:
 
-- every exception ID is unique across both registries;
 - every required field is present once;
 - every listed rule ID exists, unless `rules = ["*"]`;
 - `max_accepted.value` is a positive integer;
@@ -132,6 +155,17 @@ multiple rules only when all listed rules use the same unit.
 - every matched path is inside the scan scope unless stale handling is disabled;
 - every stale entry follows `[exceptions].stale`: `warn`, `error`, or `ignore`.
 
+Every diagnostic about a single entry leads with the registry file and the
+entry's `path`, because that pair is the line the reader has to edit
+(§DF-005-exception-identity):
+
+```text
+docs/file-size-human-exceptions.toml: src/orders.rs has an empty reason
+```
+
+The registry file is part of the identifier: the same path may appear in both
+registries, making two different claims at two different severities.
+
 The validator does not require the target file to exist during `check --staged`
 because a staged deletion may make the path temporarily absent. Whole-repo
 `audit --stale-exceptions` performs the stale-path inventory.
@@ -139,15 +173,15 @@ because a staged deletion may make the path temporarily absent. Whole-repo
 ## 5. Output
 
 An overflow silenced by an exception emits no default finding for that severity.
-In verbose audit output, `fissile` includes the exception ID and severity so a
-reviewer can resolve the rationale:
+In verbose audit output, `fissile` includes the severity and the accepted ceiling
+so a reviewer can find the entry — in the registry the severity names, under the
+path already on the line:
 
 ```text
-tests/fixtures/parser/large-corpus.json: hard exception EX-001-generated-parser-fixture (accepted up to 300000 bytes)
+tests/fixtures/parser/large-corpus.json: hard exception (accepted up to 300000 bytes)
 ```
 
-JSON output carries the same ID as `exception_id` and the same ceiling as
-`exception_max`.
+JSON output carries the same ceiling as `exception_max`.
 
 `audit` also counts the registries by kind (§FS-004-check-audit.2), so a reader
 sees accepted-permanently and carrying-debt as two numbers rather than one

@@ -35,3 +35,4 @@ The harness drives the real `fissile` binary, so every documented behavior under
 - §E2E-016-init-dry-run-explains — a dry run explains the workflow without writing.
 - §E2E-017-exception-kind — a deferred exception cannot be open-ended.
 - §E2E-018-audit-exception-kinds — audit separates accepted-permanently from carrying-debt.
+- §E2E-020-registry-version-2 — an unmigrated registry is refused with both edits named.

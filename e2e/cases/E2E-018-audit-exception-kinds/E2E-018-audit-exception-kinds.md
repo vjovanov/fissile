@@ -5,7 +5,6 @@
 waiting on work someone has to do* are different facts about a codebase, and a
 single number is actionable as neither.
 
-The fixture also pins the compatibility rule: the second entry predates the
-`kind` field, still loads, and counts as `deferred` — the reading that keeps
-`until` meaningful and claims no constraint the author never asserted
-(§FS-003-exceptions.2.1).
+The fixture also pins what an unstated kind means: the second entry omits `kind`,
+still loads, and counts as `deferred` — the reading that keeps `until` meaningful
+and claims no constraint the author never asserted (§FS-003-exceptions.2.1).

@@ -6,7 +6,9 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::cli::{self, CommandError, Loaded};
-use crate::exceptions::{Exception, INDEFINITE, Kind, MatchKind, Registries, is_indefinite};
+use crate::exceptions::{
+    Exception, INDEFINITE, Kind, MatchKind, Registries, RegistrySource, is_indefinite,
+};
 use crate::{Glob, Rule, Severity, Unit, scan};
 
 /// Inputs to `exception add`.
@@ -25,11 +27,9 @@ pub struct AddOptions {
     /// which defaults it to `indefinite` (§FS-005-exception-add.1).
     pub until: Option<String>,
     pub match_kind: MatchKind,
-    pub id: Option<String>,
     pub title: Option<String>,
     pub owner: Option<String>,
     pub issue: Option<String>,
-    pub replaces: Option<String>,
     pub max: Option<u64>,
     pub unit: Option<Unit>,
     pub dry_run: bool,
@@ -53,10 +53,9 @@ pub fn run(options: &AddOptions) -> Result<Run, CommandError> {
     let unit = rules[0].budget.unit;
     let max = resolve_max(options, &loaded, &path, unit, rules[0])?;
     check_min_limit(&rules, options.severity, max)?;
-    let id = resolve_id(options, &loaded)?;
     check_conflict(&loaded, options, &path, unit)?;
 
-    let entry = render_entry(options, &path, &id, &until, unit, max);
+    let entry = render_entry(options, &path, &until, unit, max);
     let registry_rel = match options.severity {
         Severity::Soft => loaded.soft_registry.clone(),
         Severity::Hard => loaded.hard_registry.clone(),
@@ -64,7 +63,7 @@ pub fn run(options: &AddOptions) -> Result<Run, CommandError> {
     let registry_path = loaded.root.join(&registry_rel);
 
     let existing = cli::read_optional(&registry_path)?;
-    let base = existing.unwrap_or_else(|| "fissile_exceptions_version = 1\n".to_owned());
+    let base = existing.unwrap_or_else(|| "fissile_exceptions_version = 2\n".to_owned());
     let new_text = format!("{}\n{}\n", base.trim_end(), entry);
 
     // Final guard: the combined registry must still validate (§FS-005-exception-add.4).
@@ -81,7 +80,7 @@ pub fn run(options: &AddOptions) -> Result<Run, CommandError> {
     }
     fs::write(&registry_path, &new_text)?;
     Ok(Run {
-        output: format!("appended {} to {}", id, registry_rel.display()),
+        output: format!("appended {} to {}", path, registry_rel.display()),
     })
 }
 
@@ -230,55 +229,6 @@ fn check_min_limit(rules: &[&Rule], severity: Severity, max: u64) -> Result<(), 
     Ok(())
 }
 
-fn resolve_id(options: &AddOptions, loaded: &Loaded) -> Result<String, CommandError> {
-    if let Some(id) = &options.id {
-        if loaded.registries.all().any(|entry| &entry.id == id) {
-            return Err(CommandError::Usage(format!(
-                "exception id {id} already exists"
-            )));
-        }
-        return Ok(id.clone());
-    }
-    let next = next_number(&loaded.registries);
-    Ok(format!("EX-{next:03}-{}", slug(&options.path)))
-}
-
-fn next_number(registries: &Registries) -> u32 {
-    registries
-        .all()
-        .filter_map(|entry| {
-            entry
-                .id
-                .strip_prefix("EX-")
-                .and_then(|rest| rest.split('-').next())
-                .and_then(|digits| digits.parse::<u32>().ok())
-        })
-        .max()
-        .map(|max| max + 1)
-        .unwrap_or(1)
-}
-
-fn slug(path: &str) -> String {
-    let base = path.rsplit('/').next().unwrap_or(path);
-    let mut slug = String::new();
-    let mut prev_dash = false;
-    for ch in base.chars() {
-        if ch.is_ascii_alphanumeric() {
-            slug.push(ch.to_ascii_lowercase());
-            prev_dash = false;
-        } else if !prev_dash {
-            slug.push('-');
-            prev_dash = true;
-        }
-    }
-    let trimmed = slug.trim_matches('-').to_owned();
-    if trimmed.is_empty() {
-        "entry".to_owned()
-    } else {
-        trimmed
-    }
-}
-
 /// Reject another same-severity entry already accepting the same `(path, rule,
 /// unit)` condition (§FS-005-exception-add.4).
 fn check_conflict(
@@ -297,9 +247,11 @@ fn check_conflict(
             && shared_rule
             && path_matchers_overlap(entry, options.match_kind, path)
         {
+            // Named by where it lives, so the reader can go edit that entry
+            // instead of adding a second one (§DF-005-exception-identity).
             return Err(CommandError::Usage(format!(
-                "exception {} already accepts {path} for this unit and rule",
-                entry.id
+                "{}: {} already accepts {path} for this unit and rule",
+                entry.registry, entry.path
             )));
         }
     }
@@ -330,20 +282,22 @@ fn validate_combined(
             Some(new_target_text.to_owned()),
         ),
     };
-    let registries = Registries::load(soft.as_deref(), hard.as_deref())?;
+    // The configured paths, the same labels `cli::load` uses, so a diagnostic
+    // from this dry run reads identically to one from `check`.
+    let registries = Registries::load(
+        soft.as_deref()
+            .map(|text| RegistrySource::new(&loaded.config.exceptions.soft_registry, text)),
+        hard.as_deref()
+            .map(|text| RegistrySource::new(&loaded.config.exceptions.hard_registry, text)),
+    )?;
     registries.validate_against(loaded.checker.rules())?;
     Ok(())
 }
 
-fn render_entry(
-    options: &AddOptions,
-    path: &str,
-    id: &str,
-    until: &str,
-    unit: Unit,
-    max: u64,
-) -> String {
-    let mut lines = vec!["[[exceptions]]".to_owned(), format!("id = {}", quote(id))];
+fn render_entry(options: &AddOptions, path: &str, until: &str, unit: Unit, max: u64) -> String {
+    // No id line: the entry is identified by this registry, this path, and what
+    // it accepts (§FS-005-exception-add.3, §DF-005-exception-identity).
+    let mut lines = vec!["[[exceptions]]".to_owned()];
     if let Some(title) = &options.title {
         lines.push(format!("title = {}", quote(title)));
     }
@@ -364,9 +318,6 @@ fn render_entry(
     }
     if let Some(issue) = &options.issue {
         lines.push(format!("issue = {}", quote(issue)));
-    }
-    if let Some(replaces) = &options.replaces {
-        lines.push(format!("replaces = {}", quote(replaces)));
     }
     lines.push(format!(
         "reason = \"\"\"\n{}\n\"\"\"",
@@ -410,15 +361,6 @@ fn quote(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn slug_uses_basename() {
-        assert_eq!(
-            slug("tests/fixtures/large-corpus.json"),
-            "large-corpus-json"
-        );
-        assert_eq!(slug("a/b/c"), "c");
-    }
 
     #[test]
     fn quote_escapes_specials() {
