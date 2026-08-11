@@ -28,14 +28,14 @@ title = "generated parser fixture"
 path = "tests/fixtures/parser/large-corpus.json"
 match = "exact"
 rules = ["fixtures"]
+kind = "deferred"
 max_accepted = { value = 300000, unit = "bytes" }
-until = "review after parser fixture generator lands"
+until = "the fixture generator lands"
 owner = "parser"
 reason = """
-This fixture is intentionally large because it is a golden corpus copied from
-production parser incidents. Retire this exception when the fixture can be
-generated deterministically inside the test or split by parser feature without
-losing incident coverage.
+Missing boundary: a generator that reproduces this corpus from the incident
+descriptions. Until one exists the corpus can only be split by hand, and a hand
+split loses the incident-to-case mapping the fixture exists to preserve.
 """
 ```
 
@@ -54,11 +54,13 @@ Required fields:
 - `max_accepted.value`: largest measurement this exception accepts;
 - `max_accepted.unit`: `bytes`, `lines`, or `tokens`;
 - `until`: review condition, date, or `indefinite`;
-- `reason`: non-empty rationale explaining why the file is accepted and what
-  would let the exception be retired.
+- `reason`: non-empty rationale, establishing what §2.1 requires of the entry's
+  kind.
 
 Optional fields:
 
+- `kind`: `structural` or `deferred` (§2.1); an entry without one reads as
+  `deferred`;
 - `title`: short human-readable label;
 - `owner`: team, person, or component responsible for retiring the exception;
 - `issue`: tracker URL or ID;
@@ -69,6 +71,30 @@ commit that added it, so duplicating it in the entry would only invite drift.
 
 Unknown fields are errors in version 1 so typos cannot silently weaken the
 registry.
+
+### 2.1 Kind, And What A Reason Must Establish
+
+An accepted oversized file is one of two things, and the entry says which
+(§DF-004-exception-kind). The kind decides what the `reason` has to claim and
+what `until` may say; neither kind is answered by describing the file's contents,
+which is what the finding already reported.
+
+- `kind = "structural"` — an architectural constraint makes the split illegal.
+  The reason names that constraint and what would break if the file were split
+  anyway. Nothing retires the entry, so `until` is `indefinite`; any other value
+  is a schema error.
+- `kind = "deferred"` — no such constraint exists; a boundary is missing. The
+  reason names the missing boundary and what has to exist before the split is
+  possible. `until` carries the retirement condition and may not be `indefinite`.
+
+An entry that omits `kind` is read as `deferred` for reporting, and the
+`kind`/`until` agreement above is checked only on entries that declare a `kind`.
+Registries written before the field existed therefore keep loading unchanged;
+`fissile exception add` always writes the field explicitly
+(§FS-005-exception-add.3).
+
+`indefinite` is matched case-insensitively after trimming, so `Indefinite` and
+`indefinite ` are the same value.
 
 ## 3. Matching
 
@@ -101,6 +127,8 @@ multiple rules only when all listed rules use the same unit.
 - `max_accepted.unit` matches every rule the entry can silence;
 - `max_accepted.value` is at least the corresponding soft or hard rule limit;
 - `reason` is not empty after trimming whitespace;
+- a declared `kind` agrees with `until` (§2.1): `structural` requires
+  `indefinite`, `deferred` forbids it;
 - every matched path is inside the scan scope unless stale handling is disabled;
 - every stale entry follows `[exceptions].stale`: `warn`, `error`, or `ignore`.
 
@@ -120,6 +148,10 @@ tests/fixtures/parser/large-corpus.json: hard exception EX-001-generated-parser-
 
 JSON output carries the same ID as `exception_id` and the same ceiling as
 `exception_max`.
+
+`audit` also counts the registries by kind (§FS-004-check-audit.2), so a reader
+sees accepted-permanently and carrying-debt as two numbers rather than one
+undifferentiated total.
 
 ## 6. Adding Entries
 

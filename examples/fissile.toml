@@ -52,29 +52,33 @@ command = ["token-counter", "--count", "{path}"]
 # before more code lands and who to escalate to. Add a citation into this
 # repository's own architecture docs if it keeps them — never an ID borrowed
 # from another project, which resolves nowhere for the reader who sees it.
+#
+# Where a message offers the exception route, say what the reason has to
+# establish — the constraint that makes splitting illegal, or the boundary that
+# is missing — not merely that some reason is required (§DF-004-exception-kind).
 
 [[messages]]
 id = "split-rust-soft"
 text = """
 Should split, next time you are in one of these modules: move a cohesive group of items into a sibling module under the same parent. Split along a responsibility seam, never at the line count.
-If no split leaves the design better, record the debt instead of forcing one — with a written reason and a revisit trigger:
-fissile exception add <path> --severity soft --rule {rule}
+If no split leaves the design better, record why instead of forcing one: name the constraint that makes splitting illegal (--kind structural), or the module this code belongs in that does not exist yet (--kind deferred, --until naming what retires it):
+fissile exception add <path> --severity soft --rule {rule} --kind <kind>
 """
 
 [[messages]]
 id = "split-rust-hard"
 text = """
 Must split before more code lands here: move cohesive groups of items into sibling modules along existing seams, keeping the public surface in the parent. Do not invent an abstraction or shuffle lines to get under the limit.
-If you cannot see a safe split, stop and ask a human. A human-reviewed exception is the only other way through:
-fissile exception add <path> --severity hard --rule {rule}
+If you cannot see a safe split, stop and ask a human. A human-reviewed exception is the only other way through, and its reason names the constraint that makes splitting illegal (--kind structural) or the boundary that is missing and what must exist first (--kind deferred):
+fissile exception add <path> --severity hard --rule {rule} --kind <kind>
 """
 
 [[messages]]
 id = "split-doc-soft"
 text = """
 Should split, next time you edit one of these documents: keep one focused subject per file and move secondary detail into a child document the parent links.
-If the document has to be read whole, record it instead — with a written reason and a revisit trigger:
-fissile exception add <path> --severity soft --rule {rule}
+If the document has to be read whole, record it instead — naming what makes it indivisible (--kind structural), or the child document that does not exist yet (--kind deferred, --until naming what retires it):
+fissile exception add <path> --severity soft --rule {rule} --kind <kind>
 """
 
 [[messages]]

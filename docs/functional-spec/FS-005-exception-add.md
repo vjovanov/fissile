@@ -8,8 +8,8 @@ common case of accepting a current overflow.
 
 ```text
 fissile exception add <path> --severity soft|hard --rule <id>
-                      --reason <text> --until <text>
-                      [--config <path>] [--match exact|glob]
+                      --kind structural|deferred --reason <text>
+                      [--until <text>] [--config <path>] [--match exact|glob]
                       [--id <id>] [--title <text>] [--owner <text>]
                       [--issue <text>] [--replaces <id>]
                       [--max <N> --unit bytes|lines|tokens]
@@ -19,8 +19,24 @@ fissile exception add <path> --severity soft|hard --rule <id>
 `--severity` chooses the configured registry: `soft` writes to
 `[exceptions].soft_registry`; `hard` writes to `[exceptions].hard_registry`.
 `--rule` may be repeated to create one exception for multiple same-unit rules.
-`--reason` and `--until` are required so every accepted oversized file has a
-reviewable rationale and a retirement condition.
+
+`--kind` and `--reason` are required so every accepted oversized file carries a
+claim a reviewer can disagree with (§FS-003-exceptions.2.1,
+§DF-004-exception-kind). The kind decides what the reason must establish and what
+`--until` may say:
+
+- `--kind structural` — the reason names the architectural constraint that makes
+  splitting illegal, and what would break if the file were split anyway.
+  `--until` is optional and defaults to `indefinite`; passing any other value is
+  a usage error.
+- `--kind deferred` — the reason names the boundary that is missing and what has
+  to exist before the split is possible. `--until` is required and may not be
+  `indefinite`.
+
+Neither is answered by describing the file's contents; that is what the finding
+already said. The command does not judge the prose, but the flags it requires
+make the two questions impossible to conflate, and the error text names the
+distinction at the moment the entry is written.
 
 `--match` defaults to `exact`. `glob` is allowed only when `<path>` contains a
 glob metacharacter. The command never creates `[scan].exclude` entries; accepted
@@ -51,14 +67,20 @@ title = "generated parser fixture"
 path = "tests/fixtures/parser/large-corpus.json"
 match = "exact"
 rules = ["fixtures"]
+kind = "deferred"
 max_accepted = { value = 300000, unit = "bytes" }
-until = "review after parser fixture generator lands"
+until = "the fixture generator lands"
 owner = "parser"
 reason = """
-This fixture is intentionally large because it mirrors production parser
-incidents while the generator is still planned.
+Missing boundary: a generator that reproduces this corpus from the incident
+descriptions. Until one exists the corpus can only be split by hand, and a hand
+split loses the incident-to-case mapping the fixture exists to preserve.
 """
 ```
+
+`kind` and `until` are always written, even for a `structural` entry that took
+the `indefinite` default, so a registry entry never depends on a reader knowing
+the command's defaults (§DF-002-explicit-config).
 
 If `--id` is omitted, `fissile` derives a slug from `<path>` and picks the next
 unused `EX-NNN-...` ID across both registries. The entry records no date — the
@@ -81,6 +103,7 @@ modifying files when:
 
 - the selected rule does not exist;
 - selected rules use different units;
+- `--kind` is absent, or `--until` disagrees with it (§1);
 - the generated ID already exists;
 - another exception in the same severity registry already matches the same
   `(path, rule, unit)` condition;

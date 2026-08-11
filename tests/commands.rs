@@ -10,7 +10,7 @@ use fissile::audit::{self, AuditOptions};
 use fissile::check::{self, CheckOptions};
 use fissile::cli::Format;
 use fissile::exception::{self, AddOptions};
-use fissile::exceptions::MatchKind;
+use fissile::exceptions::{Kind, MatchKind};
 use fissile::{Severity, Unit};
 
 const CONFIG: &str = r#"
@@ -129,8 +129,9 @@ fn hard_exception_silences_hard_but_keeps_soft() {
         path: "./src/big.rs".to_owned(),
         severity: Severity::Hard,
         rules: vec!["rust".to_owned()],
-        reason: "accepted while splitting".to_owned(),
-        until: "indefinite".to_owned(),
+        kind: Kind::Deferred,
+        reason: "no module owns the generated cases yet".to_owned(),
+        until: Some("the case-builder module lands".to_owned()),
         match_kind: MatchKind::Exact,
         id: None,
         title: None,
@@ -147,6 +148,7 @@ fn hard_exception_silences_hard_but_keeps_soft() {
     // `docs/functional-spec/FS-005-exception-add.md#3-generated-entry`.
     let registry = fs::read_to_string(root.join("docs/file-size-human-exceptions.toml")).unwrap();
     assert!(registry.contains("path = \"src/big.rs\""));
+    assert!(registry.contains("kind = \"deferred\""));
 
     let run = check::run(&check_options(&root)).expect("check runs");
     assert!(!run.failed, "hard overflow is now accepted");
@@ -268,8 +270,9 @@ fn exception_add_rejects_overlapping_path_matchers() {
         path: "src/**".to_owned(),
         severity: Severity::Hard,
         rules: vec!["rust".to_owned()],
-        reason: "accepted broad subtree".to_owned(),
-        until: "indefinite".to_owned(),
+        kind: Kind::Structural,
+        reason: "generated tree asserted byte-identical by the snapshot test".to_owned(),
+        until: None,
         match_kind: MatchKind::Glob,
         id: Some("EX-001-src".to_owned()),
         title: None,
@@ -288,8 +291,9 @@ fn exception_add_rejects_overlapping_path_matchers() {
         path: "src/big.rs".to_owned(),
         severity: Severity::Hard,
         rules: vec!["rust".to_owned()],
+        kind: Kind::Deferred,
         reason: "accepted exact file".to_owned(),
-        until: "indefinite".to_owned(),
+        until: Some("the case-builder module lands".to_owned()),
         match_kind: MatchKind::Exact,
         id: Some("EX-002-big".to_owned()),
         title: None,
@@ -305,6 +309,106 @@ fn exception_add_rejects_overlapping_path_matchers() {
     };
 
     assert!(error.to_string().contains("already accepts src/big.rs"));
+}
+
+fn add_options(root: &Path, kind: Kind, until: Option<&str>) -> AddOptions {
+    AddOptions {
+        root: root.to_path_buf(),
+        config_path: None,
+        path: "src/big.rs".to_owned(),
+        severity: Severity::Hard,
+        rules: vec!["rust".to_owned()],
+        kind,
+        reason: "a reason".to_owned(),
+        until: until.map(str::to_owned),
+        match_kind: MatchKind::Exact,
+        id: None,
+        title: None,
+        owner: None,
+        issue: None,
+        replaces: None,
+        max: None,
+        unit: None,
+        dry_run: false,
+    }
+}
+
+/// §FS-005-exception-add.1: the kind decides what `until` may say. A structural
+/// entry never expires and a deferred one must name what retires it, so each
+/// wrong pairing is refused with the other kind named as the likely fix.
+#[test]
+fn exception_add_reconciles_kind_with_until() {
+    let root = temp_repo();
+
+    // Structural with no --until takes the `indefinite` default, and writes both
+    // fields rather than leaving one to be inferred (§FS-005-exception-add.3).
+    let run = exception::run(&add_options(&root, Kind::Structural, None)).expect("structural adds");
+    assert!(run.output.contains("appended"));
+    let registry = fs::read_to_string(root.join("docs/file-size-human-exceptions.toml")).unwrap();
+    assert!(registry.contains("kind = \"structural\""));
+    assert!(registry.contains("until = \"indefinite\""));
+
+    let dated = exception::run(&add_options(
+        &root,
+        Kind::Structural,
+        Some("the parser lands"),
+    ))
+    .expect_err("a structural entry cannot have a retirement condition");
+    assert!(dated.to_string().contains("--kind deferred"));
+
+    let open_ended = exception::run(&add_options(&root, Kind::Deferred, Some("indefinite")))
+        .expect_err("deferred debt cannot be open-ended");
+    assert!(open_ended.to_string().contains("--kind structural"));
+
+    let undated = exception::run(&add_options(&root, Kind::Deferred, None))
+        .expect_err("deferred debt needs a retirement condition");
+    assert!(undated.to_string().contains("--until"));
+}
+
+/// §FS-004-check-audit.2: accepted-permanently and carrying-debt are two numbers,
+/// and an entry written before `kind` existed counts as deferred
+/// (§FS-003-exceptions.2.1).
+#[test]
+fn audit_counts_exceptions_by_kind() {
+    let root = temp_repo();
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(
+        root.join("docs/file-size-human-exceptions.toml"),
+        "fissile_exceptions_version = 1\n\n\
+         [[exceptions]]\n\
+         id = \"EX-001-big\"\n\
+         path = \"src/big.rs\"\n\
+         match = \"exact\"\n\
+         rules = [\"rust\"]\n\
+         kind = \"structural\"\n\
+         max_accepted = { value = 250, unit = \"lines\" }\n\
+         until = \"indefinite\"\n\
+         reason = \"asserted byte-identical by the snapshot test\"\n\n\
+         [[exceptions]]\n\
+         id = \"EX-002-ok\"\n\
+         path = \"src/ok.rs\"\n\
+         match = \"exact\"\n\
+         rules = [\"rust\"]\n\
+         max_accepted = { value = 250, unit = \"lines\" }\n\
+         until = \"the reader module lands\"\n\
+         reason = \"written before the kind field existed\"\n",
+    )
+    .unwrap();
+
+    let run = audit::run(&AuditOptions {
+        root,
+        config_path: None,
+        format: Some(Format::Text),
+        no_color: false,
+        top: None,
+        stale_exceptions: false,
+        rule_coverage: false,
+    })
+    .expect("audit runs");
+
+    assert!(run.output.contains("exceptions:"));
+    assert!(run.output.contains("structural (never expires): 1"));
+    assert!(run.output.contains("deferred (carrying debt): 1"));
 }
 
 /// §FS-002-init.4: a dry run prints the managed block on stdout, so an agent can

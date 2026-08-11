@@ -11,7 +11,7 @@ use fissile::audit::{self, AuditOptions};
 use fissile::check::{self, CheckOptions};
 use fissile::cli::Format;
 use fissile::exception::{self, AddOptions};
-use fissile::exceptions::MatchKind;
+use fissile::exceptions::{Kind, MatchKind};
 
 /// Required keys on every finding record (§FS-004-check-audit.1).
 const REQUIRED: &[&str] = &[
@@ -142,8 +142,9 @@ fn audit_silenced_records_carry_documented_exception_fields() {
         path: "src/big.rs".to_owned(),
         severity: Severity::Hard,
         rules: vec!["rust".to_owned()],
-        reason: "accepted while splitting".to_owned(),
-        until: "indefinite".to_owned(),
+        kind: Kind::Deferred,
+        reason: "no module owns the staged-blob reader yet".to_owned(),
+        until: Some("the reader module lands".to_owned()),
         match_kind: MatchKind::Exact,
         id: None,
         title: None,
@@ -172,6 +173,12 @@ fn audit_silenced_records_carry_documented_exception_fields() {
     assert!(run.output.contains("\"silenced\""));
     assert!(run.output.contains("\"top\""));
     assert!(run.output.contains("\"stale\""));
+    // Unconditional, so a consumer never has to tell "no exceptions" from "this
+    // build does not report them" (§FS-004-check-audit.2).
+    assert!(
+        run.output
+            .contains("\"exceptions\":{\"structural\":0,\"deferred\":1}")
+    );
 
     // The silenced hard overflow carries the exception attribution fields.
     let silenced = extract_array(&run.output, "silenced");

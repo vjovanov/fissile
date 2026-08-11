@@ -99,18 +99,22 @@ hard: 1 file over the 550-line budget [rule: source, message: split-source-hard]
   flatten a boundary, or shuffle lines to get under the limit — a worse design
   under budget is not the goal.
   If you cannot see a split that leaves the architecture intact, stop and ask a
-  human. The only other way past this gate is a human-reviewed exception:
-  fissile exception add <path> --severity hard --rule source
+  human. The only other way past this gate is a human-reviewed exception, whose
+  reason names the constraint that makes splitting illegal (--kind structural)
+  or the boundary that is missing and what must exist first (--kind deferred):
+  fissile exception add <path> --severity hard --rule source --kind <kind>
     src/orders.rs: 620 lines
 
 soft: 2 files over the 350-line budget [rule: source, message: split-source-soft]
   Should split, next time you are in one of these files: move a cohesive group
   of items into a sibling module. Split along a responsibility seam, never at
   the line count, and never break apart code that belongs together.
-  If no split leaves the design better than it is now, keep the file and record
-  the debt instead of forcing one — a written reason and a revisit trigger, not
-  a silent ignore:
-  fissile exception add <path> --severity soft --rule source
+  If no split leaves the design better than it is now, record why instead of
+  forcing one — not what the file contains, which is what this finding already
+  said. Name the constraint that makes splitting illegal (--kind structural), or
+  the boundary that is missing and what must exist first (--kind deferred,
+  --until naming what retires it):
+  fissile exception add <path> --severity soft --rule source --kind <kind>
     src/util.rs: 410 lines
     src/billing.rs: 372 lines
 # exit 1
@@ -150,10 +154,17 @@ soft: 2 files over the 350-line budget [rule: source, message: split-source-soft
     src/util.rs: 410 lines
     src/billing.rs: 372 lines
 
+exceptions:
+  structural (never expires): 3
+  deferred (carrying debt): 32
+
 top lines:
   620 src/orders.rs
   410 src/util.rs
 ```
+
+The two exception counts are deliberately not one total: three files nobody will
+ever split and thirty-two waiting on work are different facts about a codebase.
 
 Add `--stale-exceptions` to find exceptions whose file is gone, or
 `--rule-coverage` to find rules and messages that match nothing.
@@ -165,7 +176,10 @@ a silent ignore comment. `exception add` appends the entry for you:
 
 ```sh
 fissile exception add src/orders.rs --severity hard --rule source \
-  --reason "legacy order engine; splitting tracked in #142" --until "#142 lands"
+  --kind deferred --until "the pricing module exists" \
+  --reason "Missing boundary: pricing has no module of its own, so the rate
+table, the discount rules, and the invoice writer are all reachable only from
+here. Splitting today just moves private helpers behind a new file."
 ```
 
 ```toml
@@ -174,15 +188,32 @@ id = "EX-001-orders-rs"
 path = "src/orders.rs"
 match = "exact"
 rules = ["source"]
+kind = "deferred"
 max_accepted = { value = 620, unit = "lines" }
-until = "#142 lands"
+until = "the pricing module exists"
 reason = """
-legacy order engine; splitting tracked in #142
+Missing boundary: pricing has no module of its own, so the rate table, the
+discount rules, and the invoice writer are all reachable only from here.
+Splitting today just moves private helpers behind a new file.
 """
 ```
 
 The hard block is now silenced — but only up to `max_accepted`. Grow the file
 past it and the finding returns. The soft warning still nudges the agent.
+
+`--kind` is the field that keeps the registry honest, because a reason answers
+one of two questions and they are not the same question
+(§DF-004-exception-kind):
+
+| | the claim | `until` | retires when |
+| --- | --- | --- | --- |
+| `structural` | splitting is **illegal** — name the constraint | `indefinite` | never |
+| `deferred` | a boundary is **missing** — name it and what must exist first | the condition | someone builds it |
+
+Without the split, both collapse into "this file is large because …", which
+describes the file and claims nothing a reviewer can disagree with. `audit`
+counts the two separately, so *accepted permanently* and *carrying debt* never
+show up as one number.
 
 ## Use as a library
 

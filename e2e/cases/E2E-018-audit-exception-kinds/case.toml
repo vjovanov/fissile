@@ -1,0 +1,7 @@
+args = ["audit", "--no-color"]
+exit = 0
+stdout_contains = [
+  "exceptions:",
+  "  structural (never expires): 1",
+  "  deferred (carrying debt): 1",
+]

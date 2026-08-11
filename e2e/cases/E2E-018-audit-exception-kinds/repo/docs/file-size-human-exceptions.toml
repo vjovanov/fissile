@@ -1,0 +1,27 @@
+fissile_exceptions_version = 1
+
+[[exceptions]]
+id = "EX-001-big"
+path = "src/big.rs"
+match = "exact"
+rules = ["rust"]
+kind = "structural"
+max_accepted = { value = 5, unit = "lines" }
+until = "indefinite"
+reason = """
+A generated table the snapshot test asserts byte-identical; splitting it would
+break the byte comparison the test exists to make.
+"""
+
+# Written before `kind` existed: it still loads, and counts as deferred
+# (§FS-003-exceptions.2.1).
+[[exceptions]]
+id = "EX-002-gone"
+path = "src/retired.rs"
+match = "exact"
+rules = ["rust"]
+max_accepted = { value = 5, unit = "lines" }
+until = "the reader module lands"
+reason = """
+No module owns the staged-blob reader yet.
+"""
