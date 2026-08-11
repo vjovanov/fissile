@@ -69,6 +69,25 @@ with a migration note.
   (accepted up to 620 lines)`, and a stale line reads
   `docs/file-size-human-exceptions.toml: src/gone.rs`.
 
+- §FS-003-exceptions.3: a silenced hard finding no longer always re-opens the
+  soft one — the accepting entry's `kind` decides. A `structural` entry silences
+  the soft finding for the same overflow, because splitting the file is illegal
+  and the warning therefore names work nobody may do; a `deferred` entry still
+  emits it, which is the minimize loop working as intended
+  (§DF-004-exception-kind.4). An entry that declares no `kind` reads as
+  `deferred`, so registries written before the field keep their behavior.
+  **Migration:** a repository carrying paired soft *and* hard entries for one
+  structural file will find the soft one dormant while the file stays at or above
+  the hard limit, since the hard entry now covers both severities there. It is
+  still what accepts the warning if the file later drops into the soft-to-hard
+  band, where no hard finding exists to silence — delete it only if that cannot
+  happen. `audit --stale-exceptions` flags it either way only when the path is
+  gone.
+- §FS-002-init.2: the starter hard registry's comments say that a `structural`
+  entry covers the soft warning for the overflow it accepts, so the duplicate the
+  rule retires is not written again. The managed block stays at v1 — its text was
+  already silent on what a hard exception silences.
+
 ### Removed
 
 - §FS-005-exception-add.1: `--id` and `--replaces`, with the `EX-NNN` allocator,

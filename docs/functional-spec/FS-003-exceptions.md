@@ -130,9 +130,32 @@ unit and `max_accepted.value` must be greater than or equal to the rule limit fo
 the registry severity. A soft-registry entry silences only soft findings at or
 below its accepted maximum. A hard-registry entry silences only hard findings at
 or below its accepted maximum. If the measured value is higher than
-`max_accepted.value`, `fissile` reports the overflow again. If a hard finding is
-silenced and no matching soft exception exists, `fissile` may still emit the soft
-finding so agents can keep minimizing accepted human debt.
+`max_accepted.value`, `fissile` reports the overflow again.
+
+A hard finding that still stands — no entry matched, or the file grew past its
+ceiling — suppresses the soft finding on its own (§GOAL-006-graded-limits.1).
+When a hard finding is *silenced*, the accepting entry's `kind` (§2.1) decides
+what happens to the soft finding for the same overflow:
+
+- `kind = "deferred"` — the soft finding is still emitted, so agents keep
+  minimizing accepted human debt. An entry that declares no kind reads as
+  `deferred` (§2.1) and behaves this way.
+- `kind = "structural"` — the soft finding is silenced too. Splitting the file is
+  illegal, so the warning asks for work nobody may do and no amount of work can
+  clear it. A structural hard entry ends the evaluation of that overflow: the
+  soft registry is not consulted, and a soft entry that would have matched the
+  same overflow silences nothing while the hard entry is doing it.
+
+The rule reads the hard entry's kind only. A `kind` in the soft registry says
+what its own reason must establish (§2.1) and changes nothing about matching.
+
+The rule reaches only as far as a hard finding does. A file below the hard limit
+produces no hard finding, so the hard registry is never consulted for it and the
+soft warning stands on its own, structural constraint or not. Accepting that
+warning is the soft registry's job — with `kind = "structural"` there too, when
+the same constraint is what makes it permanent. A soft entry paired with a
+structural hard one is therefore dormant, not dead: it takes over exactly where
+the hard entry stops applying.
 
 When more than one exception in the same severity registry matches the same
 overflow, `fissile` reports a schema error. One accepted oversized condition at
