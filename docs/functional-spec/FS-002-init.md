@@ -145,10 +145,21 @@ see AGENTS.md for the full workflow.
 The `next:` block is suppressed when every selected file already exists with the
 current managed block.
 
-The block must not promise machinery the run did not install: when the
-pre-commit hook was skipped because the target is not a git repository (§6),
-step 2 instead points at the repair — `Run git init && fissile init to install
-the pre-commit hook, or wire fissile check --staged into your commit flow.`
+The block must not promise machinery the run did not install, and must not send
+the reader to a file that is not there. Two clauses follow from that:
+
+- When the pre-commit hook was skipped because the target is not a git
+  repository (§6), step 2 instead points at the repair — `Run git init &&
+  fissile init to install the pre-commit hook, or wire fissile check --staged
+  into your commit flow.`
+- The closing `see <path> for the full workflow.` line names an agent
+  entrypoint this run handled (§3), not a fixed filename: automatic mode
+  updates whichever entrypoints already exist and only falls back to
+  `AGENTS.md` when none do, and the per-agent flags select the file directly.
+  Naming a handled entrypoint — whether it was written, updated, or already
+  current — is what makes the path resolve. When several were handled, the
+  first in the reported order is named; when none were, the line is omitted
+  rather than invented.
 
 ## 6. Pre-commit Hook
 

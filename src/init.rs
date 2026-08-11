@@ -158,6 +158,10 @@ pub struct Report {
     /// Automatic hook install found no git repository (§FS-002-init.6); the
     /// `next:` block must not promise a hook that was not written (§FS-002-init.5).
     pub hook_skipped_not_git: bool,
+    /// Agent entrypoints this run touched, in reported order (§FS-002-init.3).
+    /// The `next:` block names one of these rather than a fixed filename, so it
+    /// cannot point at a file that was never written (§FS-002-init.5).
+    pub entrypoints: Vec<PathBuf>,
 }
 
 impl Report {
@@ -182,14 +186,22 @@ impl Report {
             } else {
                 NEXT_HOOK_STEP
             };
-            lines.push(format!(
+            let mut block = format!(
                 "next:\n\
                  1. Review .agents/fissile.toml: the source rule budgets common code extensions; \
                  add this repo's languages or tune the limits.\n\
                  2. {hook_step}\n\
-                 3. Run fissile audit once and add justified exceptions with fissile exception add.\n\
-                 see AGENTS.md for the full workflow."
-            ));
+                 3. Run fissile audit once and add justified exceptions with fissile exception add."
+            );
+            // Omitted rather than invented when no entrypoint was written
+            // (§FS-002-init.5).
+            if let Some(entrypoint) = self.entrypoints.first() {
+                block.push_str(&format!(
+                    "\nsee {} for the full workflow.",
+                    entrypoint.display()
+                ));
+            }
+            lines.push(block);
         }
         lines.join("\n")
     }
@@ -263,12 +275,14 @@ pub fn run(options: &InitOptions) -> Result<Report, InitError> {
 
     // 3. Agent entrypoints and managed blocks (§FS-002-init.3).
     let name = project_name(options);
+    let mut entrypoints = Vec::new();
     for relative in resolve_entrypoints(&options.root, &options.agents) {
         outcomes.push(write_managed_block(
             &options.root.join(&relative),
             &name,
             options.dry_run,
         )?);
+        entrypoints.push(relative);
     }
 
     // 4. Managed pre-commit hook (§FS-002-init.6). Automatic mode installs only
@@ -294,6 +308,7 @@ pub fn run(options: &InitOptions) -> Result<Report, InitError> {
         outcomes,
         dry_run: options.dry_run,
         hook_skipped_not_git,
+        entrypoints,
     })
 }
 
@@ -508,6 +523,39 @@ mod tests {
     fn starter_registries_parse() {
         assert!(DEFAULT_SOFT_REGISTRY.contains("fissile_exceptions_version = 1"));
         assert!(DEFAULT_HARD_REGISTRY.contains("fissile_exceptions_version = 1"));
+    }
+
+    fn report_for(entrypoints: &[&str]) -> Report {
+        Report {
+            outcomes: vec![Outcome {
+                path: PathBuf::from(".agents/fissile.toml"),
+                action: Action::Wrote,
+            }],
+            dry_run: false,
+            hook_skipped_not_git: false,
+            entrypoints: entrypoints.iter().map(PathBuf::from).collect(),
+        }
+    }
+
+    /// The closing line names an entrypoint the run handled, so it cannot send
+    /// the reader to a file that was never written (§FS-002-init.5).
+    #[test]
+    fn next_block_names_a_handled_entrypoint() {
+        assert!(
+            report_for(&["CLAUDE.md", ".claude/CLAUDE.md"])
+                .render()
+                .contains("see CLAUDE.md for the full workflow.")
+        );
+        assert!(
+            report_for(&["GEMINI.md"])
+                .render()
+                .contains("see GEMINI.md for the full workflow.")
+        );
+
+        // Nothing to point at: the line is omitted, not invented.
+        let rendered = report_for(&[]).render();
+        assert!(rendered.contains("next:"));
+        assert!(!rendered.contains("full workflow"));
     }
 
     #[test]

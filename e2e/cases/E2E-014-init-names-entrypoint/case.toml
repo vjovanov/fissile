@@ -1,0 +1,10 @@
+# The repo ships CLAUDE.md and no AGENTS.md, so the block lands in CLAUDE.md and
+# the closing line must name it (§FS-002-init.5).
+args = ["init"]
+exit = 0
+git = true
+stderr_contains = [
+  "CLAUDE.md",
+  "see CLAUDE.md for the full workflow.",
+]
+creates = [".agents/fissile.toml", "CLAUDE.md"]

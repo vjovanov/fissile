@@ -32,6 +32,13 @@ with a migration note.
 
 ### Fixed
 
+- §FS-002-init.5: the `next:` block's closing line now names an agent
+  entrypoint the run actually handled instead of always saying `AGENTS.md`.
+  Automatic mode updates whichever entrypoints already exist and only falls
+  back to `AGENTS.md` when none do, so in a repository carrying `CLAUDE.md` the
+  last line a new adopter read pointed at a file that was not there. Resolves
+  #3.
+
 - §FS-001-config.2: `respect_gitignore` now prunes the walk instead of
   filtering its result, so an ignored directory is never descended into.
   `audit` previously traversed ignored subtrees in full and discarded them
