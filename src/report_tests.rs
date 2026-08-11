@@ -4,7 +4,10 @@
 
 use super::*;
 use crate::config::Config;
+use crate::exceptions::RegistrySource;
 use crate::{RenderedMessage, Unit};
+
+const HARD_REGISTRY: &str = "docs/file-size-human-exceptions.toml";
 
 const CONFIG: &str = r#"
 fissile_config_version = 1
@@ -25,9 +28,8 @@ message = "m"
 fn hard_registry(kind: &str, until: &str) -> String {
     format!(
         r#"
-fissile_exceptions_version = 1
+fissile_exceptions_version = 2
 [[exceptions]]
-id = "EX-001-big"
 path = "src/big.rs"
 match = "exact"
 rules = ["rust"]
@@ -43,7 +45,8 @@ reason = "a reason"
 /// `(severity, is_reported)` in emission order.
 fn outcomes(registry: &str, lines: u64) -> Vec<(Severity, bool)> {
     let checker = Config::parse(CONFIG).unwrap().to_checker().unwrap();
-    let registries = Registries::load(None, Some(registry)).unwrap();
+    let registries =
+        Registries::load(None, Some(RegistrySource::new(HARD_REGISTRY, registry))).unwrap();
     let file = FileMeasurement::new("src/big.rs", lines * 12).with_lines(lines);
     evaluate_file(&checker, &registries, &file)
         .unwrap()
