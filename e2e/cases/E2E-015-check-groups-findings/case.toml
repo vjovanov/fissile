@@ -1,0 +1,15 @@
+args = ["check", "--no-color"]
+exit = 1
+stdout_equals = """
+hard: 1 file over the 6-line budget [rule: rust, message: must-split]
+  Must split before more code lands here. If you cannot see a split that leaves
+  the architecture intact, stop and ask a human.
+    src/big.rs: 8 lines
+
+soft: 2 files over the 2-line budget [rule: rust, message: should-split]
+  Should split, next time you are in one of these files: move a cohesive group
+  of items into a sibling module along a seam that already exists.
+  If no split leaves the design better, record it instead of forcing one:
+  fissile exception add <path> --severity soft --rule rust
+    src/a.rs: 4 lines
+    src/b.rs: 3 lines"""

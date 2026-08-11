@@ -19,13 +19,35 @@ exception applies. Severity is not configurable. This is the stable
 CI/pre-commit contract: the same config must produce the same pass/fail result
 locally and remotely (§GOAL-003-friendly-output).
 
-Text output for an overflow has a compact finding line plus, when configured, a
-single rendered guidance line:
+Text findings are grouped, one block per `(severity, rule, rendered guidance)`.
+The header names the severity, the file count, the crossed limit, the rule, and
+the message ID; the guidance follows once, indented two spaces; the files follow
+indented four. Guidance is never repeated per file — a repo-wide run says what
+to do once and then lists what it applies to (§GOAL-003-friendly-output).
 
 ```text
-src/domain/order.rs: 612 lines > 550 lines [hard, rule: rust-source, message: split-rust-module]
-  Split src/domain/order.rs: move cohesive helpers into a sibling module before adding more code.
+hard: 2 files over the 550-line budget [rule: rust-source, message: split-rust-hard]
+  Must split before more code lands here: move cohesive groups of items into
+  sibling modules. If you cannot see a safe split, stop and ask a human.
+    src/domain/order.rs: 612 lines
+    src/domain/invoice.rs: 588 lines
+
+soft: 1 file over the 350-line budget [rule: rust-source, message: split-rust-soft]
+  Should split the next time you touch it. If no split leaves the architecture
+  cleaner, record it with `fissile exception add --severity soft`.
+    src/domain/tax.rs: 402 lines
 ```
+
+Blocks are ordered hard before soft, then by rule ID; files within a block are
+ordered by measured value descending, then by path. Blocks are separated by a
+blank line. A message that interpolates a per-file variable renders distinct
+text per file, which by the grouping key puts each file in its own block
+(§FS-001-config.4).
+
+Guidance is wrapped at a fixed 78 columns, and newlines written into the message
+are kept, so a project that configures a paragraph gets a readable block. The
+width is fixed rather than read from the terminal: the same finding must be
+byte-identical in a narrow terminal and in CI (§GOAL-006-graded-limits.2).
 
 JSON output emits one record per overflow with at least:
 

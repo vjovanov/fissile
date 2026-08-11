@@ -104,16 +104,18 @@ the file unchanged.
 The canonical v1 block teaches:
 
 - run `fissile check --staged` before claiming work is done;
-- treat soft overflows as agent-actionable guidance when the agent changed the
-  file;
-- treat hard overflows as stop-the-line failures unless a structured exception
-  exists;
-- read the message ID and guidance line as the configured remediation guidance
-  for that rule;
-- use `fissile exception add --severity soft` for accepted agent-facing warning
-  debt;
-- use `fissile exception add --severity hard` only for human-reviewed blocking
-  debt;
+- read a grouped block as one instruction: the header names the severity, rule,
+  and limit, and the guidance under it covers every file listed below it
+  (§FS-004-check-audit.1);
+- treat a soft overflow as *should split* — agent-actionable when the agent
+  changed the file, and split along an existing seam rather than at the line
+  count;
+- treat a hard overflow as *must split* — stop-the-line unless a structured
+  exception exists;
+- never damage the design to fit a budget: record accepted warning debt with
+  `fissile exception add --severity soft`, and ask a human for a hard overflow
+  no safe split resolves, since `--severity hard` is human-reviewed
+  (§DF-003-severity-guidance.1);
 - run `fissile audit --stale-exceptions` before removing or moving large files.
 
 An example rendered block lives at `examples/AGENTS.fissile.md`.

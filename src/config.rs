@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
-use crate::{Budget, Checker, FissileError, Glob, MessageTemplate, Rule, Selector, Unit};
+use crate::{Budget, Checker, FissileError, Glob, MessageTemplate, Rule, Selector, Severity, Unit};
 
 /// The only supported major config version (§FS-001-config.1).
 pub const SUPPORTED_VERSION: u32 = 1;
@@ -129,11 +129,92 @@ pub struct RuleSpec {
     pub hard: Option<u64>,
     #[serde(default)]
     pub priority: i32,
-    pub message: String,
+    /// Guidance for both severities unless a severity-specific field overrides
+    /// it (§FS-001-config.3).
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub soft_message: Option<String>,
+    #[serde(default)]
+    pub hard_message: Option<String>,
     #[serde(default)]
     pub count_blank_lines: bool,
     #[serde(default = "default_true")]
     pub count_comment_lines: bool,
+}
+
+impl RuleSpec {
+    /// The message ID used at `severity`: the severity-specific field when set,
+    /// otherwise the shared `message` (§FS-001-config.3).
+    pub fn message_id(&self, severity: Severity) -> Option<&str> {
+        let specific = match severity {
+            Severity::Soft => self.soft_message.as_deref(),
+            Severity::Hard => self.hard_message.as_deref(),
+        };
+        specific.or(self.message.as_deref())
+    }
+
+    /// Whether the rule declares a threshold at `severity`, and so needs
+    /// guidance for it.
+    fn declares(&self, severity: Severity) -> bool {
+        match severity {
+            Severity::Soft => self.soft.is_some(),
+            Severity::Hard => self.hard.is_some(),
+        }
+    }
+
+    /// Every message ID this rule references, for coverage reporting
+    /// (§FS-004-check-audit.2).
+    pub fn message_ids(&self) -> impl Iterator<Item = &str> {
+        [
+            self.message.as_deref(),
+            self.soft_message.as_deref(),
+            self.hard_message.as_deref(),
+        ]
+        .into_iter()
+        .flatten()
+    }
+}
+
+/// The template for one severity. A severity the rule declares no threshold for
+/// borrows the other's text — it is never rendered — so a rule that configures
+/// only the half it uses stays valid.
+fn resolve_message(
+    spec: &RuleSpec,
+    severity: Severity,
+    messages: &HashMap<&str, &Message>,
+) -> Result<MessageTemplate, ConfigError> {
+    let id = match spec.message_id(severity) {
+        Some(id) => Some(id),
+        None if spec.declares(severity) => {
+            return Err(ConfigError::MissingMessage {
+                rule: spec.id.clone(),
+                severity,
+            });
+        }
+        // Undeclared severity: borrow the other one's template rather than
+        // demanding guidance for a limit nobody set.
+        None => spec.message_id(severity.other()),
+    };
+
+    // Reached only by a rule that names no message and declares no threshold;
+    // `Budget::validate` rejects it for the missing threshold (§FS-001-config.3).
+    let Some(id) = id else {
+        return Ok(MessageTemplate::new("none", "no guidance configured"));
+    };
+
+    let message = messages
+        .get(id)
+        .ok_or_else(|| ConfigError::UnknownMessage {
+            rule: spec.id.clone(),
+            message: id.to_owned(),
+        })?;
+    // Trimmed so a multi-line TOML string, which a project reaches for as soon
+    // as its guidance is a paragraph, does not render a blank guidance line.
+    Ok(MessageTemplate::new(
+        message.id.clone(),
+        message.text.trim(),
+    ))
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
@@ -289,20 +370,15 @@ impl Config {
                 });
             }
 
-            let message =
-                messages
-                    .get(spec.message.as_str())
-                    .ok_or_else(|| ConfigError::UnknownMessage {
-                        rule: spec.id.clone(),
-                        message: spec.message.clone(),
-                    })?;
+            let soft_template = resolve_message(spec, Severity::Soft, &messages)?;
+            let hard_template = resolve_message(spec, Severity::Hard, &messages)?;
 
             let selector = Selector::Glob(spec.include.iter().map(Glob::new).collect());
             let budget = Budget::new(spec.unit.into(), spec.soft, spec.hard);
-            let template = MessageTemplate::new(message.id.clone(), message.text.clone());
 
             rules.push(
-                Rule::new(spec.id.clone(), selector, budget, template)
+                Rule::new(spec.id.clone(), selector, budget, hard_template)
+                    .with_message(Severity::Soft, soft_template)
                     .with_priority(spec.priority)
                     .with_line_policy(spec.count_blank_lines, spec.count_comment_lines),
             );
@@ -331,6 +407,11 @@ pub enum ConfigError {
     UnknownMessage {
         rule: String,
         message: String,
+    },
+    /// A rule declares a threshold with no guidance for it (§FS-001-config.3).
+    MissingMessage {
+        rule: String,
+        severity: Severity,
     },
     Engine(FissileError),
     /// A load-time error tagged with the document it came from
@@ -374,6 +455,10 @@ impl fmt::Display for ConfigError {
             ConfigError::UnknownMessage { rule, message } => {
                 write!(f, "rule {rule} references unknown message id {message}")
             }
+            ConfigError::MissingMessage { rule, severity } => write!(
+                f,
+                "rule {rule} declares a {severity} limit with no message; set {severity}_message or message"
+            ),
             ConfigError::Engine(error) => write!(f, "{error}"),
         }
     }
@@ -434,6 +519,115 @@ message = "split-rust"
         assert_eq!(overflows.len(), 1);
         assert_eq!(overflows[0].severity, Severity::Hard);
         assert_eq!(overflows[0].rule_id, "rust");
+    }
+
+    /// §FS-001-config.3: a rule may carry different guidance per severity, and
+    /// the shared `message` stays the fallback for the severity it omits.
+    #[test]
+    fn severity_messages_override_the_shared_message() {
+        let config = Config::parse(
+            r#"
+fissile_config_version = 1
+
+[[messages]]
+id = "shared"
+text = "Split it."
+
+[[messages]]
+id = "must"
+text = """
+Must split.
+Ask a human when no safe split exists.
+"""
+
+[[rules]]
+id = "rust"
+include = ["src/**/*.rs"]
+unit = "lines"
+soft = 2
+hard = 4
+message = "shared"
+hard_message = "must"
+"#,
+        )
+        .expect("valid config");
+        let checker = config.to_checker().expect("valid checker");
+
+        let soft = checker
+            .check(&crate::measure_text("src/a.rs", "a\nb\n"))
+            .expect("check succeeds");
+        assert_eq!(soft[0].message.id, "shared");
+
+        let hard = checker
+            .check(&crate::measure_text("src/b.rs", "a\nb\nc\nd\n"))
+            .expect("check succeeds");
+        assert_eq!(hard[0].message.id, "must");
+        // The multi-line template is trimmed, so rendering starts at the text.
+        assert_eq!(
+            hard[0].message.text,
+            "Must split.\nAsk a human when no safe split exists."
+        );
+    }
+
+    /// §FS-001-config.3: a declared threshold with no guidance is a schema error,
+    /// not a silently empty message.
+    #[test]
+    fn rejects_a_threshold_with_no_message() {
+        let config = Config::parse(
+            r#"
+fissile_config_version = 1
+
+[[messages]]
+id = "must"
+text = "Must split."
+
+[[rules]]
+id = "rust"
+include = ["src/**/*.rs"]
+unit = "lines"
+soft = 2
+hard = 4
+hard_message = "must"
+"#,
+        )
+        .expect("valid config");
+
+        let error = config.to_checker().expect_err("soft limit has no message");
+        assert_eq!(
+            error,
+            ConfigError::MissingMessage {
+                rule: "rust".to_owned(),
+                severity: Severity::Soft,
+            }
+        );
+    }
+
+    /// A rule that declares only one threshold needs guidance only for it.
+    #[test]
+    fn one_sided_rule_needs_only_its_own_message() {
+        let config = Config::parse(
+            r#"
+fissile_config_version = 1
+
+[[messages]]
+id = "must"
+text = "Must split."
+
+[[rules]]
+id = "rust"
+include = ["src/**/*.rs"]
+unit = "lines"
+hard = 2
+hard_message = "must"
+"#,
+        )
+        .expect("valid config");
+
+        let checker = config.to_checker().expect("valid checker");
+        let overflows = checker
+            .check(&crate::measure_text("src/a.rs", "a\nb\n"))
+            .expect("check succeeds");
+        assert_eq!(overflows[0].message.id, "must");
     }
 
     #[test]

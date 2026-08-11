@@ -127,6 +127,10 @@ pub fn has_hard_failure(outcomes: &[Outcome]) -> bool {
         .any(|outcome| outcome.is_reported() && outcome.overflow().severity == Severity::Hard)
 }
 
+/// Guidance wraps at a fixed width, not the terminal's, so a block is
+/// byte-identical in a narrow terminal and in CI (§GOAL-006-graded-limits.2).
+const GUIDANCE_COLUMNS: usize = 78;
+
 const BOLD_RED: &str = "\x1b[1;31m";
 const BOLD_YELLOW: &str = "\x1b[1;33m";
 const GREEN: &str = "\x1b[32m";
@@ -140,19 +144,127 @@ fn paint(color: bool, code: &str, text: &str) -> String {
     }
 }
 
-/// The two-line text block for one standing finding (§FS-004-check-audit.1). The
-/// finding line is tinted by severity when `color` is set; the guidance line is
-/// left plain so it stays easy to copy.
-pub fn finding_block(overflow: &Overflow, color: bool) -> String {
-    let code = match overflow.severity {
-        Severity::Hard => BOLD_RED,
-        Severity::Soft => BOLD_YELLOW,
-    };
-    format!(
-        "{}\n  {}",
-        paint(color, code, &overflow.finding_line()),
-        overflow.message.text
-    )
+/// The standing findings as grouped text blocks: one per `(severity, rule,
+/// rendered guidance)`, hard first, files largest first, and shared guidance
+/// written once under a severity-tinted header (§FS-004-check-audit.1).
+pub fn finding_blocks(outcomes: &[Outcome], color: bool) -> Vec<String> {
+    let mut groups: Vec<Group<'_>> = Vec::new();
+
+    for overflow in outcomes
+        .iter()
+        .filter(|outcome| outcome.is_reported())
+        .map(Outcome::overflow)
+    {
+        match groups.iter_mut().find(|group| group.accepts(overflow)) {
+            Some(group) => group.overflows.push(overflow),
+            None => groups.push(Group {
+                head: overflow,
+                overflows: vec![overflow],
+            }),
+        }
+    }
+
+    groups.sort_by(|left, right| left.order().cmp(&right.order()));
+    for group in &mut groups {
+        // Worst first: the file that most needs splitting leads its block.
+        group.overflows.sort_by(|left, right| {
+            right
+                .actual
+                .cmp(&left.actual)
+                .then(left.path.cmp(&right.path))
+        });
+    }
+
+    groups.iter().map(|group| group.render(color)).collect()
+}
+
+/// The findings that share a severity, a rule, and one rendered guidance string.
+struct Group<'a> {
+    head: &'a Overflow,
+    overflows: Vec<&'a Overflow>,
+}
+
+impl<'a> Group<'a> {
+    /// Guidance is compared as rendered text, not by message ID: a template that
+    /// interpolates `{path}` says something different about each file, so those
+    /// findings must not be collapsed under one line (§FS-001-config.4).
+    fn accepts(&self, overflow: &Overflow) -> bool {
+        self.head.severity == overflow.severity
+            && self.head.rule_id == overflow.rule_id
+            && self.head.message.text == overflow.message.text
+    }
+
+    /// Hard before soft, then by rule ID, then by message ID.
+    fn order(&self) -> (u8, &str, &str) {
+        let severity = match self.head.severity {
+            Severity::Hard => 0,
+            Severity::Soft => 1,
+        };
+        (severity, &self.head.rule_id, &self.head.message.id)
+    }
+
+    fn header(&self) -> String {
+        let files = if self.overflows.len() == 1 {
+            "1 file".to_owned()
+        } else {
+            format!("{} files", self.overflows.len())
+        };
+        format!(
+            "{}: {files} over the {}-{} budget [rule: {}, message: {}]",
+            self.head.severity,
+            self.head.limit,
+            self.head.unit.singular(),
+            self.head.rule_id,
+            self.head.message.id,
+        )
+    }
+
+    fn render(&self, color: bool) -> String {
+        let code = match self.head.severity {
+            Severity::Hard => BOLD_RED,
+            Severity::Soft => BOLD_YELLOW,
+        };
+        let mut block = paint(color, code, &self.header());
+
+        for line in wrap(&self.head.message.text, GUIDANCE_COLUMNS) {
+            block.push_str("\n  ");
+            block.push_str(&line);
+        }
+
+        for overflow in &self.overflows {
+            block.push_str(&format!(
+                "\n    {}: {} {}",
+                overflow.path.display(),
+                overflow.actual,
+                overflow.unit
+            ));
+        }
+
+        block
+    }
+}
+
+/// Greedy word wrap at `columns`, measured in characters. Explicit newlines in
+/// the message are kept as paragraph breaks; a word longer than `columns` (a
+/// path, a URL) takes its own line rather than being broken.
+fn wrap(text: &str, columns: usize) -> Vec<String> {
+    let mut lines = Vec::new();
+
+    for paragraph in text.lines() {
+        let mut line = String::new();
+        for word in paragraph.split_whitespace() {
+            let width = line.chars().count();
+            if !line.is_empty() && width + 1 + word.chars().count() > columns {
+                lines.push(std::mem::take(&mut line));
+            } else if !line.is_empty() {
+                line.push(' ');
+            }
+            line.push_str(word);
+        }
+        lines.push(line);
+    }
+
+    lines
 }
 
 /// The success marker, tinted green when `color` is set (§FS-001-config.6).
@@ -197,3 +309,7 @@ pub fn overflow_json(outcome: &Outcome) -> Json {
     }
     Json::Object(fields)
 }
+
+#[cfg(test)]
+#[path = "report_tests.rs"]
+mod tests;

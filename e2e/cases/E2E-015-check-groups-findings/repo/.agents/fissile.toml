@@ -1,0 +1,29 @@
+fissile_config_version = 1
+
+[scan]
+include = ["src"]
+exclude = []
+respect_gitignore = false
+
+[[messages]]
+id = "should-split"
+text = """
+Should split, next time you are in one of these files: move a cohesive group of items into a sibling module along a seam that already exists.
+If no split leaves the design better, record it instead of forcing one:
+fissile exception add <path> --severity soft --rule {rule}
+"""
+
+[[messages]]
+id = "must-split"
+text = """
+Must split before more code lands here. If you cannot see a split that leaves the architecture intact, stop and ask a human.
+"""
+
+[[rules]]
+id = "rust"
+include = ["src/**/*.rs"]
+unit = "lines"
+soft = 2
+hard = 6
+soft_message = "should-split"
+hard_message = "must-split"

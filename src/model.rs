@@ -12,6 +12,18 @@ pub enum Unit {
     Tokens,
 }
 
+impl Unit {
+    /// The singular spelling, for the `550-line budget` phrasing in grouped
+    /// output (§FS-004-check-audit.1).
+    pub fn singular(self) -> &'static str {
+        match self {
+            Unit::Bytes => "byte",
+            Unit::Lines => "line",
+            Unit::Tokens => "token",
+        }
+    }
+}
+
 impl fmt::Display for Unit {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -127,6 +139,14 @@ impl Severity {
             Severity::Hard => "hard",
         }
     }
+
+    /// The opposite severity.
+    pub fn other(self) -> Severity {
+        match self {
+            Severity::Soft => Severity::Hard,
+            Severity::Hard => Severity::Soft,
+        }
+    }
 }
 
 impl fmt::Display for Severity {
@@ -155,6 +175,9 @@ pub struct Overflow {
 }
 
 impl Overflow {
+    /// The single-line form of one finding. `check` and `audit` render findings
+    /// grouped instead (§FS-004-check-audit.1); this stays the compact spelling
+    /// for library callers that report one overflow at a time.
     pub fn finding_line(&self) -> String {
         format!(
             "{}: {} {} > {} {} [{}, rule: {}, message: {}]",
