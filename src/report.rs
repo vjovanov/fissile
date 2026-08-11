@@ -5,7 +5,7 @@
 use std::error::Error;
 use std::fmt;
 
-use crate::exceptions::{ExceptionError, Registries, Verdict};
+use crate::exceptions::{ExceptionError, Kind, Registries, Verdict};
 use crate::json::Json;
 use crate::{Checker, FileMeasurement, FissileError, Overflow, Severity, render_overflow};
 
@@ -80,8 +80,8 @@ pub fn evaluate_file(
         let actual = hit.actual;
 
         // Hard overflow: a standing hard finding suppresses the soft one
-        // (§GOAL-006-graded-limits). A silenced hard still lets the soft finding
-        // through so agents keep minimizing accepted debt (§FS-003-exceptions.3).
+        // (§GOAL-006-graded-limits). A silenced hard leaves the soft finding to
+        // the accepting entry's kind (§FS-003-exceptions.3).
         if let Some(hard) = rule.budget.hard.filter(|hard| actual >= *hard) {
             match registries.verdict(Severity::Hard, &path, &rule.id, unit, actual)? {
                 Verdict::None | Verdict::Exceeded(_) => {
@@ -94,10 +94,18 @@ pub fn evaluate_file(
                     )));
                     continue;
                 }
-                Verdict::Silenced(entry) => outcomes.push(Outcome::Silenced {
-                    overflow: render_overflow(file, rule, Severity::Hard, actual, hard),
-                    exception_max: entry.max_value,
-                }),
+                Verdict::Silenced(entry) => {
+                    outcomes.push(Outcome::Silenced {
+                        overflow: render_overflow(file, rule, Severity::Hard, actual, hard),
+                        exception_max: entry.max_value,
+                    });
+                    // Structural: the split is illegal, so there is nothing to
+                    // minimize and the soft registry goes unconsulted. Deferred
+                    // falls through and still warns (§FS-003-exceptions.3).
+                    if entry.kind == Kind::Structural {
+                        continue;
+                    }
+                }
             }
         }
 

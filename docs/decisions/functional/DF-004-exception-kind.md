@@ -89,6 +89,14 @@ only whether a tool can see it.
   is how the descriptive reason gets written in the first place.
 - `audit` reports the two counts whenever a registry holds entries
   (§FS-004-check-audit.2), and JSON carries them unconditionally.
+- A silenced hard finding no longer always re-opens the soft one: a `structural`
+  hard entry silences the soft finding for the same overflow, a `deferred` one
+  leaves it standing (§FS-003-exceptions.3). The minimize loop
+  (§GOAL-006-graded-limits.2) assumes shrinking is possible, and the kind is what
+  made that knowable. Warning about a file nobody may split names work that does
+  not exist, and it cannot be cleared by doing the work — only by writing a
+  second entry duplicating the first: same file, same rationale twice, two
+  `max_accepted` values free to drift apart.
 - Registry version stays `1`. An upgrade is not a migration: existing entries
   keep loading as `deferred`, and re-classifying them is a repository's own
   review pass, not something the tool forces at load time.
