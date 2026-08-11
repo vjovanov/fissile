@@ -2,6 +2,7 @@
 //! scan scope or a git-staged set into [`FileMeasurement`]s, honoring
 //! `[scan].exclude`, `respect_gitignore`, and the opt-in `[tokens].command`.
 
+use std::collections::HashSet;
 use std::fs;
 use std::io;
 use std::path::Component;
@@ -38,18 +39,20 @@ pub fn walk_scope(root: &Path, scan: &Scan) -> io::Result<Vec<String>> {
                     push_if_kept(&mut out, &rel, &exclude);
                 }
             } else if base.is_dir() {
-                walk_matching(root, &base, &include, &exclude, &mut out)?;
+                walk(root, base, Some(&include), &exclude, scan, &mut out)?;
             }
         } else {
             let full = root.join(entry);
             if full.is_file() {
                 push_if_kept(&mut out, entry, &exclude);
             } else if full.is_dir() {
-                walk_dir(root, &full, &exclude, &mut out)?;
+                walk(root, full, None, &exclude, scan, &mut out)?;
             }
         }
     }
 
+    // Files that are themselves ignored but sit in a kept directory; the
+    // ignored *directories* are already gone (§FS-001-config.2).
     if scan.respect_gitignore {
         filter_gitignored(root, &mut out);
     }
@@ -59,52 +62,68 @@ pub fn walk_scope(root: &Path, scan: &Scan) -> io::Result<Vec<String>> {
     Ok(out)
 }
 
-fn walk_matching(
+/// Breadth-first walk from `start`, keeping files that pass `include` and
+/// `exclude`. Ignored directories are pruned per level, so an ignored subtree
+/// is never entered and git calls track depth, not count (§FS-001-config.2).
+fn walk(
     root: &Path,
-    dir: &Path,
-    include: &Glob,
+    start: PathBuf,
+    include: Option<&Glob>,
     exclude: &[Glob],
+    scan: &Scan,
     out: &mut Vec<String>,
 ) -> io::Result<()> {
-    for entry in fs::read_dir(dir)? {
-        let entry = entry?;
-        let path = entry.path();
-        let Some(rel) = relative(root, &path) else {
-            continue;
-        };
-        let file_type = entry.file_type()?;
-        if file_type.is_dir() {
-            if rel == ".git" || is_excluded(&format!("{rel}/"), exclude) {
-                continue;
+    let mut level = vec![start];
+
+    while !level.is_empty() {
+        let mut next = Vec::new();
+
+        for dir in &level {
+            for entry in fs::read_dir(dir)? {
+                let entry = entry?;
+                let path = entry.path();
+                let Some(rel) = relative(root, &path) else {
+                    continue;
+                };
+                let file_type = entry.file_type()?;
+                if file_type.is_dir() {
+                    // Skip VCS metadata always, and prune directories whose whole
+                    // subtree is excluded (e.g. `target/**`).
+                    if rel == ".git" || is_excluded(&format!("{rel}/"), exclude) {
+                        continue;
+                    }
+                    next.push(path);
+                } else if file_type.is_file() && include.is_none_or(|include| include.matches(&rel))
+                {
+                    push_if_kept(out, &rel, exclude);
+                }
             }
-            walk_matching(root, &path, include, exclude, out)?;
-        } else if file_type.is_file() && include.matches(&rel) {
-            push_if_kept(out, &rel, exclude);
         }
+
+        if scan.respect_gitignore {
+            retain_unignored(root, &mut next);
+        }
+        level = next;
     }
+
     Ok(())
 }
 
-fn walk_dir(root: &Path, dir: &Path, exclude: &[Glob], out: &mut Vec<String>) -> io::Result<()> {
-    for entry in fs::read_dir(dir)? {
-        let entry = entry?;
-        let path = entry.path();
-        let Some(rel) = relative(root, &path) else {
-            continue;
-        };
-        let file_type = entry.file_type()?;
-        if file_type.is_dir() {
-            // Skip VCS metadata always, and prune directories whose whole subtree
-            // is excluded (e.g. `target/**`).
-            if rel == ".git" || is_excluded(&format!("{rel}/"), exclude) {
-                continue;
-            }
-            walk_dir(root, &path, exclude, out)?;
-        } else if file_type.is_file() {
-            push_if_kept(out, &rel, exclude);
-        }
+/// Drop the directories git ignores, so their subtrees are never walked.
+fn retain_unignored(root: &Path, dirs: &mut Vec<PathBuf>) {
+    if dirs.is_empty() {
+        return;
     }
-    Ok(())
+    let rels: Vec<String> = dirs.iter().filter_map(|dir| relative(root, dir)).collect();
+    if rels.len() != dirs.len() {
+        return; // A path outside the root: leave the level untouched.
+    }
+    let ignored = git_ignored(root, &rels);
+    if ignored.is_empty() {
+        return;
+    }
+    let mut keep = rels.iter().map(|rel| !ignored.contains(rel));
+    dirs.retain(|_| keep.next().unwrap_or(true));
 }
 
 fn has_glob_meta(path: &str) -> bool {
@@ -250,6 +269,14 @@ fn filter_gitignored(root: &Path, paths: &mut Vec<String>) {
     if paths.is_empty() {
         return;
     }
+    let ignored = git_ignored(root, paths);
+    paths.retain(|path| !ignored.contains(path));
+}
+
+/// The subset of `paths` that git ignores, resolved in one `check-ignore` call.
+/// Best-effort by design: an unavailable or failing git yields an empty set, so
+/// the caller keeps its exclusion-only result rather than losing files.
+fn git_ignored(root: &Path, paths: &[String]) -> HashSet<String> {
     let mut child = Command::new("git");
     child
         .arg("-C")
@@ -260,24 +287,23 @@ fn filter_gitignored(root: &Path, paths: &mut Vec<String>) {
         .stderr(std::process::Stdio::null());
 
     let Ok(mut handle) = child.spawn() else {
-        return; // git unavailable: best-effort, keep the exclusion-only result.
+        return HashSet::new();
     };
     if let Some(mut stdin) = handle.stdin.take() {
         use io::Write;
         let _ = stdin.write_all(paths.join("\n").as_bytes());
     }
     let Ok(output) = handle.wait_with_output() else {
-        return;
+        return HashSet::new();
     };
-    // exit 0 = some ignored, 1 = none ignored; anything else: leave list as is.
+    // exit 0 = some ignored, 1 = none ignored; anything else: report nothing.
     if !matches!(output.status.code(), Some(0 | 1)) {
-        return;
+        return HashSet::new();
     }
-    let ignored: std::collections::HashSet<String> = String::from_utf8_lossy(&output.stdout)
+    String::from_utf8_lossy(&output.stdout)
         .lines()
         .map(str::to_owned)
-        .collect();
-    paths.retain(|path| !ignored.contains(path));
+        .collect()
 }
 
 /// Measure one repo-relative file. UTF-8 files are line-classified; others are
@@ -460,6 +486,53 @@ mod tests {
         let exclude = globs(&["target/**"]);
         assert!(is_excluded("target/", &exclude));
         assert!(!is_excluded("src/", &exclude));
+    }
+
+    /// An ignored directory must be pruned, not filtered afterwards
+    /// (§FS-001-config.2). Proving a subtree was never entered needs one that
+    /// fails when entered: an unreadable directory errors a descending walk.
+    #[cfg(unix)]
+    #[test]
+    fn gitignored_directories_are_never_descended_into() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = temp_root();
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::create_dir_all(root.join("ignored/unreadable")).unwrap();
+        fs::write(root.join("src/lib.rs"), "fn lib() {}\n").unwrap();
+        fs::write(root.join("ignored/big.rs"), "fn big() {}\n").unwrap();
+        fs::write(root.join(".gitignore"), "ignored/\n").unwrap();
+        let git = |args: &[&str]| {
+            std::process::Command::new("git")
+                .arg("-C")
+                .arg(&root)
+                .args(args)
+                .output()
+                .expect("git runs")
+        };
+        git(&["init", "-q"]);
+        fs::set_permissions(
+            root.join("ignored/unreadable"),
+            fs::Permissions::from_mode(0o000),
+        )
+        .unwrap();
+
+        let scan = Scan {
+            include: vec![".".to_owned()],
+            exclude: Vec::new(),
+            respect_gitignore: true,
+        };
+        let paths = walk_scope(&root, &scan).expect("ignored subtree is pruned, not entered");
+
+        assert!(paths.contains(&"src/lib.rs".to_owned()));
+        assert!(!paths.iter().any(|path| path.starts_with("ignored/")));
+
+        fs::set_permissions(
+            root.join("ignored/unreadable"),
+            fs::Permissions::from_mode(0o755),
+        )
+        .unwrap();
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
