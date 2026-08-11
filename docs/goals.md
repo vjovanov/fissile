@@ -163,13 +163,17 @@ id = "EX-NNN-slug"
 path = "path/to/file.ts"
 match = "exact"
 rules = ["rule-id"]
+kind = "deferred"
 max_accepted = { value = 800, unit = "lines" }
 until = "condition, date, or indefinite"
 reason = """
-One paragraph of rationale: why this file is large, what would need to change
-for the exception to be retired, and who to ask before deleting it.
+One paragraph that establishes what the kind requires: the architectural
+constraint that makes the split illegal, or the boundary that is missing and
+what has to exist before the split is possible.
 """
 ```
+
+An entry declares which of two claims it is making, because they are not the same claim and they do not expire the same way: `kind = "structural"` says the split is illegal and nothing retires the entry; `kind = "deferred"` says the boundary is simply missing and `until` names what retires it ([§DF-004-exception-kind](decisions/functional/DF-004-exception-kind.md)). Demanding one phrasing for both is what produces fabricated justifications for ordinary debt.
 
 The `EX-` ID is local to `fissile`; the parsing contract lives in
 §FS-003-exceptions.
@@ -183,11 +187,12 @@ The `EX-` ID is local to `fissile`; the parsing contract lives in
   entries, so users do not need to hand-edit registry TOML for current
   overflows.
 - An exception whose path matches no file under scan is reported by `audit --stale-exceptions` — dead exceptions rot fast and the tool refuses to pretend they are load-bearing.
-- `audit` names silenced exception IDs when an exception applies, so reviewers can find the rationale without grep.
+- `audit` names silenced exception IDs when an exception applies, so reviewers can find the rationale without grep, and counts the registries by kind so accepted-permanently and carrying-debt are two numbers rather than one total (§FS-004-check-audit.2).
 
 ### 3. What this rules out
 
 - **An exception without a rationale.** The schema requires the prose paragraph; an entry with empty body is a parse error. Silent override is exactly what [§GOAL-003-friendly-output](goals.md#goal-003-friendly-output-tell-the-user-exactly-what-broke-and-how-to-fix-it) refuses.
+- **An unstated question.** A reason is not free-form prose about the file. The entry's kind fixes what the paragraph must establish, and the shipped guidance says so rather than only demanding that *some* reason exist — "a written reason and a revisit trigger" reads as satisfied by any sentence, which is how a registry fills with descriptions of file contents ([§DF-004-exception-kind](decisions/functional/DF-004-exception-kind.md)).
 - **A flag-based override.** No `--allow path/to/file`, no `# fissile: allow` magic comment. The registries are the only escape hatch, because they are the only form that survives review and shows up in history.
 - **An exception that lives next to its file.** Centralizing the registries is what makes the inventory legible: one file lists soft agent debt and one file lists hard human debt. A scattered "exemption per file" cannot answer "show me everything we have given up on."
 
@@ -199,7 +204,7 @@ The `EX-` ID is local to `fissile`; the parsing contract lives in
 
 ### 5. Measurable
 
-E2E fixtures cover: `fissile exception add` appending soft and hard entries; a hard registry with a single exception silencing a hard violation; a soft registry with a single exception silencing a soft warning; a file that outgrows its exception's maximum accepted size and reports again; a registry whose exception names a path that no longer exists (audit must flag it stale); and a registry entry whose rationale is empty (parse error). A snapshot test on the default registry paths and the parse rules guards against silent schema changes.
+E2E fixtures cover: `fissile exception add` appending soft and hard entries; a hard registry with a single exception silencing a hard violation; a soft registry with a single exception silencing a soft warning; a file that outgrows its exception's maximum accepted size and reports again; a registry whose exception names a path that no longer exists (audit must flag it stale); and a registry entry whose rationale is empty (parse error). Kind coverage adds: `exception add` refusing a `structural` entry with a dated `until` and a `deferred` entry with an `indefinite` one, a pre-`kind` registry still loading, and `audit` reporting the two counts. A snapshot test on the default registry paths and the parse rules guards against silent schema changes.
 
 ## GOAL-008-remediation-messages: overflows can carry local remediation guidance
 

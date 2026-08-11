@@ -76,6 +76,20 @@ fissile audit [--config <path>] [--format text|json] [--top <N>]
 state. It is for adoption and maintenance, not just pass/fail.
 
 - Default audit reports current soft and hard overflows.
+- Default audit also counts the exception registries by kind
+  (§FS-003-exceptions.2.1) — how many files are accepted permanently versus how
+  many carry debt someone has to retire:
+
+  ```text
+  exceptions:
+    structural (never expires): 3
+    deferred (carrying debt): 32
+  ```
+
+  The section is omitted from text output when both registries are empty, so a
+  repository with no exceptions pays nothing for it. JSON always carries the
+  object, because a consumer should not have to distinguish "no exceptions" from
+  "this build does not report them".
 - `--top <N>` reports the largest measured files per unit, after exclusions,
   even when they are under limit.
 - `--stale-exceptions` reports exception entries whose path or glob matches no

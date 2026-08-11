@@ -1,0 +1,13 @@
+args = [
+  "exception", "add", "src/big.rs",
+  "--severity", "hard",
+  "--rule", "rust",
+  "--kind", "deferred",
+  "--until", "indefinite",
+  "--reason", "the module that would own this does not exist yet",
+]
+exit = 2
+stderr_contains = [
+  "--kind deferred cannot be --until \"indefinite\"",
+  "--kind structural",
+]

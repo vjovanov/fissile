@@ -46,16 +46,16 @@ command = ["token-counter", "--count", "{path}"]
 id = "split-rust-library-soft"
 text = """
 Should split, next time you are in one of these modules: move one cohesive behavior into a sibling module, keeping the seams the crate already has — measurement, evaluation, exceptions, rendering, CLI surface. Split along that grain, not at the line count.
-If no split leaves the crate clearer, record it instead of forcing one — with a written reason and a revisit trigger:
-fissile exception add <path> --severity soft --rule {rule}
+If no split leaves the crate clearer, record why instead of forcing one: name the constraint that makes splitting illegal (--kind structural), or the seam that does not exist yet and what has to exist first (--kind deferred, --until naming what retires it):
+fissile exception add <path> --severity soft --rule {rule} --kind <kind>
 """
 
 [[messages]]
 id = "split-rust-library-hard"
 text = """
 Must split before more surface area lands here: move cohesive behavior into sibling modules along the crate's existing seams. Do not add a layer of indirection or move code somewhere it does not belong to get under the limit.
-If you cannot see a split that keeps the module boundaries honest, stop and ask a human. A human-reviewed exception is the only other way through:
-fissile exception add <path> --severity hard --rule {rule}
+If you cannot see a split that keeps the module boundaries honest, stop and ask a human. A human-reviewed exception is the only other way through, and its reason names the constraint that makes splitting illegal (--kind structural) or the seam that is missing and what must exist first (--kind deferred):
+fissile exception add <path> --severity hard --rule {rule} --kind <kind>
 """
 
 [[messages]]
@@ -68,8 +68,8 @@ Keep benchmark setup and measured cases compact so a performance change stays re
 id = "split-spec-soft"
 text = """
 Should split, next time you edit one of these declarations: keep the declaration focused and move secondary detail into a narrower spec the parent cites. Split at a real section boundary — a citation that stops resolving costs more than the extra lines.
-If the declaration has to be read whole, record it instead — with a written reason and a revisit trigger:
-fissile exception add <path> --severity soft --rule {rule}
+If the declaration has to be read whole, record it instead — naming what makes it indivisible (--kind structural), or the child declaration that does not exist yet (--kind deferred, --until naming what retires it):
+fissile exception add <path> --severity soft --rule {rule} --kind <kind>
 """
 
 [[messages]]

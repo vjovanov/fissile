@@ -5,7 +5,7 @@
   "description": "`fissile audit --format json` (FS-004-check-audit.2): standing findings plus optional inventory sections. `top`, `stale`, and `coverage` appear only when their flags are passed.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["findings", "silenced"],
+  "required": ["findings", "silenced", "exceptions"],
   "properties": {
     "findings": {
       "type": "array",
@@ -16,6 +16,16 @@
       "type": "array",
       "description": "Overflows accepted by an exception, carried for attribution (FS-003-exceptions.5).",
       "items": { "$ref": "finding.schema.json" }
+    },
+    "exceptions": {
+      "type": "object",
+      "description": "Registry entries per kind across both registries (FS-004-check-audit.2): accepted permanently versus carrying debt. Always present, including all-zero.",
+      "additionalProperties": false,
+      "required": ["structural", "deferred"],
+      "properties": {
+        "structural": { "type": "integer", "minimum": 0 },
+        "deferred": { "type": "integer", "minimum": 0 }
+      }
     },
     "top": {
       "type": "array",

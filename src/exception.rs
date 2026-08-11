@@ -6,7 +6,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::cli::{self, CommandError, Loaded};
-use crate::exceptions::{Exception, MatchKind, Registries};
+use crate::exceptions::{Exception, INDEFINITE, Kind, MatchKind, Registries, is_indefinite};
 use crate::{Glob, Rule, Severity, Unit, scan};
 
 /// Inputs to `exception add`.
@@ -17,8 +17,13 @@ pub struct AddOptions {
     pub path: String,
     pub severity: Severity,
     pub rules: Vec<String>,
+    /// What the entry claims, and therefore what `reason` must establish
+    /// (§FS-005-exception-add.1).
+    pub kind: Kind,
     pub reason: String,
-    pub until: String,
+    /// Retirement condition. `None` is legal only for [`Kind::Structural`],
+    /// which defaults it to `indefinite` (§FS-005-exception-add.1).
+    pub until: Option<String>,
     pub match_kind: MatchKind,
     pub id: Option<String>,
     pub title: Option<String>,
@@ -30,6 +35,7 @@ pub struct AddOptions {
     pub dry_run: bool,
 }
 
+#[derive(Clone, Debug)]
 pub struct Run {
     pub output: String,
 }
@@ -42,6 +48,7 @@ pub fn run(options: &AddOptions) -> Result<Run, CommandError> {
     };
 
     validate_match(&options.match_kind, &path)?;
+    let until = resolve_until(options)?;
     let rules = resolve_rules(&loaded, &options.rules)?;
     let unit = rules[0].budget.unit;
     let max = resolve_max(options, &loaded, &path, unit, rules[0])?;
@@ -49,7 +56,7 @@ pub fn run(options: &AddOptions) -> Result<Run, CommandError> {
     let id = resolve_id(options, &loaded)?;
     check_conflict(&loaded, options, &path, unit)?;
 
-    let entry = render_entry(options, &path, &id, unit, max);
+    let entry = render_entry(options, &path, &id, &until, unit, max);
     let registry_rel = match options.severity {
         Severity::Soft => loaded.soft_registry.clone(),
         Severity::Hard => loaded.hard_registry.clone(),
@@ -88,6 +95,31 @@ fn validate_match(match_kind: &MatchKind, path: &str) -> Result<(), CommandError
             "<path> contains a glob metacharacter; pass --match glob".to_owned(),
         )),
         _ => Ok(()),
+    }
+}
+
+/// Reconcile `--until` with `--kind` (§FS-005-exception-add.1): a structural
+/// entry never expires, a deferred one must name what retires it. Each error
+/// offers the other kind, usually the real correction.
+fn resolve_until(options: &AddOptions) -> Result<String, CommandError> {
+    let until = options.until.as_deref().map(str::trim);
+    match (options.kind, until) {
+        (Kind::Structural, None) => Ok(INDEFINITE.to_owned()),
+        (Kind::Structural, Some(until)) if is_indefinite(until) => Ok(until.to_owned()),
+        (Kind::Structural, Some(_)) => Err(CommandError::Usage(format!(
+            "--kind structural never expires, so --until must be \"{INDEFINITE}\" or omitted; \
+             if the work you named would retire it, this is --kind deferred"
+        ))),
+        (Kind::Deferred, None) | (Kind::Deferred, Some("")) => Err(CommandError::Usage(
+            "--kind deferred requires --until naming the condition that retires the entry; \
+             use --kind structural if an architectural constraint makes the split illegal"
+                .to_owned(),
+        )),
+        (Kind::Deferred, Some(until)) if is_indefinite(until) => Err(CommandError::Usage(format!(
+            "--kind deferred cannot be --until \"{INDEFINITE}\": name what retires the entry, \
+             or use --kind structural if splitting the file is genuinely illegal"
+        ))),
+        (Kind::Deferred, Some(until)) => Ok(until.to_owned()),
     }
 }
 
@@ -303,7 +335,14 @@ fn validate_combined(
     Ok(())
 }
 
-fn render_entry(options: &AddOptions, path: &str, id: &str, unit: Unit, max: u64) -> String {
+fn render_entry(
+    options: &AddOptions,
+    path: &str,
+    id: &str,
+    until: &str,
+    unit: Unit,
+    max: u64,
+) -> String {
     let mut lines = vec!["[[exceptions]]".to_owned(), format!("id = {}", quote(id))];
     if let Some(title) = &options.title {
         lines.push(format!("title = {}", quote(title)));
@@ -311,11 +350,15 @@ fn render_entry(options: &AddOptions, path: &str, id: &str, unit: Unit, max: u64
     lines.push(format!("path = {}", quote(path)));
     lines.push(format!("match = {}", quote(match_str(&options.match_kind))));
     lines.push(format!("rules = [{}]", rule_list(&options.rules)));
+    // `kind` and `until` are always written, even when `until` took the
+    // structural default, so the entry never depends on a reader knowing the
+    // command's defaults (§FS-005-exception-add.3).
+    lines.push(format!("kind = {}", quote(&options.kind.to_string())));
     lines.push(format!(
         "max_accepted = {{ value = {max}, unit = {} }}",
         quote(&unit.to_string())
     ));
-    lines.push(format!("until = {}", quote(&options.until)));
+    lines.push(format!("until = {}", quote(until)));
     if let Some(owner) = &options.owner {
         lines.push(format!("owner = {}", quote(owner)));
     }

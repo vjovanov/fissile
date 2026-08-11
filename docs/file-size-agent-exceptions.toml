@@ -4,8 +4,9 @@ id = "EX-001-release-yml"
 path = ".github/workflows/release.yml"
 match = "exact"
 rules = ["tooling"]
+kind = "structural"
 max_accepted = { value = 303, unit = "lines" }
-until = "revisit when the job graph itself changes"
+until = "indefinite"
 reason = """
-GitHub requires the release job graph in one workflow file; the extractable shell already lives in scripts/release/ and the hard budget still caps growth
+GitHub resolves a workflow's job graph inside one file — `needs:` cannot name a job in another workflow — so splitting this one would break the release ordering it exists to express. What is extractable already lives in scripts/release/ and the jobs call it; what remains is the graph, and the hard budget still caps its growth.
 """

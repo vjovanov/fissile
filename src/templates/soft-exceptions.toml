@@ -4,6 +4,16 @@
 # accepted as oversized, each with a written reason and a maximum accepted size
 # so the warning returns if the file grows past it. Add entries with
 # `fissile exception add --severity soft` (§FS-005-exception-add).
+#
+# `kind` says which claim the entry makes, and therefore what `reason` has to
+# establish (§FS-003-exceptions.2.1):
+#
+#   structural  splitting this file is illegal — name the constraint and what
+#               would break. Nothing retires it, so `until` is "indefinite".
+#   deferred    no constraint; a boundary is missing — name it and what has to
+#               exist first. `until` names the condition that retires the entry.
+#
+# Neither is answered by describing what the file contains.
 
 fissile_exceptions_version = 1
 
@@ -12,9 +22,10 @@ fissile_exceptions_version = 1
 # path = "path/to/large-file"
 # match = "exact"               # exact | glob
 # rules = ["*"]                 # rule ids this applies to, or ["*"] for all
+# kind = "deferred"             # structural | deferred
 # max_accepted = { value = 0, unit = "lines" }
-# until = "indefinite"
+# until = "the condition that retires this entry"
 # reason = """
-# Why this file is accepted as oversized, and what would let the exception be
-# retired.
+# Missing boundary: <what does not exist yet>, and what has to exist before the
+# split is possible.
 # """

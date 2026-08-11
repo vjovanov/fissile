@@ -25,3 +25,13 @@ The harness drives the real `fissile` binary, so every documented behavior under
 - §E2E-006-audit-inventory — audit reports overflows plus optional inventory sections.
 - §E2E-007-init-installs-hook — init bootstraps config, registries, agent block, and the hook.
 - §E2E-008-exception-add — exception add appends a structured registry entry.
+- §E2E-009-check-token-rule — a non-default config with a token-unit rule passes.
+- §E2E-010-cli-version — `--version` prints one stable line.
+- §E2E-011-check-unreadable-continues — one unmeasurable path never hides the rest.
+- §E2E-012-check-binary-lines — non-UTF-8 content still measures lines.
+- §E2E-013-init-no-git — init without a repository stays honest about the hook.
+- §E2E-014-init-names-entrypoint — the next block names the entrypoint it wrote.
+- §E2E-015-check-groups-findings — findings group under one copy of their guidance.
+- §E2E-016-init-dry-run-explains — a dry run explains the workflow without writing.
+- §E2E-017-exception-kind — a deferred exception cannot be open-ended.
+- §E2E-018-audit-exception-kinds — audit separates accepted-permanently from carrying-debt.

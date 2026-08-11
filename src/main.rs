@@ -10,7 +10,7 @@ use fissile::audit::{self, AuditOptions};
 use fissile::check::{self, CheckOptions};
 use fissile::cli::Format;
 use fissile::exception::{self, AddOptions};
-use fissile::exceptions::MatchKind;
+use fissile::exceptions::{Kind, MatchKind};
 use fissile::init::{self, AgentTargets, HookMode, InitOptions};
 use fissile::{Severity, Unit};
 
@@ -59,14 +59,20 @@ examples:
 
 const EXCEPTION_USAGE: &str = "\
 usage: fissile exception add <path> --severity soft|hard --rule <id>
-                 --reason <text> --until <text> [--config <path>]
-                 [--match exact|glob] [--id <id>] [--title <text>]
-                 [--owner <text>] [--issue <text>] [--replaces <id>]
-                 [--max <N> --unit bytes|lines|tokens] [--dry-run]
+                 --kind structural|deferred --reason <text> [--until <text>]
+                 [--config <path>] [--match exact|glob] [--id <id>]
+                 [--title <text>] [--owner <text>] [--issue <text>]
+                 [--replaces <id>] [--max <N> --unit bytes|lines|tokens]
+                 [--dry-run]
+
+--kind says what --reason has to establish. Describing the file does not:
+  structural  splitting is illegal — name the constraint. Never expires.
+  deferred    a boundary is missing — name it and what must exist first, and
+              give --until the condition that retires the entry.
 
 examples:
-  fissile exception add src/big.rs --severity hard --rule source --reason \"accepted debt\" --until \"split tracked\"
-  fissile exception add \"tests/fixtures/**\" --match glob --severity soft --rule fixtures --max 300000 --unit bytes --reason \"fixture corpus\" --until indefinite";
+  fissile exception add src/big.rs --severity hard --rule source --kind deferred --reason \"...\" --until \"the parser module lands\"
+  fissile exception add \"tests/fixtures/**\" --match glob --severity soft --rule fixtures --max 300000 --unit bytes --kind structural --reason \"...\"";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -322,6 +328,7 @@ fn run_exception_add(args: &[String]) -> ExitCode {
             }
             "--rule" => value(&mut iter, "--rule").map(|v| builder.rules.push(v)),
             "--severity" => value(&mut iter, "--severity").and_then(|v| builder.set_severity(&v)),
+            "--kind" => value(&mut iter, "--kind").and_then(|v| builder.set_kind(&v)),
             "--reason" => value(&mut iter, "--reason").map(|v| builder.reason = Some(v)),
             "--until" => value(&mut iter, "--until").map(|v| builder.until = Some(v)),
             "--config" => value(&mut iter, "--config").map(|v| builder.config = Some(v)),
@@ -367,6 +374,7 @@ fn run_exception_add(args: &[String]) -> ExitCode {
 struct AddBuilder {
     path: Option<String>,
     severity: Option<Severity>,
+    kind: Option<Kind>,
     rules: Vec<String>,
     reason: Option<String>,
     until: Option<String>,
@@ -400,6 +408,15 @@ impl AddBuilder {
         Ok(())
     }
 
+    fn set_kind(&mut self, raw: &str) -> Result<(), String> {
+        self.kind = Some(match raw {
+            "structural" => Kind::Structural,
+            "deferred" => Kind::Deferred,
+            other => return Err(format!("unknown kind `{other}`")),
+        });
+        Ok(())
+    }
+
     fn set_match(&mut self, raw: &str) -> Result<(), String> {
         self.match_kind = Some(match raw {
             "exact" => MatchKind::Exact,
@@ -425,9 +442,16 @@ impl AddBuilder {
             config_path: self.config.map(PathBuf::from),
             path: self.path.ok_or("a <path> is required")?,
             severity: self.severity.ok_or("--severity is required")?,
+            // Required rather than defaulted: which of the two claims the entry
+            // makes is the author's call, and the error is the moment to say
+            // what each one means (§DF-004-exception-kind.1).
+            kind: self.kind.ok_or(
+                "--kind is required: structural = an architectural constraint makes the split \
+                 illegal; deferred = the boundary is simply missing and someone has to build it",
+            )?,
             rules: self.rules,
             reason: self.reason.ok_or("--reason is required")?,
-            until: self.until.ok_or("--until is required")?,
+            until: self.until,
             match_kind: self.match_kind.unwrap_or(MatchKind::Exact),
             id: self.id,
             title: self.title,

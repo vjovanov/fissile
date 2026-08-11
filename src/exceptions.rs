@@ -21,6 +21,60 @@ pub enum MatchKind {
     Glob,
 }
 
+/// The `until` value that means "nothing retires this entry"
+/// (§FS-003-exceptions.2.1).
+pub const INDEFINITE: &str = "indefinite";
+
+/// Whether an `until` value says the entry never expires. Trimmed and
+/// case-insensitive, so `Indefinite` is the same value (§FS-003-exceptions.2.1).
+pub fn is_indefinite(until: &str) -> bool {
+    until.trim().eq_ignore_ascii_case(INDEFINITE)
+}
+
+/// Which of two questions an entry answers (§FS-003-exceptions.2.1,
+/// §DF-004-exception-kind). The kind fixes what `reason` must establish and what
+/// `until` may say; it is not a severity and not a priority.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Kind {
+    /// An architectural constraint makes the split illegal. Never expires.
+    Structural,
+    /// No constraint; a boundary is missing. `until` names what retires it.
+    /// The default for an entry written before the field existed.
+    #[default]
+    Deferred,
+}
+
+impl Kind {
+    fn as_str(self) -> &'static str {
+        match self {
+            Kind::Structural => "structural",
+            Kind::Deferred => "deferred",
+        }
+    }
+}
+
+impl fmt::Display for Kind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// How many entries of each kind both registries hold (§FS-004-check-audit.2):
+/// accepted permanently versus carrying debt someone has to retire.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct KindCounts {
+    pub structural: usize,
+    pub deferred: usize,
+}
+
+impl KindCounts {
+    /// Whether the registries hold nothing to inventory.
+    pub fn is_empty(self) -> bool {
+        self.structural == 0 && self.deferred == 0
+    }
+}
+
 /// `max_accepted = { value, unit }` — the ceiling this entry accepts.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -48,6 +102,11 @@ struct RawException {
     max_accepted: MaxAccepted,
     until: String,
     reason: String,
+    /// Absent in registries written before the field existed; read as
+    /// `Deferred`, and the `until` agreement is not checked
+    /// (§FS-003-exceptions.2.1).
+    #[serde(default)]
+    kind: Option<Kind>,
     #[serde(default)]
     title: Option<String>,
     #[serde(default)]
@@ -69,6 +128,9 @@ pub struct Exception {
     pub max_value: u64,
     pub max_unit: Unit,
     pub until: String,
+    /// Resolved kind: an undeclared one reads as [`Kind::Deferred`]
+    /// (§FS-003-exceptions.2.1).
+    pub kind: Kind,
     pub reason: String,
     pub title: Option<String>,
     pub owner: Option<String>,
@@ -237,6 +299,19 @@ impl Registries {
         })
     }
 
+    /// Entries per kind across both registries (§FS-004-check-audit.2): how many
+    /// files are accepted permanently, and how many carry debt to retire.
+    pub fn kind_counts(&self) -> KindCounts {
+        let mut counts = KindCounts::default();
+        for entry in self.all() {
+            match entry.kind {
+                Kind::Structural => counts.structural += 1,
+                Kind::Deferred => counts.deferred += 1,
+            }
+        }
+        counts
+    }
+
     /// Entries whose path/glob matches none of `scanned` (§FS-004-check-audit.2).
     pub fn stale<'a>(&'a self, scanned: &[String]) -> Vec<&'a Exception> {
         self.all()
@@ -272,11 +347,21 @@ fn build_exception(raw: RawException, severity: Severity) -> Result<Exception, E
     if raw.reason.trim().is_empty() {
         return Err(ExceptionError::EmptyReason { id: raw.id });
     }
+    if raw.until.trim().is_empty() {
+        return Err(ExceptionError::EmptyUntil { id: raw.id });
+    }
     if raw.max_accepted.value == 0 {
         return Err(ExceptionError::NonPositiveMax { id: raw.id });
     }
     if raw.rules.is_empty() {
         return Err(ExceptionError::NoRules { id: raw.id });
+    }
+    // Checked only when the entry declares a kind, so a registry written before
+    // the field existed keeps loading (§FS-003-exceptions.2.1).
+    if let Some(kind) = raw.kind
+        && (kind == Kind::Structural) != is_indefinite(&raw.until)
+    {
+        return Err(ExceptionError::KindUntilMismatch { id: raw.id, kind });
     }
 
     let matcher = match raw.match_kind {
@@ -293,6 +378,7 @@ fn build_exception(raw: RawException, severity: Severity) -> Result<Exception, E
         max_value: raw.max_accepted.value,
         max_unit: raw.max_accepted.unit.into(),
         until: raw.until,
+        kind: raw.kind.unwrap_or_default(),
         reason: raw.reason,
         title: raw.title,
         owner: raw.owner,
@@ -315,6 +401,13 @@ pub enum ExceptionError {
     },
     EmptyReason {
         id: String,
+    },
+    EmptyUntil {
+        id: String,
+    },
+    KindUntilMismatch {
+        id: String,
+        kind: Kind,
     },
     NonPositiveMax {
         id: String,
@@ -364,6 +457,26 @@ impl fmt::Display for ExceptionError {
             ExceptionError::EmptyReason { id } => {
                 write!(f, "exception {id} has an empty reason")
             }
+            ExceptionError::EmptyUntil { id } => {
+                write!(f, "exception {id} has an empty until")
+            }
+            // The message names the distinction rather than the rule it broke:
+            // the fix is usually the other kind, not a different `until`
+            // (§DF-004-exception-kind.1).
+            ExceptionError::KindUntilMismatch {
+                id,
+                kind: Kind::Structural,
+            } => write!(
+                f,
+                "exception {id} is structural, so until must be \"{INDEFINITE}\"; if something would retire it, no constraint makes the split illegal and the entry is deferred"
+            ),
+            ExceptionError::KindUntilMismatch {
+                id,
+                kind: Kind::Deferred,
+            } => write!(
+                f,
+                "exception {id} is deferred, so until must name what retires it, not \"{INDEFINITE}\"; use kind = \"structural\" if splitting the file is genuinely illegal"
+            ),
             ExceptionError::NonPositiveMax { id } => {
                 write!(
                     f,

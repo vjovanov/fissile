@@ -98,6 +98,63 @@ reason = "   "
     assert!(matches!(error, ExceptionError::EmptyReason { .. }));
 }
 
+/// §FS-003-exceptions.2.1: an entry written before the field existed still
+/// loads, and reads as deferred — the reading that keeps `until` meaningful and
+/// asserts no constraint the author never claimed.
+#[test]
+fn undeclared_kind_reads_as_deferred() {
+    let registries = Registries::load(Some(SOFT), None).expect("loads");
+    assert_eq!(registries.soft[0].kind, Kind::Deferred);
+    // The kind/until agreement is not applied to it, so `until = "indefinite"`
+    // in a pre-kind registry is not retroactively an error.
+    assert_eq!(registries.soft[0].until, "indefinite");
+}
+
+/// §FS-003-exceptions.2.1: a declared kind must agree with `until`. Structural
+/// never expires; deferred has to name what retires it.
+#[test]
+fn rejects_kind_that_disagrees_with_until() {
+    let structural = SOFT.replace(
+        "until = \"indefinite\"",
+        "kind = \"structural\"\nuntil = \"the generator lands\"",
+    );
+    let error = Registries::load(Some(&structural), None).expect_err("dated structural");
+    assert!(matches!(
+        error,
+        ExceptionError::KindUntilMismatch {
+            kind: Kind::Structural,
+            ..
+        }
+    ));
+
+    let deferred = SOFT.replace("until =", "kind = \"deferred\"\nuntil =");
+    let error = Registries::load(Some(&deferred), None).expect_err("open-ended deferred");
+    assert!(matches!(
+        error,
+        ExceptionError::KindUntilMismatch {
+            kind: Kind::Deferred,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn accepts_agreeing_kind_and_counts_by_kind() {
+    let toml = SOFT.replace("until =", "kind = \"structural\"\nuntil =");
+    let registries = Registries::load(Some(&toml), None).expect("loads");
+    assert_eq!(registries.soft[0].kind, Kind::Structural);
+    let counts = registries.kind_counts();
+    assert_eq!(counts.structural, 1);
+    assert_eq!(counts.deferred, 0);
+}
+
+#[test]
+fn rejects_empty_until() {
+    let toml = SOFT.replace("until = \"indefinite\"", "until = \"  \"");
+    let error = Registries::load(Some(&toml), None).expect_err("empty until");
+    assert!(matches!(error, ExceptionError::EmptyUntil { .. }));
+}
+
 #[test]
 fn rejects_duplicate_ids_across_registries() {
     let dup = SOFT.replace("tests/fixtures/large.json", "tests/fixtures/other.json");

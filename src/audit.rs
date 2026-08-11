@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 use crate::cli::{self, CommandError, Format, Loaded};
 use crate::config::Stale;
+use crate::exceptions::KindCounts;
 use crate::json::Json;
 use crate::report::{self, Outcome};
 use crate::{FileMeasurement, Selector, Unit, scan};
@@ -35,6 +36,16 @@ const UNITS: [Unit; 3] = [Unit::Bytes, Unit::Lines, Unit::Tokens];
 /// The largest files per unit: one ranked `(value, path)` list per measurement
 /// unit (§FS-004-check-audit.2).
 type TopFiles = Vec<(Unit, Vec<(u64, String)>)>;
+
+/// What `audit` reports beyond the standing findings (§FS-004-check-audit.2).
+/// A `None` section was not requested; `kinds` is default-on and carries its own
+/// emptiness.
+struct Inventory {
+    top: Option<TopFiles>,
+    stale: Option<Vec<(String, String)>>,
+    coverage: Option<Coverage>,
+    kinds: KindCounts,
+}
 
 pub fn run(options: &AuditOptions) -> Result<Run, CommandError> {
     let loaded = cli::load(&options.root, options.config_path.as_deref())?;
@@ -79,25 +90,23 @@ pub fn run(options: &AuditOptions) -> Result<Run, CommandError> {
     // `ignore` suppresses the report entirely (§FS-003-exceptions.4).
     let stale = stale.filter(|_| loaded.config.exceptions.stale != Stale::Ignore);
 
-    let top = options.top.map(|n| top_files(&measurements, n));
-    let coverage = options
-        .rule_coverage
-        .then(|| coverage(&loaded, &measurements));
+    let inventory = Inventory {
+        top: options.top.map(|n| top_files(&measurements, n)),
+        stale,
+        coverage: options
+            .rule_coverage
+            .then(|| coverage(&loaded, &measurements)),
+        // Default-on, no flag: the two numbers are what an inventory is for
+        // (§FS-004-check-audit.2).
+        kinds: loaded.registries.kind_counts(),
+    };
 
     let output = match format {
         Format::Text => {
             let color = cli::use_color(loaded.config.output.color, options.no_color, format);
-            render_text(
-                &loaded,
-                &outcomes,
-                top.as_ref(),
-                stale.as_ref(),
-                coverage.as_ref(),
-                color,
-                &errors,
-            )
+            render_text(&loaded, &outcomes, &inventory, color, &errors)
         }
-        Format::Json => render_json(&outcomes, top.as_ref(), stale.as_ref(), coverage.as_ref()),
+        Format::Json => render_json(&outcomes, &inventory),
     };
     Ok(Run {
         output,
@@ -201,9 +210,7 @@ fn coverage(loaded: &Loaded, measurements: &[FileMeasurement]) -> Coverage {
 fn render_text(
     loaded: &Loaded,
     outcomes: &[Outcome],
-    top: Option<&TopFiles>,
-    stale: Option<&Vec<(String, String)>>,
-    coverage: Option<&Coverage>,
+    inventory: &Inventory,
     color: bool,
     errors: &[String],
 ) -> String {
@@ -240,7 +247,17 @@ fn render_text(
         sections.push(silenced.join("\n"));
     }
 
-    if let Some(top) = top {
+    // Omitted when there is nothing to inventory: a repository with no
+    // exceptions pays no lines for the section (§FS-004-check-audit.2).
+    let kinds = inventory.kinds;
+    if !kinds.is_empty() {
+        sections.push(format!(
+            "exceptions:\n  structural (never expires): {}\n  deferred (carrying debt): {}",
+            kinds.structural, kinds.deferred
+        ));
+    }
+
+    if let Some(top) = &inventory.top {
         for (unit, ranked) in top {
             let mut lines = vec![format!("top {unit}:")];
             for (value, path) in ranked {
@@ -250,7 +267,7 @@ fn render_text(
         }
     }
 
-    if let Some(stale) = stale {
+    if let Some(stale) = &inventory.stale {
         let mut lines = vec!["stale exceptions:".to_owned()];
         if stale.is_empty() {
             lines.push("  none".to_owned());
@@ -261,7 +278,7 @@ fn render_text(
         sections.push(lines.join("\n"));
     }
 
-    if let Some(coverage) = coverage {
+    if let Some(coverage) = &inventory.coverage {
         sections.push(render_coverage_text(coverage));
     }
 
@@ -293,12 +310,7 @@ fn join_or_none(items: &[String]) -> String {
     }
 }
 
-fn render_json(
-    outcomes: &[Outcome],
-    top: Option<&TopFiles>,
-    stale: Option<&Vec<(String, String)>>,
-    coverage: Option<&Coverage>,
-) -> String {
+fn render_json(outcomes: &[Outcome], inventory: &Inventory) -> String {
     let findings: Vec<Json> = outcomes
         .iter()
         .filter(|outcome| outcome.is_reported())
@@ -310,12 +322,22 @@ fn render_json(
         .map(report::overflow_json)
         .collect();
 
+    // Unconditional, unlike the text section: a consumer should not have to tell
+    // "no exceptions" from "this build does not report them"
+    // (§FS-004-check-audit.2).
     let mut fields = vec![
         ("findings", Json::Array(findings)),
         ("silenced", Json::Array(silenced)),
+        (
+            "exceptions",
+            Json::Object(vec![
+                ("structural", Json::UInt(inventory.kinds.structural as u64)),
+                ("deferred", Json::UInt(inventory.kinds.deferred as u64)),
+            ]),
+        ),
     ];
 
-    if let Some(top) = top {
+    if let Some(top) = &inventory.top {
         let groups: Vec<Json> = top
             .iter()
             .map(|(unit, ranked)| {
@@ -337,7 +359,7 @@ fn render_json(
         fields.push(("top", Json::Array(groups)));
     }
 
-    if let Some(stale) = stale {
+    if let Some(stale) = &inventory.stale {
         let entries = stale
             .iter()
             .map(|(id, path)| {
@@ -350,7 +372,7 @@ fn render_json(
         fields.push(("stale", Json::Array(entries)));
     }
 
-    if let Some(coverage) = coverage {
+    if let Some(coverage) = &inventory.coverage {
         fields.push((
             "coverage",
             Json::Object(vec![

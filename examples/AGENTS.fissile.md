@@ -27,13 +27,22 @@ Never damage the design to fit a budget — that is what the registries are for.
 
 Soft-limit exceptions are agent-facing warning debt. If a file is intentionally
 above the soft limit and no split leaves the code better, run
-`fissile exception add <path> --severity soft --rule <id> --reason <text> --until <text>`.
+`fissile exception add <path> --severity soft --rule <id> --kind <kind> --reason <text> [--until <text>]`.
 
 Hard-limit overflows are not bypassed with flags or source comments. If you
 cannot see a split that keeps the architecture intact, ask a human: a
 human-reviewed
-`fissile exception add <path> --severity hard --rule <id> --reason <text> --until <text>`
+`fissile exception add <path> --severity hard --rule <id> --kind <kind> --reason <text> [--until <text>]`
 is the only other way past the gate.
+
+`--kind` decides what `--reason` has to establish, and a description of the
+file's contents answers neither question:
+
+- `structural` — an architectural constraint makes the split illegal. Name the
+  constraint and what would break. The entry never expires.
+- `deferred` — no such constraint; a boundary is missing. Name it and what has
+  to exist before the split is possible, and give `--until` the condition that
+  retires the entry.
 
 Use `fissile audit --stale-exceptions` before removing or moving large files so
 dead exceptions do not stay in the registries.
