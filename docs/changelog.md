@@ -30,7 +30,17 @@ with a migration note.
 
 ## Unreleased
 
-No entries yet.
+### Fixed
+
+- §FS-001-config.2: `respect_gitignore` now prunes the walk instead of
+  filtering its result, so an ignored directory is never descended into.
+  `audit` previously traversed ignored subtrees in full and discarded them
+  afterwards, which only stayed cheap when the subtree also matched an
+  `[scan].exclude` glob. On a repository with a gitignored 850 MB
+  `scratchpad/`, `audit` went from over two minutes to 0.04 s; the emitted
+  findings are byte-identical, since the pruned contents were discarded either
+  way. `git check-ignore` is now batched one call per tree level rather than
+  one per path, so invocations track depth, not directory count. Resolves #1.
 
 ## 2. [0.1.0] — 2026-08-11
 

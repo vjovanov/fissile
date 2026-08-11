@@ -63,6 +63,15 @@ Pre-commit checks receive their file set from git and do not use `include`, but
 they still apply `exclude` so generated assets and lockfiles stay out of the
 budget system.
 
+Both `exclude` and `respect_gitignore` prune the walk rather than filter its
+result: an excluded or ignored directory is never descended into. This is a
+cost guarantee, not only a selection rule — a repository whose ignored build or
+scratch directory dwarfs its source (a `target/`, `.venv/`, or `scratchpad/` of
+several gigabytes is ordinary) must not pay to traverse it, or the whole-repo
+budget in §GOAL-001-fast-feedback.1 is unreachable in exactly the repositories
+that most need it. Pruning never changes which findings are emitted: the
+contents of a pruned directory would have been discarded anyway.
+
 ## 3. Rules
 
 Rules are declared as `[[rules]]` entries. Each rule has:
