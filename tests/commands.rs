@@ -212,6 +212,45 @@ fn unmigrated_registry_is_refused_with_both_edits_named() {
     }
 }
 
+/// §FS-003-exceptions.3: a `structural` hard entry silences the soft finding too.
+/// Splitting the file is illegal, so the warning names work nobody may do, and no
+/// amount of work can clear it — the whole file goes quiet on one entry.
+#[test]
+fn structural_hard_exception_also_silences_soft() {
+    let root = temp_repo();
+    let mut options = add_options(&root, Kind::Structural, None);
+    options.reason = "a generated table the snapshot test asserts byte-identical".to_owned();
+    exception::run(&options).expect("exception add runs");
+
+    let run = check::run(&check_options(&root)).expect("check runs");
+    assert!(!run.failed, "hard overflow is accepted");
+    assert_eq!(
+        run.output, "ok",
+        "a structural entry leaves nothing to report"
+    );
+
+    // Audit still attributes the silenced hard overflow to the entry that
+    // accepted it, and reports no soft finding beside it (§FS-003-exceptions.5).
+    let audited = audit::run(&AuditOptions {
+        root,
+        config_path: None,
+        format: Some(Format::Text),
+        no_color: false,
+        top: None,
+        stale_exceptions: false,
+        rule_coverage: false,
+    })
+    .expect("audit runs");
+    // Attribution names no id since version 2 removed it (§DF-005-exception-identity).
+    assert!(
+        audited
+            .output
+            .contains("src/big.rs: hard exception (accepted up to")
+    );
+    assert!(!audited.output.contains("soft: "), "{}", audited.output);
+    assert!(audited.output.contains("structural (never expires): 1"));
+}
+
 #[test]
 fn check_json_emits_records_or_empty_array() {
     let root = temp_repo();

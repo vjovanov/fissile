@@ -1,8 +1,108 @@
-//! Unit tests for grouped text rendering (§FS-004-check-audit.1). Kept in a
-//! sibling file so `report.rs` stays well under its own line budget.
+//! Unit tests for evaluation against the registries (§FS-003-exceptions.3) and
+//! for grouped text rendering (§FS-004-check-audit.1). Kept in a sibling file so
+//! `report.rs` stays well under its own line budget.
 
 use super::*;
+use crate::config::Config;
+use crate::exceptions::RegistrySource;
 use crate::{RenderedMessage, Unit};
+
+const HARD_REGISTRY: &str = "docs/file-size-human-exceptions.toml";
+
+const CONFIG: &str = r#"
+fissile_config_version = 1
+[[messages]]
+id = "m"
+text = "Split it."
+[[rules]]
+id = "rust"
+include = ["src/**/*.rs"]
+unit = "lines"
+soft = 100
+hard = 200
+message = "m"
+"#;
+
+/// A hard registry accepting `src/big.rs` up to 250 lines, with `kind` written
+/// verbatim so a pre-`kind` entry can be spelled as the empty string.
+fn hard_registry(kind: &str, until: &str) -> String {
+    format!(
+        r#"
+fissile_exceptions_version = 2
+[[exceptions]]
+path = "src/big.rs"
+match = "exact"
+rules = ["rust"]
+{kind}
+max_accepted = {{ value = 250, unit = "lines" }}
+until = "{until}"
+reason = "a reason"
+"#
+    )
+}
+
+/// Every outcome `evaluate_file` produced for a `lines`-long `src/big.rs`, as
+/// `(severity, is_reported)` in emission order.
+fn outcomes(registry: &str, lines: u64) -> Vec<(Severity, bool)> {
+    let checker = Config::parse(CONFIG).unwrap().to_checker().unwrap();
+    let registries =
+        Registries::load(None, Some(RegistrySource::new(HARD_REGISTRY, registry))).unwrap();
+    let file = FileMeasurement::new("src/big.rs", lines * 12).with_lines(lines);
+    evaluate_file(&checker, &registries, &file)
+        .unwrap()
+        .iter()
+        .map(|outcome| (outcome.overflow().severity, outcome.is_reported()))
+        .collect()
+}
+
+/// §FS-003-exceptions.3: a `deferred` hard entry accepts the blocking finding and
+/// leaves the soft one standing. An entry declaring no kind reads as deferred and
+/// behaves the same (§FS-003-exceptions.2.1).
+#[test]
+fn a_deferred_hard_exception_leaves_the_soft_finding_standing() {
+    let standing = vec![(Severity::Hard, false), (Severity::Soft, true)];
+    let until = "the case-builder module lands";
+    assert_eq!(
+        outcomes(&hard_registry("kind = \"deferred\"", until), 250),
+        standing
+    );
+    assert_eq!(outcomes(&hard_registry("", until), 250), standing);
+}
+
+/// §FS-003-exceptions.3: a `structural` hard entry silences the soft finding too.
+/// Splitting is illegal, so the warning can never be cleared by doing the work.
+#[test]
+fn a_structural_hard_exception_silences_the_soft_finding_too() {
+    assert_eq!(
+        outcomes(&hard_registry("kind = \"structural\"", "indefinite"), 250),
+        vec![(Severity::Hard, false)]
+    );
+}
+
+/// §FS-003-exceptions.3: the rule reaches only as far as a hard finding does. A
+/// file below the hard limit never consults the hard registry, so the soft
+/// warning stands and the soft registry is what accepts it.
+#[test]
+fn a_file_below_the_hard_limit_warns_despite_a_structural_hard_entry() {
+    let registry = hard_registry("kind = \"structural\"", "indefinite");
+    assert_eq!(outcomes(&registry, 150), vec![(Severity::Soft, true)]);
+}
+
+/// §GOAL-006-graded-limits.1: a *standing* hard finding suppresses the soft one
+/// whatever the registries say, so a file grown past its ceiling reports the hard
+/// overflow alone — the kind never reaches that path.
+#[test]
+fn a_hard_overflow_past_its_ceiling_still_suppresses_the_soft_finding() {
+    for (kind, until) in [
+        ("kind = \"structural\"", "indefinite"),
+        ("kind = \"deferred\"", "the case-builder module lands"),
+    ] {
+        assert_eq!(
+            outcomes(&hard_registry(kind, until), 300),
+            vec![(Severity::Hard, true)]
+        );
+    }
+}
 
 fn reported(path: &str, rule: &str, severity: Severity, actual: u64, text: &str) -> Outcome {
     Outcome::Reported(Overflow {

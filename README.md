@@ -198,7 +198,8 @@ Splitting today just moves private helpers behind a new file.
 ```
 
 The hard block is now silenced — but only up to `max_accepted`. Grow the file
-past it and the finding returns. The soft warning still nudges the agent.
+past it and the finding returns. The soft warning still nudges the agent, because
+this entry is `deferred`: there is a split to keep asking for.
 
 `--kind` is the field that keeps the registry honest, because a reason answers
 one of two questions and they are not the same question
@@ -213,6 +214,12 @@ Without the split, both collapse into "this file is large because …", which
 describes the file and claims nothing a reviewer can disagree with. `audit`
 counts the two separately, so *accepted permanently* and *carrying debt* never
 show up as one number.
+
+The kind also decides what a hard entry silences. A `structural` one silences the
+soft warning for the overflow it accepts as well: splitting is illegal, so the
+warning names work nobody may do and no amount of work can clear it. One entry
+makes a file over the hard limit quiet — no second entry in the soft registry
+repeating the same rationale (§FS-003-exceptions.3).
 
 ## Use as a library
 

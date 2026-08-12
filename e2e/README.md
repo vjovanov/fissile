@@ -21,7 +21,7 @@ The harness drives the real `fissile` binary, so every documented behavior under
 - §E2E-002-check-hard-blocks — a hard overflow fails the commit with a named fix.
 - §E2E-003-check-soft-warns — a soft overflow warns without blocking.
 - §E2E-004-check-json — the JSON surface is one flat record per finding.
-- §E2E-005-exception-silences-hard — a hard exception accepts the file; the soft warning survives.
+- §E2E-005-exception-silences-hard — a deferred hard exception accepts the file; the soft warning survives.
 - §E2E-006-audit-inventory — audit reports overflows plus optional inventory sections.
 - §E2E-007-init-installs-hook — init bootstraps config, registries, agent block, and the hook.
 - §E2E-008-exception-add — exception add appends a structured registry entry.
@@ -35,4 +35,5 @@ The harness drives the real `fissile` binary, so every documented behavior under
 - §E2E-016-init-dry-run-explains — a dry run explains the workflow without writing.
 - §E2E-017-exception-kind — a deferred exception cannot be open-ended.
 - §E2E-018-audit-exception-kinds — audit separates accepted-permanently from carrying-debt.
+- §E2E-019-structural-silences-soft — a structural hard exception silences the soft warning too.
 - §E2E-020-registry-version-2 — an unmigrated registry is refused with both edits named.
