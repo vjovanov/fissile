@@ -1,4 +1,4 @@
-//! Tests for exception registry parsing, validation, and matching (§FS-003).
+//! Tests for exception registry parsing, validation, and matching (§FS-003-exceptions).
 
 use super::*;
 use crate::config::Config;
