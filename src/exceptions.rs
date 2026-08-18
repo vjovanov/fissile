@@ -238,7 +238,7 @@ impl Registries {
     pub fn validate_against(&self, rules: &[Rule]) -> Result<(), ExceptionError> {
         for entry in self.all() {
             // Mixed-unit rule lists are rejected for explicit lists too: a single
-            // entry may only silence rules that share its unit (§FS-003.3).
+            // entry may only silence rules that share its unit (§FS-003-exceptions.3).
             for rule_id in &entry.rules {
                 if rule_id == "*" {
                     continue;

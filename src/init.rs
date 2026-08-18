@@ -507,7 +507,7 @@ mod tests {
 
     #[test]
     fn default_config_is_valid_and_fully_populated() {
-        // The generated config must parse and build a checker (§DF-002).
+        // The generated config must parse and build a checker (§DF-002-explicit-config).
         let config = Config::parse(DEFAULT_CONFIG).expect("default config parses");
         config
             .to_checker()
