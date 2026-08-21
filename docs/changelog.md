@@ -40,10 +40,10 @@ with a migration note.
   moves code *into*, whose headroom decides where the seam can go.
 - §FS-004-check-audit.1.2: a `check --staged` run that exits non-zero closes
   with a commit-gate epilogue naming what blocked it — a split and a reviewed
-  hard exception for an overflow, the registry for a dead entry — and in both
-  cases that `--no-verify` only moves the problem into the branch — and, when a
-  staged file could not be measured at all (§FS-004-check-audit.5), that nothing
-  above accounts for it. Every reason the run has to fail has an epilogue, and
+  hard exception for an overflow, the registry for a dead entry, and the path to
+  fix or unstage when a staged file could not be measured at all
+  (§FS-004-check-audit.5) — and in every case that `--no-verify` only moves the
+  problem into the branch. Every reason the run has to fail has an epilogue, and
   the two are decided together: a blocked commit whose output reads as advisory
   is the failure mode this closes.
   Only `--staged` prints it: a CI or manual run is not blocking anything a
