@@ -26,7 +26,7 @@ fn top_level_help_fits_one_screen() {
 
 #[test]
 fn subcommand_help_fits_one_screen_and_shows_examples() {
-    for command in ["init", "check", "audit", "exception"] {
+    for command in ["init", "check", "measure", "audit", "exception"] {
         let text = help(&[command, "--help"]);
         let lines = text.lines().count();
         assert!(
@@ -36,6 +36,25 @@ fn subcommand_help_fits_one_screen_and_shows_examples() {
         assert!(
             text.contains("examples:"),
             "fissile {command} --help should include compact examples"
+        );
+    }
+}
+
+/// §FS-006-cli.2: each `exception` subcommand carries its own one-screen usage,
+/// so the shared screen stays a dispatcher rather than growing two flag lists.
+#[test]
+fn exception_subcommand_help_fits_one_screen() {
+    for subcommand in ["add", "retune"] {
+        let text = help(&["exception", subcommand, "--help"]);
+        let lines = text.lines().count();
+        assert!(
+            lines <= MAX_HELP_LINES,
+            "fissile exception {subcommand} --help is {lines} lines, \
+             over the {MAX_HELP_LINES}-line budget"
+        );
+        assert!(
+            text.contains("examples:"),
+            "fissile exception {subcommand} --help should include compact examples"
         );
     }
 }

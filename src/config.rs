@@ -77,7 +77,8 @@ pub enum Color {
     Never,
 }
 
-/// `[exceptions]` — registry paths and stale handling (§FS-001-config.5).
+/// `[exceptions]` — registry paths, stale handling, and the ceiling step
+/// (§FS-001-config.5).
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Exceptions {
@@ -87,6 +88,44 @@ pub struct Exceptions {
     pub hard_registry: String,
     #[serde(default)]
     pub stale: Stale,
+    #[serde(default)]
+    pub bump: Bump,
+}
+
+/// `[exceptions.bump]` — the step a written ceiling is quantized to, per unit
+/// (§FS-001-config.5, §DF-006-quantized-ceilings). The same step bounds the slack
+/// before `audit` calls a ceiling loose (§FS-003-exceptions.7).
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct Bump {
+    #[serde(default = "default_bump_lines")]
+    pub lines: u64,
+    #[serde(default = "default_bump_bytes")]
+    pub bytes: u64,
+    #[serde(default = "default_bump_tokens")]
+    pub tokens: u64,
+}
+
+impl Bump {
+    /// The step for one unit. A step of `0` or `1` means no quantization: the
+    /// measurement is written exactly, and any slack at all reads as loose.
+    pub fn step(&self, unit: Unit) -> u64 {
+        match unit {
+            Unit::Bytes => self.bytes,
+            Unit::Lines => self.lines,
+            Unit::Tokens => self.tokens,
+        }
+    }
+}
+
+impl Default for Bump {
+    fn default() -> Self {
+        Self {
+            lines: default_bump_lines(),
+            bytes: default_bump_bytes(),
+            tokens: default_bump_tokens(),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
@@ -261,8 +300,24 @@ impl Default for Exceptions {
             soft_registry: default_soft_registry(),
             hard_registry: default_hard_registry(),
             stale: Stale::default(),
+            bump: Bump::default(),
         }
     }
+}
+
+/// One hundred lines is roughly a screen of code: coarse enough that an ordinary
+/// edit stays inside the ceiling it was granted, small enough that the number
+/// still reads as a limit (§DF-006-quantized-ceilings.1).
+fn default_bump_lines() -> u64 {
+    100
+}
+
+fn default_bump_bytes() -> u64 {
+    4096
+}
+
+fn default_bump_tokens() -> u64 {
+    1000
 }
 
 fn default_true() -> bool {
@@ -474,295 +529,5 @@ impl Error for ConfigError {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{Severity, measure_bytes};
-
-    const SAMPLE: &str = r#"
-fissile_config_version = 1
-
-[[messages]]
-id = "split-rust"
-text = "Split {path}."
-
-[[rules]]
-id = "rust"
-include = ["src/**/*.rs"]
-unit = "lines"
-soft = 200
-hard = 400
-count_blank_lines = false
-count_comment_lines = true
-message = "split-rust"
-"#;
-
-    #[test]
-    fn parses_defaults_when_tables_absent() {
-        let config = Config::parse(SAMPLE).expect("valid config");
-        assert!(config.scan.respect_gitignore);
-        assert_eq!(config.output.success, "ok");
-        assert_eq!(config.output.format, Format::Text);
-        assert_eq!(
-            config.exceptions.soft_registry,
-            "docs/file-size-agent-exceptions.toml"
-        );
-        assert_eq!(config.exceptions.stale, Stale::Warn);
-        assert!(!config.tokens.enabled);
-    }
-
-    #[test]
-    fn builds_a_working_checker() {
-        let config = Config::parse(SAMPLE).expect("valid config");
-        let checker = config.to_checker().expect("valid checker");
-        let file = crate::measure_text("src/lib.rs", &"line\n".repeat(450));
-        let overflows = checker.check(&file).expect("check succeeds");
-        assert_eq!(overflows.len(), 1);
-        assert_eq!(overflows[0].severity, Severity::Hard);
-        assert_eq!(overflows[0].rule_id, "rust");
-    }
-
-    /// §FS-001-config.3: a rule may carry different guidance per severity, and
-    /// the shared `message` stays the fallback for the severity it omits.
-    #[test]
-    fn severity_messages_override_the_shared_message() {
-        let config = Config::parse(
-            r#"
-fissile_config_version = 1
-
-[[messages]]
-id = "shared"
-text = "Split it."
-
-[[messages]]
-id = "must"
-text = """
-Must split.
-Ask a human when no safe split exists.
-"""
-
-[[rules]]
-id = "rust"
-include = ["src/**/*.rs"]
-unit = "lines"
-soft = 2
-hard = 4
-message = "shared"
-hard_message = "must"
-"#,
-        )
-        .expect("valid config");
-        let checker = config.to_checker().expect("valid checker");
-
-        let soft = checker
-            .check(&crate::measure_text("src/a.rs", "a\nb\n"))
-            .expect("check succeeds");
-        assert_eq!(soft[0].message.id, "shared");
-
-        let hard = checker
-            .check(&crate::measure_text("src/b.rs", "a\nb\nc\nd\n"))
-            .expect("check succeeds");
-        assert_eq!(hard[0].message.id, "must");
-        // The multi-line template is trimmed, so rendering starts at the text.
-        assert_eq!(
-            hard[0].message.text,
-            "Must split.\nAsk a human when no safe split exists."
-        );
-    }
-
-    /// §FS-001-config.3: a declared threshold with no guidance is a schema error,
-    /// not a silently empty message.
-    #[test]
-    fn rejects_a_threshold_with_no_message() {
-        let config = Config::parse(
-            r#"
-fissile_config_version = 1
-
-[[messages]]
-id = "must"
-text = "Must split."
-
-[[rules]]
-id = "rust"
-include = ["src/**/*.rs"]
-unit = "lines"
-soft = 2
-hard = 4
-hard_message = "must"
-"#,
-        )
-        .expect("valid config");
-
-        let error = config.to_checker().expect_err("soft limit has no message");
-        assert_eq!(
-            error,
-            ConfigError::MissingMessage {
-                rule: "rust".to_owned(),
-                severity: Severity::Soft,
-            }
-        );
-    }
-
-    /// A rule that declares only one threshold needs guidance only for it.
-    #[test]
-    fn one_sided_rule_needs_only_its_own_message() {
-        let config = Config::parse(
-            r#"
-fissile_config_version = 1
-
-[[messages]]
-id = "must"
-text = "Must split."
-
-[[rules]]
-id = "rust"
-include = ["src/**/*.rs"]
-unit = "lines"
-hard = 2
-hard_message = "must"
-"#,
-        )
-        .expect("valid config");
-
-        let checker = config.to_checker().expect("valid checker");
-        let overflows = checker
-            .check(&crate::measure_text("src/a.rs", "a\nb\n"))
-            .expect("check succeeds");
-        assert_eq!(overflows[0].message.id, "must");
-    }
-
-    #[test]
-    fn load_names_the_file_in_parse_errors() {
-        // §FS-001-config.1: every config diagnostic names its document.
-        let root = std::env::temp_dir().join(format!("fissile-config-{}", std::process::id()));
-        std::fs::create_dir_all(root.join(".agents")).unwrap();
-        let text = "fissile_config_version = 1\nbogus = 1\n";
-        std::fs::write(root.join(".agents/fissile.toml"), text).unwrap();
-        let error = Config::load(&root, None).expect_err("parse error");
-        let rendered = error.to_string();
-        assert!(
-            rendered.contains(".agents/fissile.toml") && rendered.contains("config parse error"),
-            "diagnostic must name the file: {rendered}"
-        );
-        let _ = std::fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn rejects_unknown_keys() {
-        let error = Config::parse("fissile_config_version = 1\nbogus = true\n")
-            .expect_err("unknown key is rejected");
-        assert!(matches!(error, ConfigError::Parse { .. }));
-    }
-
-    #[test]
-    fn rejects_unsupported_version() {
-        let error =
-            Config::parse("fissile_config_version = 2\n").expect_err("version 2 unsupported");
-        assert_eq!(error, ConfigError::UnsupportedVersion { version: 2 });
-    }
-
-    #[test]
-    fn rejects_unknown_message_reference() {
-        let toml = r#"
-fissile_config_version = 1
-
-[[rules]]
-id = "rust"
-include = ["src/**/*.rs"]
-unit = "lines"
-soft = 200
-message = "missing"
-"#;
-        let config = Config::parse(toml).expect("parses");
-        let error = config.to_checker().expect_err("dangling message id");
-        assert_eq!(
-            error,
-            ConfigError::UnknownMessage {
-                rule: "rust".to_owned(),
-                message: "missing".to_owned(),
-            }
-        );
-    }
-
-    #[test]
-    fn cross_dimension_overlap_is_ambiguous() {
-        let toml = r#"
-fissile_config_version = 1
-
-[[messages]]
-id = "m"
-text = "Split {path}."
-
-[[rules]]
-id = "generated-rust"
-include = ["src/**/*.gen.rs"]
-unit = "lines"
-soft = 1200
-message = "m"
-
-[[rules]]
-id = "domain-rust"
-include = ["src/domain/**/*.rs"]
-unit = "lines"
-soft = 350
-message = "m"
-"#;
-        let checker = Config::parse(toml).unwrap().to_checker().unwrap();
-        let file = crate::measure_text("src/domain/schema.gen.rs", &"x\n".repeat(10));
-        let error = checker.check(&file).expect_err("overlap is ambiguous");
-        assert!(matches!(error, FissileError::AmbiguousRules { .. }));
-    }
-
-    #[test]
-    fn explicit_priority_resolves_overlap() {
-        let toml = r#"
-fissile_config_version = 1
-
-[[messages]]
-id = "m"
-text = "Split {path}."
-
-[[rules]]
-id = "generated-rust"
-include = ["src/**/*.gen.rs"]
-unit = "lines"
-soft = 1200
-priority = 20
-message = "m"
-
-[[rules]]
-id = "domain-rust"
-include = ["src/domain/**/*.rs"]
-unit = "lines"
-soft = 5
-message = "m"
-"#;
-        let checker = Config::parse(toml).unwrap().to_checker().unwrap();
-        let file = crate::measure_text("src/domain/schema.gen.rs", &"x\n".repeat(10));
-        // generated-rust wins on priority; its soft limit of 1200 is not crossed.
-        let overflows = checker.check(&file).expect("priority breaks the tie");
-        assert!(overflows.is_empty());
-    }
-
-    #[test]
-    fn byte_rule_matches_via_glob() {
-        let toml = r#"
-fissile_config_version = 1
-
-[[messages]]
-id = "m"
-text = "Large {path}."
-
-[[rules]]
-id = "large-file-default"
-include = ["**/*"]
-unit = "bytes"
-soft = 4
-message = "m"
-"#;
-        let checker = Config::parse(toml).unwrap().to_checker().unwrap();
-        let overflows = checker
-            .check(&measure_bytes("anything.bin", b"abcdef"))
-            .expect("check succeeds");
-        assert_eq!(overflows.len(), 1);
-    }
-}
+#[path = "config_tests.rs"]
+mod tests;

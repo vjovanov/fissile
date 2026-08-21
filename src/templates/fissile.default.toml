@@ -41,6 +41,15 @@ soft_registry = "docs/file-size-agent-exceptions.toml"
 hard_registry = "docs/file-size-human-exceptions.toml"
 stale = "warn" # warn | error | ignore
 
+# A ceiling written by `exception add` or `exception retune` is rounded up to
+# this step, so it reads as a decision rather than as whatever the file measured
+# that day. The same step is the slack `audit --stale-exceptions` tolerates
+# before calling a ceiling loose. Set a unit to 1 to record exact measurements.
+[exceptions.bump]
+lines = 100
+bytes = 4096
+tokens = 1000
+
 [tokens]
 # Token budgets are opt-in; bytes and lines work without external tooling.
 enabled = false

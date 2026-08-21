@@ -12,14 +12,17 @@ pub mod check;
 pub mod cli;
 mod comments;
 pub mod config;
+pub mod entry;
 pub mod exception;
 pub mod exceptions;
 mod glob;
 pub mod hook;
 pub mod init;
 pub mod json;
+pub mod measure;
 mod model;
 pub mod report;
+pub mod retune;
 pub mod scan;
 
 pub use glob::Glob;

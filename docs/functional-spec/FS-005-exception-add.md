@@ -43,14 +43,19 @@ oversized files remain under `fissile` measurement.
 
 ## 2. Accepted Size
 
-When `--max` is omitted, `fissile` measures `<path>` using the selected rule unit
-and writes the current measurement as `max_accepted`. This makes the generated
-exception a ceiling, not an open-ended waiver: if the file grows later, the
-finding appears again.
+When `--max` is omitted, `fissile` measures `<path>` using the selected rule
+unit. When `--max` is present, `--unit` is required, the unit must match every
+selected rule, and the value must be at least the selected soft or hard limit for
+the chosen severity and at least the current measurement for exact-path entries.
 
-When `--max` is present, `--unit` is required. The unit must match every selected
-rule. `--max` must be at least the selected soft or hard limit for the chosen
-severity and at least the current measurement for exact-path entries.
+Either way, the number written as `max_accepted` is that value quantized up to
+the unit's `[exceptions.bump]` step (§FS-001-config.5): the smallest multiple of
+the step at or above it. Under the default 100-line step a 488-line file is
+accepted at 500. The entry is still a ceiling and not an open-ended waiver — the
+finding returns once the file passes the number — but the number is a decision a
+reviewer can weigh rather than a reading taken on the day the entry was written
+(§DF-006-quantized-ceilings). `fissile exception retune` moves it afterwards
+(§FS-008-exception-retune).
 
 For `--match glob`, `--max` and `--unit` are required because there is no single
 file measurement to infer.
@@ -104,9 +109,13 @@ modifying files when:
 - the selected rule does not exist;
 - selected rules use different units;
 - `--kind` is absent, or `--until` disagrees with it (§1);
-- another exception in the same severity registry already matches the same
-  `(path, rule, unit)` condition — the rejection names that registry and the
-  `path` of the entry already accepting it, which is the entry to edit instead;
+- another exception in the same severity registry already answers to the same
+  `(path, rule, unit)` address — the rejection names that registry and the
+  entry's `path`, reports the ceiling it records against the file's current
+  measurement, and names `fissile exception retune` as the command that moves it
+  (§FS-008-exception-retune). "An entry exists here" and "the file is accepted"
+  are different facts, and a refusal issued while `check` is reporting that very
+  file must not assert the second;
 - `--max` would make the exception invalid or smaller than the current exact-path
   measurement;
 - the registry contains unrelated schema errors.

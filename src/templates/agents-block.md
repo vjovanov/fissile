@@ -1,4 +1,4 @@
-## Keeping Files Small With fissile (v1)
+## Keeping Files Small With fissile (v2)
 
 This repository uses [`fissile`](https://github.com/vjovanov/fissile) to keep
 files small so agents spend fewer tokens reading them, while respecting the
@@ -20,4 +20,16 @@ architecture. It is a simple guard, not a style police.
   either what makes splitting illegal (`--kind structural`, never expires) or
   which boundary is missing and what has to exist first (`--kind deferred`,
   with `--until` naming what retires it). Restating the finding is not a reason.
+- Ask `fissile measure <path>` how large a file is and how much room is left
+  before deciding where new code goes. The count is fissile's own — comments
+  count, blank lines do not — so `wc -l` does not answer the question.
+- When a file already carries an exception and has outgrown its ceiling, the
+  reason usually still holds and only the number is wrong. Move it with
+  `fissile exception retune <path> --severity <severity> --rule <rule>` and let
+  the command pick the value: do not hand-pick a ceiling, do not pass `--max`
+  to shave the bump, and never hand-edit a registry. This holds at both
+  severities — retuning an existing hard entry is bookkeeping on a decision a
+  human already made, unlike adding one.
 - Run `fissile audit --stale-exceptions` before removing or moving large files.
+  It also reports ceilings that have drifted far above the file they accept;
+  lower those with the same `retune`.

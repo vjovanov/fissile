@@ -20,7 +20,7 @@ pub const DEFAULT_HARD_REGISTRY: &str = include_str!("templates/hard-exceptions.
 pub const MANAGED_BLOCK: &str = include_str!("templates/agents-block.md");
 
 const BLOCK_HEADING_PREFIX: &str = "## Keeping Files Small With fissile (v";
-const SUPPORTED_BLOCK_VERSION: u32 = 1;
+const SUPPORTED_BLOCK_VERSION: u32 = 2;
 
 /// Which agent entrypoint families to write (§FS-002-init.3).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -581,12 +581,12 @@ mod tests {
 
     #[test]
     fn rejects_newer_block_version() {
-        let existing = "## Keeping Files Small With fissile (v2)\n\nfuture body\n";
+        let existing = "## Keeping Files Small With fissile (v3)\n\nfuture body\n";
         let error =
-            apply_managed_block(existing, Path::new("AGENTS.md")).expect_err("v2 unsupported");
+            apply_managed_block(existing, Path::new("AGENTS.md")).expect_err("v3 unsupported");
         assert!(matches!(
             error,
-            InitError::UnsupportedBlock { version: 2, .. }
+            InitError::UnsupportedBlock { version: 3, .. }
         ));
     }
 

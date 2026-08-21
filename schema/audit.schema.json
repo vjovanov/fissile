@@ -2,29 +2,46 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/vjovanov/fissile/schema/audit.schema.json",
   "title": "fissile audit output",
-  "description": "`fissile audit --format json` (FS-004-check-audit.2): standing findings plus optional inventory sections. `top`, `stale`, and `coverage` appear only when their flags are passed.",
+  "description": "`fissile audit --format json` (FS-004-check-audit.2): standing findings plus optional inventory sections. `top` appears with --top, `stale` and `loose` with --stale-exceptions, and `coverage` with --rule-coverage.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["findings", "silenced", "exceptions"],
+  "required": [
+    "findings",
+    "silenced",
+    "exceptions"
+  ],
   "properties": {
     "findings": {
       "type": "array",
       "description": "Standing findings, same shape as check output.",
-      "items": { "$ref": "finding.schema.json" }
+      "items": {
+        "$ref": "finding.schema.json"
+      }
     },
     "silenced": {
       "type": "array",
       "description": "Overflows accepted by an exception, carried for attribution (FS-003-exceptions.5).",
-      "items": { "$ref": "finding.schema.json" }
+      "items": {
+        "$ref": "finding.schema.json"
+      }
     },
     "exceptions": {
       "type": "object",
       "description": "Registry entries per kind across both registries (FS-004-check-audit.2): accepted permanently versus carrying debt. Always present, including all-zero.",
       "additionalProperties": false,
-      "required": ["structural", "deferred"],
+      "required": [
+        "structural",
+        "deferred"
+      ],
       "properties": {
-        "structural": { "type": "integer", "minimum": 0 },
-        "deferred": { "type": "integer", "minimum": 0 }
+        "structural": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "deferred": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     },
     "top": {
@@ -33,18 +50,36 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["unit", "files"],
+        "required": [
+          "unit",
+          "files"
+        ],
         "properties": {
-          "unit": { "type": "string", "enum": ["bytes", "lines", "tokens"] },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "bytes",
+              "lines",
+              "tokens"
+            ]
+          },
           "files": {
             "type": "array",
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["value", "path"],
+              "required": [
+                "value",
+                "path"
+              ],
               "properties": {
-                "value": { "type": "integer", "minimum": 0 },
-                "path": { "type": "string" }
+                "value": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "path": {
+                  "type": "string"
+                }
               }
             }
           }
@@ -57,10 +92,73 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["registry", "path"],
+        "required": [
+          "registry",
+          "path"
+        ],
         "properties": {
-          "registry": { "type": "string" },
-          "path": { "type": "string" }
+          "registry": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "loose": {
+      "type": "array",
+      "description": "Exact-path exceptions whose ceiling stands more than one [exceptions.bump] step above the file they accept (audit --stale-exceptions, FS-003-exceptions.7). Stale is the other half: an entry accepting a file that is gone.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "registry",
+          "path",
+          "unit",
+          "accepted",
+          "actual",
+          "retune_to",
+          "silences_nothing"
+        ],
+        "properties": {
+          "registry": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "bytes",
+              "lines",
+              "tokens"
+            ]
+          },
+          "accepted": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The ceiling the entry records."
+          },
+          "actual": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "What the file measures now."
+          },
+          "retune_to": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The ceiling `fissile exception retune` would write, never below the limit the entry accepts."
+          },
+          "silences_nothing": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ],
+            "description": "1 when the file no longer crosses that limit at all, so removing the entry is the remedy rather than lowering it."
+          }
         }
       }
     },
@@ -68,11 +166,30 @@
       "type": "object",
       "description": "Rule coverage gaps (audit --rule-coverage).",
       "additionalProperties": false,
-      "required": ["unmatched_rules", "catch_all_only", "unused_messages"],
+      "required": [
+        "unmatched_rules",
+        "catch_all_only",
+        "unused_messages"
+      ],
       "properties": {
-        "unmatched_rules": { "type": "array", "items": { "type": "string" } },
-        "catch_all_only": { "type": "array", "items": { "type": "string" } },
-        "unused_messages": { "type": "array", "items": { "type": "string" } }
+        "unmatched_rules": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "catch_all_only": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unused_messages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
       }
     }
   }

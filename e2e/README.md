@@ -37,3 +37,6 @@ The harness drives the real `fissile` binary, so every documented behavior under
 - §E2E-018-audit-exception-kinds — audit separates accepted-permanently from carrying-debt.
 - §E2E-019-structural-silences-soft — a structural hard exception silences the soft warning too.
 - §E2E-020-registry-version-2 — an unmigrated registry is refused with both edits named.
+- §E2E-021-measure-reports-headroom — measure reports the count and the distance to what binds.
+- §E2E-022-exception-retune-moves-a-ceiling — retune moves a recorded ceiling to the quantized value.
+- §E2E-023-audit-reports-loose-ceilings — audit reports a ceiling that has drifted above its file.

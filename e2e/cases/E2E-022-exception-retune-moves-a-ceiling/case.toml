@@ -1,0 +1,9 @@
+args = [
+  "exception", "retune", "src/big.rs",
+  "--severity", "hard",
+  "--rule", "rust",
+]
+exit = 0
+# 9 lines against a 4-line step: the caller names no number, the step picks 12.
+stdout_equals = """
+docs/file-size-human-exceptions.toml: src/big.rs 8 -> 12 lines"""

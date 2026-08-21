@@ -1,0 +1,82 @@
+# FS-008-exception-retune: fissile exception retune moves a recorded ceiling
+
+An exception's `reason` outlives its number. A file whose split is genuinely
+illegal is still illegal two lines later, and a boundary that was missing is
+still missing. What changes is `max_accepted` — and moving it is bookkeeping, not
+a new claim. Until `retune`, the only way to move it was hand-edited registry
+TOML, which skips every check `exception add` applies and, in a repository that
+keeps twin registries, desynchronizes them silently.
+
+`fissile exception retune` moves the ceiling of an entry that already exists. It
+writes no `reason`, no `kind`, and no `until`: an entry whose claim has changed is
+not a retune, it is a different entry.
+
+## 1. Command
+
+```text
+fissile exception retune <path> --severity soft|hard --rule <id>
+                         [--max <N> --unit bytes|lines|tokens]
+                         [--config <path>] [--match exact|glob] [--dry-run]
+```
+
+`<path>`, `--severity`, `--rule` and `--match` address the entry with exactly the
+fields that describe one to `exception add`: an entry is identified by the
+registry it lives in and the `(path matcher, rules, unit)` condition it accepts
+(§DF-005-exception-identity). `--rule` may be repeated, and the address matches an
+entry that covers any of the named rules at the selected unit. When no entry
+answers to that address the command fails without writing, and the error names
+`fissile exception add` as the command that creates one.
+
+With `--max` omitted, the new ceiling derives from the file's current
+measurement. With `--max`, it derives from that value. Either way the written
+number is quantized to `[exceptions.bump]` (§FS-005-exception-add.2,
+§DF-006-quantized-ceilings): the caller states a requirement, the step chooses the
+number.
+
+For `--match glob` there is no single file to measure, so `--max` and `--unit`
+are required, as they are for a glob `add`.
+
+## 2. Direction
+
+Both directions, one command. Raising accepts a file that grew; lowering follows
+a file that shrank and is how a loose ceiling is retired
+(§FS-003-exceptions.7). Neither direction asks for a new rationale, and neither is
+gated by severity: the alternative to retuning a hard entry is a hand-edited hard
+registry, which is the same change made worse. What reviews a moved ceiling is
+the registry diff, exactly as before (§GOAL-007-justified-exceptions).
+
+The new ceiling is never below the current measurement. Writing one would leave
+the entry accepting less than the file it exists to accept, standing a finding
+against an exception someone wrote on purpose.
+
+## 3. Result
+
+The command rewrites one `max_accepted` value in place. Every other byte of the
+registry — comments, entry order, and the other fields of the entry itself — is
+preserved, so the diff is a single line and a reviewer reads precisely the
+decision that changed.
+
+```text
+docs/file-size-agent-exceptions.toml: src/domain/order.rs 486 -> 500 lines
+```
+
+When the quantized ceiling equals the recorded one, nothing is written and the
+command says so and exits `0`. An idempotent retune is the normal outcome of an
+edit that stayed inside the step, and it must not read as a failure.
+
+When the other registry also holds an entry for that path and rule, the result
+names it and its ceiling. `retune` never writes to a registry the caller did not
+select — twin consistency is a repository's policy, not the tool's — but a caller
+about to leave two ceilings disagreeing should learn it here rather than from a
+later run.
+
+## 4. Validation
+
+`retune` validates what `add` validates (§FS-005-exception-add.4): the effective
+config, both registries as they stand, and the combined document before the
+write. It fails additionally when the address matches no entry, when it matches
+more than one, and when `--max` is below the current measurement or below the
+selected rule's limit for the chosen severity.
+
+`--dry-run` prints the ceiling change and the registry it would update, and
+modifies nothing.

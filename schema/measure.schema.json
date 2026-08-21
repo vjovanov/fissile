@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/vjovanov/fissile/schema/measure.schema.json",
+  "title": "fissile measure output",
+  "description": "`fissile measure --format json` (FS-007-measure.2): one record per (file, rule), plus one per file no rule measures. Records follow the caller's file order, and a file measured in two units appears once per rule.",
+  "type": "array",
+  "items": {
+    "oneOf": [
+      { "$ref": "#/$defs/measured" },
+      { "$ref": "#/$defs/unruled" }
+    ]
+  },
+  "$defs": {
+    "measured": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "unit", "actual", "rule_id"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Repo-relative path with forward slashes."
+        },
+        "unit": {
+          "type": "string",
+          "enum": ["bytes", "lines", "tokens"],
+          "description": "The unit the matched rule measures in."
+        },
+        "actual": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The file's measured value in `unit`, counted the way the rule counts (FS-001-config.3.1)."
+        },
+        "rule_id": {
+          "type": "string",
+          "description": "The effective rule for this file and unit."
+        },
+        "soft": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The rule's soft limit; omitted when the rule declares none."
+        },
+        "hard": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The rule's hard limit; omitted when the rule declares none."
+        },
+        "soft_accepted": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Ceiling the soft registry records for this path and rule; omitted when no entry matches."
+        },
+        "hard_accepted": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Ceiling the hard registry records for this path and rule; omitted when no entry matches."
+        },
+        "headroom": {
+          "type": "integer",
+          "description": "Signed distance to `headroom_to`: positive is room left below it, negative the distance past it. Omitted when the rule declares no threshold at all."
+        },
+        "headroom_to": {
+          "type": "string",
+          "enum": ["soft", "hard", "soft-accepted", "hard-accepted"],
+          "description": "The threshold `headroom` is measured against: the lowest one above the value, or the highest one below it."
+        }
+      }
+    },
+    "unruled": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "unruled"],
+      "description": "A file no rule measures. Emitted rather than dropped so a consumer can tell `not measured here` from `not in the output` (FS-007-measure.2).",
+      "properties": {
+        "path": { "type": "string" },
+        "unruled": { "const": 1 }
+      }
+    }
+  }
+}
