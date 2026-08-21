@@ -11,3 +11,7 @@ The closing `see <path> ...` line must name the file that holds the block, not
 the link (§FS-002-init.5, §GOAL-003-friendly-output). A reader following it is
 looking for the workflow they just installed, and the link's target is where
 editing it will stick.
+
+That line is what this case asserts, so it holds on a host that cannot make
+links at all: there the companion is `kept` and `AGENTS.md` still owns the
+block. §E2E-042-companions-link-to-agents-md asserts the link itself.

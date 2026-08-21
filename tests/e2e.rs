@@ -80,6 +80,12 @@ struct FileAssert {
     excludes: Vec<String>,
 }
 
+/// Output with `\` folded to `/`, so one manifest asserts the same path on
+/// every platform. Paths are the only place fissile emits a backslash.
+fn separator_agnostic(text: &str) -> String {
+    text.replace('\\', "/")
+}
+
 fn cases_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("e2e/cases")
 }
@@ -179,8 +185,11 @@ fn run_case(dir: &Path) -> Result<(), String> {
         .output()
         .map_err(|error| format!("spawning fissile: {error}"))?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    // Windows renders `root.join(rel)` with a backslash, so `wrote ./AGENTS.md`
+    // arrives as `wrote .\AGENTS.md`. Needles are written the one way and
+    // compared against the separator this host happens to use.
+    let stdout = separator_agnostic(&String::from_utf8_lossy(&output.stdout));
+    let stderr = separator_agnostic(&String::from_utf8_lossy(&output.stderr));
     let code = output.status.code().unwrap_or(-1);
     let mut problems = Vec::new();
 
