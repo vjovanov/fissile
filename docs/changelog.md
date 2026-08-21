@@ -30,6 +30,8 @@ with a migration note.
 
 ## Unreleased
 
+## 2. [0.7.0] — 2026-08-21
+
 ### Added
 
 - §FS-004-check-audit.1.1: a run that reports a finding adds one `hint:` line
@@ -99,73 +101,9 @@ with a migration note.
   validator's own rule is stated plainly: an entry is well-formed whether or not
   its path is on disk today.
 
-## 2. [0.6.0] — 2026-08-21
-
-### Added
-
-- §FS-007-measure: new `fissile measure <paths>... | --staged` reports what
-  fissile counts for a file — the value, the rule, the limits, any accepted
-  ceiling, and the signed room left before whichever binds first. The room is
-  spendable: a limit fires *at* the limit and a ceiling silences *at* the
-  ceiling, so `0 to hard` means the next line fails while `0 to hard-accepted`
-  is a file `check` calls `ok`. It answers for files that are passing, which
-  `check` never did, and always exits `0`. The JSON shape is published as
-  `schema/measure.schema.json`.
-- §FS-008-exception-retune: new `fissile exception retune` moves the ceiling an
-  entry already records, up or down and at either severity, leaving `reason`,
-  `kind`, and `until` untouched. It rewrites one `max_accepted` line in place —
-  reading the registry as TOML, so prose in a `reason` names no entry, and
-  keeping the line endings the file is stored with — so the diff is the single
-  decision that changed. The entry is addressed by its matcher, not by a path
-  the matcher happens to cover: an address that only overlaps an entry, or
-  spans two, is refused with the address to use instead. Lowering stops at the
-  rule limit, where the remedy is to remove the entry rather than retune it.
-- §FS-001-config.5: new `[exceptions.bump]` table — `lines = 100`,
-  `bytes = 4096`, `tokens = 1000` — quantizing every ceiling `fissile` writes
-  (§DF-006-quantized-ceilings). Set a unit to `1` for the previous
-  exact-measurement behavior.
-- §FS-003-exceptions.7: `audit --stale-exceptions` also reports **loose**
-  ceilings — an exact-path entry standing more than one bump step above the file
-  it accepts — with the value `exception retune` would write in its place. The
-  JSON record carries `severity` and `limit` alongside them, so a consumer can
-  reproduce the text line without matching a registry filename against the
-  config.
-
-### Changed
-
-- §FS-002-init.4: the managed agent block is now **v2**, teaching `measure`,
-  `retune`, and the loose-ceiling sweep. **Migration: re-run `fissile init` to
-  upgrade.** `init` replaces a v1 block in place and preserves the bytes around
-  it; a repository that does not re-run it keeps its v1 text and only misses the
-  new guidance.
-- §FS-001-config.1: `[exceptions.bump]` is additive within
-  `fissile_config_version = 1`, so a config that declares it is **rejected by
-  fissile 0.5.0 and earlier** with `unknown field \`bump\``, which names no
-  version floor. A repository adopting the key must raise its pinned `fissile`
-  version — including in any pre-commit hook or CI install step — at the same
-  commit.
-- §FS-005-exception-add.2: `max_accepted` is now the measurement quantized up to
-  the bump step rather than the measurement itself. Existing registries are
-  unaffected — quantization governs what the commands write, never what a
-  registry may hold (§FS-003-exceptions.4).
-- §FS-005-exception-add.4: the refusal when an entry already exists reports the
-  recorded ceiling beside the file's current measurement and names
-  `fissile exception retune`. It previously read "already accepts <path>", which
-  was false at the very moment `check` was reporting that file.
-- §FS-006-cli.1: five commands rather than four, and `exception add` and
-  `exception retune` each carry their own one-screen usage under a shared
-  `exception` dispatch screen.
-
-### Fixed
-
-- §FS-004-check-audit.2: `audit --top` ranked files by raw physical lines while
-  findings reported the rule's counted value, so one tool reported two numbers
-  for one file. `--top` now reports what the effective rule counts where a rule
-  measures the file, and the default line policy everywhere else — so the
-  largest file in a repository still ranks when no rule reaches it yet.
-
 ## 3. Older releases
 
+- [0.6.0](changelog/0.6.0.md) — 2026-08-21: - §FS-007-measure: new `fissile measure <paths>...
 - [0.5.0](changelog/0.5.0.md) — 2026-08-12: - §FS-003-exceptions.1: the exception registry schema is now `fissile_exceptions_version = 2`.
 - [0.4.0](changelog/0.4.0.md) — 2026-08-11: - §FS-003-exceptions.2.1: exception entries carry `kind = "structural" | "deferred"`, which fixes what `reason` must establish — the architectural constraint that makes the split illegal, or the boundary that is missing and what has to exist first (§DF-004-exception-kind).
 - [0.3.0](changelog/0.3.0.md) — 2026-08-11: - §FS-006-cli.2: the usage screen opens with a short paragraph — what `fissile` is for, the two tiers, the `check --staged` habit, and the rule that a budget is never met by damaging the design — closing with a pointer to `fissile init --dry-run` for the full agent instructions.
