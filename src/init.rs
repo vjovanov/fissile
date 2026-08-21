@@ -21,20 +21,21 @@ pub const DEFAULT_HARD_REGISTRY: &str = include_str!("templates/hard-exceptions.
 /// (§FS-002-init.4).
 pub const MANAGED_BLOCK: &str = include_str!("templates/agents-block.md");
 
-const BLOCK_BEGIN_PREFIX: &str = "<!-- >>> fissile managed block (v";
-const BLOCK_END_PREFIX: &str = "<!-- <<< fissile managed block (v";
-/// The pre-marker heading v1 and v2 blocks were found by (§FS-002-init.4).
-const LEGACY_BLOCK_HEADING: &str = "## Keeping Files Small With fissile (v";
+const BLOCK_BEGIN: &str = "<!-- BEGIN FISSILE MANAGED BLOCK -->";
+const BLOCK_END: &str = "<!-- END FISSILE MANAGED BLOCK -->";
+/// The block's own heading, which states its version and — in a v1 or v2 file,
+/// written before the markers existed — was its only boundary (§FS-002-init.4).
+const BLOCK_HEADING: &str = "## Keeping Files Small With fissile (v";
 const SUPPORTED_BLOCK_VERSION: u32 = 3;
 
 /// How `init` finds, versions, and rewrites the agent block (§FS-002-init.4).
 fn agent_block() -> Block<'static> {
     Block {
-        begin_prefix: BLOCK_BEGIN_PREFIX,
-        end_prefix: BLOCK_END_PREFIX,
+        begin_prefix: BLOCK_BEGIN,
+        end_prefix: BLOCK_END,
         version: SUPPORTED_BLOCK_VERSION,
         body: MANAGED_BLOCK.trim_end(),
-        legacy_heading: Some(LEGACY_BLOCK_HEADING),
+        version_heading: Some(BLOCK_HEADING),
     }
 }
 
@@ -517,14 +518,14 @@ mod tests {
             apply_managed_block("# My Project\n\nHello.\n", Path::new("AGENTS.md"))
                 .expect("append succeeds");
         assert_eq!(action, Action::Appended);
-        let opened = "# My Project\n\nHello.\n\n<!-- >>> fissile managed block (v3) >>> -->";
+        let opened = "# My Project\n\nHello.\n\n<!-- BEGIN FISSILE MANAGED BLOCK -->";
         assert!(result.starts_with(opened));
         assert!(result.contains("fissile check --staged"));
     }
 
     #[test]
     fn replaces_existing_managed_block_and_preserves_surroundings() {
-        let existing = "# Project\n\n<!-- >>> fissile managed block (v3) >>> -->\nold body\n<!-- <<< fissile managed block (v3) <<< -->\n\n## Other\n\nkeep me\n";
+        let existing = "# Project\n\n<!-- BEGIN FISSILE MANAGED BLOCK -->\nold body\n<!-- END FISSILE MANAGED BLOCK -->\n\n## Other\n\nkeep me\n";
         let (result, action) =
             apply_managed_block(existing, Path::new("AGENTS.md")).expect("replace succeeds");
         assert_eq!(action, Action::Updated);
@@ -535,7 +536,7 @@ mod tests {
 
     #[test]
     fn rejects_newer_block_version() {
-        let existing = "<!-- >>> fissile managed block (v4) >>> -->\nfuture body\n<!-- <<< fissile managed block (v4) <<< -->\n";
+        let existing = "<!-- BEGIN FISSILE MANAGED BLOCK -->\n## Keeping Files Small With fissile (v4)\n\nfuture body\n<!-- END FISSILE MANAGED BLOCK -->\n";
         let error =
             apply_managed_block(existing, Path::new("AGENTS.md")).expect_err("v4 unsupported");
         assert!(matches!(
@@ -554,6 +555,20 @@ mod tests {
         assert_eq!(action, Action::Updated);
         assert!(!result.contains("old body"));
         assert!(!result.contains("(v2)"));
+        let heading = "## Keeping Files Small With fissile";
+        assert_eq!(result.matches(heading).count(), 1);
+        assert!(result.contains("## Other\n\nkeep me"));
+    }
+
+    /// A begin marker with no end falls back to the heading rule — and the
+    /// block's own heading must not end its own span (§FS-002-init.4).
+    #[test]
+    fn a_truncated_block_is_replaced_wholesale() {
+        let existing = "<!-- BEGIN FISSILE MANAGED BLOCK -->\n## Keeping Files Small With fissile (v3)\n\nold body\n\n## Other\n\nkeep me\n";
+        let (result, action) =
+            apply_managed_block(existing, Path::new("AGENTS.md")).expect("replace succeeds");
+        assert_eq!(action, Action::Updated);
+        assert!(!result.contains("old body"));
         let heading = "## Keeping Files Small With fissile";
         assert_eq!(result.matches(heading).count(), 1);
         assert!(result.contains("## Other\n\nkeep me"));

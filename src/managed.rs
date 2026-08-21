@@ -13,10 +13,10 @@ pub struct Block<'a> {
     pub end_prefix: &'a str,
     pub version: u32,
     pub body: &'a str,
-    /// A pre-marker span this build still recognizes, by its heading prefix
-    /// through `(v`. Replacing it in place upgrades a repository that adopted
-    /// an earlier block, instead of leaving it with two (§FS-002-init.4).
-    pub legacy_heading: Option<&'a str>,
+    /// The in-block line carrying the version, by its prefix through `(v`; it
+    /// also finds a pre-marker block, whose only boundary that heading was.
+    /// `None` reads the version from the begin marker instead (§FS-002-init.4).
+    pub version_heading: Option<&'a str>,
 }
 
 impl Block<'_> {
@@ -45,20 +45,20 @@ impl Block<'_> {
         path: &Path,
     ) -> Result<Option<std::ops::Range<usize>>, InitError> {
         if let Some(begin) = lines.iter().position(|line| self.is_begin(line)) {
-            let version = version_after(lines[begin], self.begin_prefix).unwrap_or(self.version);
-            self.check_version(version, path)?;
             // One past the matching end marker; a truncated block — a begin
-            // marker with no end — falls back to the heading rule so trailing
+            // marker with no end — falls back to the heading rule, so trailing
             // user sections are not swallowed (§FS-002-init.4).
             let end = lines[begin + 1..]
                 .iter()
                 .position(|line| self.is_end(line))
                 .map(|offset| begin + 1 + offset + 1)
-                .unwrap_or_else(|| heading_span_end(lines, begin));
+                .unwrap_or_else(|| self.heading_span_end(lines, begin));
+            self.check_version(self.version_in(&lines[begin..end]), path)?;
             return Ok(Some(begin..end));
         }
 
-        let Some(prefix) = self.legacy_heading else {
+        // No markers: a block from before they existed, bounded by its heading.
+        let Some(prefix) = self.version_heading else {
             return Ok(None);
         };
         let Some(start) = lines
@@ -69,7 +69,34 @@ impl Block<'_> {
         };
         let version = version_after(lines[start], prefix).unwrap_or(self.version);
         self.check_version(version, path)?;
-        Ok(Some(start..heading_span_end(lines, start)))
+        Ok(Some(start..self.heading_span_end(lines, start)))
+    }
+
+    /// The version a located block declares: from its heading when it carries
+    /// one, else from the begin marker. An undeclared version reads as current.
+    fn version_in(&self, span: &[&str]) -> u32 {
+        let Some(prefix) = self.version_heading else {
+            return version_after(span[0], self.begin_prefix).unwrap_or(self.version);
+        };
+        span.iter()
+            .find_map(|line| version_after(line, prefix))
+            .unwrap_or(self.version)
+    }
+
+    /// Where an unmarked or truncated span starting at `start` ends: the next
+    /// H1 or H2, or end of file. The block's own heading does not end it.
+    fn heading_span_end(&self, lines: &[&str], start: usize) -> usize {
+        lines
+            .iter()
+            .enumerate()
+            .skip(start + 1)
+            .find(|(_, line)| is_heading(line) && !self.is_own_heading(line))
+            .map_or(lines.len(), |(index, _)| index)
+    }
+
+    fn is_own_heading(&self, line: &str) -> bool {
+        self.version_heading
+            .is_some_and(|prefix| line.trim_end().starts_with(prefix))
     }
 
     fn check_version(&self, version: u32, path: &Path) -> Result<(), InitError> {
@@ -119,16 +146,6 @@ fn splice(lines: &[&str], span: std::ops::Range<usize>, body: &str) -> String {
         result.push('\n');
     }
     result
-}
-
-/// Where an unmarked span starting at `start` ends: the next H1 or H2, or end
-/// of file. This is the pre-marker rule, kept for legacy and truncated blocks.
-fn heading_span_end(lines: &[&str], start: usize) -> usize {
-    lines[start + 1..]
-        .iter()
-        .position(|line| is_heading(line))
-        .map(|offset| start + 1 + offset)
-        .unwrap_or(lines.len())
 }
 
 fn is_heading(line: &str) -> bool {

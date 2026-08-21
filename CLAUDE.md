@@ -54,11 +54,11 @@ Specs cite goals, architecture cites specs, code and executable tests cite the s
 On repository web surfaces, link `§<ID>` to the PR branch in PR bodies, the reviewed commit in reviews, an exact commit for permalinks, and the default branch otherwise; fall back to plain when unsure.
 <!-- END GRUND MANAGED BLOCK -->
 
-<!-- >>> fissile managed block (v3) >>> -->
-## Keeping Files Small With fissile
+<!-- BEGIN FISSILE MANAGED BLOCK -->
+## Keeping Files Small With fissile (v3)
 
 This repository caps file size with [`fissile`](https://github.com/vjovanov/fissile)
 so that agents spend fewer tokens reading. A pre-commit hook runs
 `fissile check --staged`, and its findings say what to split and how. Run it
 yourself before claiming work is done, and never get past it with `--no-verify`.
-<!-- <<< fissile managed block (v3) <<< -->
+<!-- END FISSILE MANAGED BLOCK -->

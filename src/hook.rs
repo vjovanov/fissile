@@ -67,7 +67,9 @@ fn apply_block(existing: &str, path: &Path) -> Result<(String, Action), InitErro
         end_prefix: END_PREFIX,
         version: SUPPORTED_VERSION,
         body: BLOCK,
-        legacy_heading: None,
+        // A shell file has no heading to state a version on, so the marker
+        // carries it — the shape `conda init` writes (§FS-002-init.6).
+        version_heading: None,
     }
     .apply(existing, path)
 }

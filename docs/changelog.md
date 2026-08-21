@@ -54,15 +54,15 @@ with a migration note.
 ### Changed
 
 - §FS-002-init.4: the managed agent block is now **v3**, and delimited by
-  `<!-- >>> fissile managed block (v3) >>> -->` / `<!-- <<< ... <<< -->` markers
-  like the hook block, with the version in the marker rather than the heading.
-  The block is five lines rather than thirty-five: the instructions moved to the
-  surfaces that raise each question (§DF-007-instructions-at-the-error-site).
-  **Migration: re-run `fissile init` to upgrade.** A v1 or v2 heading-only block
-  is recognized and replaced in place, so a repository upgrades rather than
-  growing a second block. Since the span is now the markers and not "everything
-  up to the next H1 or H2", a heading a user writes directly beneath the block is
-  outside it and survives a refresh.
+  `<!-- BEGIN FISSILE MANAGED BLOCK -->` / `<!-- END FISSILE MANAGED BLOCK -->`.
+  The heading keeps the version, as it always has; the markers say who owns the
+  span. The block is five lines rather than thirty-five: the instructions moved
+  to the surfaces that raise each question
+  (§DF-007-instructions-at-the-error-site). **Migration: re-run `fissile init`
+  to upgrade.** A v1 or v2 unmarked block is recognized and replaced in place,
+  so a repository upgrades rather than growing a second block. Since the span is
+  now the markers and not "everything up to the next H1 or H2", a heading a user
+  writes directly beneath the block is outside it and survives a refresh.
 - §FS-005-exception-add.4: `exception add --severity hard` is refused when
   standard input is not a terminal, naming the soft-severity route and `--force`
   (§DF-008-hard-severity-needs-a-terminal). **Migration: scripted hard adds need

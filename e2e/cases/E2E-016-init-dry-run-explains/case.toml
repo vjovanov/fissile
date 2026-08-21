@@ -2,10 +2,10 @@ args = ["init", "--dry-run"]
 exit = 0
 git = true
 stdout_contains = [
-  "<!-- >>> fissile managed block (v3) >>> -->",
-  "## Keeping Files Small With fissile",
+  "<!-- BEGIN FISSILE MANAGED BLOCK -->",
+  "## Keeping Files Small With fissile (v3)",
   "`fissile check --staged`, and its findings say what to split and how",
   "never get past it with `--no-verify`",
-  "<!-- <<< fissile managed block (v3) <<< -->",
+  "<!-- END FISSILE MANAGED BLOCK -->",
 ]
 stderr_contains = ["would-write", "AGENTS.md"]

@@ -84,19 +84,26 @@ workspace signal.
 
 ## 4. Managed Block
 
-The managed block is delimited by marker lines, as the hook block is (§6):
+The managed block is delimited by named markers, with its version stated on the
+first line of the content:
 
 ```markdown
-<!-- >>> fissile managed block (v3) >>> -->
-## Keeping Files Small With fissile
+<!-- BEGIN FISSILE MANAGED BLOCK -->
+## Keeping Files Small With fissile (v3)
 ...
-<!-- <<< fissile managed block (v3) <<< -->
+<!-- END FISSILE MANAGED BLOCK -->
 ```
 
-The version lives in the markers rather than in the heading. What a reader
-compares is then in the line that delimits the span, and the heading a
-repository sees in its own entrypoint stays put across versions instead of
-renaming itself every time the text changes.
+That is the shape generated Markdown regions take everywhere — `terraform-docs`,
+`doctoc`, `all-contributors`, and `grund` all use named, symmetric,
+version-free HTML comments — and where a generator states a version, it states
+it inside the region, as `protoc-gen-go` does on its first comment lines. The
+markers say which tool owns the span; the heading says which generation of the
+text it is. Nothing has to parse a delimiter to answer the second question.
+
+The hook block (§6) states its version in its marker instead. A shell file has
+no heading to carry it, and `# >>> ... >>>` is the shape `conda init` writes
+into the same kind of file.
 
 The block is exactly the marker lines and everything between them. Every byte
 outside is user-authored and preserved, including a heading of any depth
@@ -109,13 +116,15 @@ has a supported block version, `init` replaces only the block and preserves the
 bytes before and after it, including the block position. If it has a newer
 unsupported block version, `init` exits with a schema error and leaves the file
 unchanged. A begin marker with no end marker is a truncated block: it runs to
-the next H1 or H2 heading, or to end of file, and is replaced wholesale.
+the next H1 or H2 heading that is not the block's own, or to end of file, and is
+replaced wholesale.
 
-Blocks v1 and v2 had no markers. They were found by the heading
-`## Keeping Files Small With fissile (v<N>)` and ran to the next H1 or H2
-heading, or end of file. `init` still recognizes that span and replaces it with
-the delimited block, so a repository that adopted an earlier version upgrades in
-place on its next run rather than growing a second block.
+Blocks v1 and v2 had no markers; the heading was the whole boundary, and the
+span ran to the next H1 or H2 heading, or end of file. `init` still recognizes
+that span and replaces it with the delimited block, so a repository that adopted
+an earlier version upgrades in place on its next run rather than growing a
+second block. This is why the heading keeps a fixed prefix: it is the one line
+present in every version of the block.
 
 The v3 block teaches three things, and deliberately no more
 (§DF-007-instructions-at-the-error-site.1):
