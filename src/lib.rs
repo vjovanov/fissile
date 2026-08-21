@@ -13,6 +13,7 @@ pub mod cli;
 mod comments;
 pub mod config;
 pub mod entry;
+pub mod entrypoint;
 pub mod exception;
 pub mod exceptions;
 mod glob;

@@ -30,6 +30,24 @@ with a migration note.
 
 ## Unreleased
 
+### Changed
+
+- §FS-002-init.3: `AGENTS.md` is the one entrypoint that holds the managed
+  block, and every other one `init` touches is a **symbolic link** to it
+  (§DF-009-one-file-agents-read). A repository with `AGENTS.md`, `CLAUDE.md`,
+  and a `.claude/` directory carried three copies of the same five lines, and
+  Claude Code reads two of them — the tool whose purpose is spending fewer
+  tokens on what agents read was itself sending the block twice. Links are
+  relative to the file that carries them (`../AGENTS.md` from `.claude/`), so a
+  clone or a move keeps them resolving.
+  **Migration: none required, and nothing is overwritten.** A companion whose
+  bytes match `AGENTS.md` becomes a link to it; a project with a `CLAUDE.md` and
+  no `AGENTS.md` has that file's content *become* `AGENTS.md`, since it is what
+  the project already told agents. A companion holding bytes of its own is kept
+  as a regular file with the block written in, and the run reports `kept` rather
+  than `linked`. Where the filesystem refuses a link — Windows without Developer
+  Mode — `init` writes the block into the file and says so instead of failing.
+
 ## 2. [0.7.0] — 2026-08-21
 
 ### Added
