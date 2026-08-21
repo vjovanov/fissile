@@ -44,6 +44,11 @@ struct Case {
     /// claims it did; these say what it actually wrote (§FS-008-exception-retune.3).
     #[serde(default)]
     files: Vec<FileAssert>,
+    /// Paths that must be symbolic links after the run, and what each must
+    /// point at (§FS-002-init.3). Windows refuses links without Developer Mode,
+    /// so a case using this sets `unix_only`.
+    #[serde(default)]
+    links: Vec<LinkAssert>,
     /// Skip on non-Unix hosts. Used by the token-unit case, whose external
     /// counter is a POSIX shell stub (§DA-001-token-external-command); token
     /// mode itself is cross-platform, but a portable counter stub is not, so
@@ -51,6 +56,15 @@ struct Case {
     /// (§DA-002-instruction-count-benchmarks).
     #[serde(default)]
     unix_only: bool,
+}
+
+/// One post-run assertion that a path is a link, and where it goes.
+#[derive(Deserialize)]
+struct LinkAssert {
+    /// Repo-relative path within the throwaway tree.
+    path: String,
+    /// The exact link target, as stored — relative, so the tree can move.
+    target: String,
 }
 
 /// One post-run assertion about a file the command wrote. Needles are compared
@@ -211,6 +225,30 @@ fn run_case(dir: &Path) -> Result<(), String> {
                 }
             }
             Err(error) => problems.push(format!("reading {}: {error}", assertion.path)),
+        }
+    }
+    for assertion in &case.links {
+        let path = work.join(&assertion.path);
+        // `symlink_metadata` does not follow, so a regular file the run wrote
+        // instead of a link is caught rather than silently passing.
+        match fs::symlink_metadata(&path) {
+            Ok(metadata) if !metadata.file_type().is_symlink() => {
+                problems.push(format!(
+                    "{} is a regular file, expected a link",
+                    assertion.path
+                ));
+            }
+            Ok(_) => match fs::read_link(&path) {
+                Ok(target) if target != Path::new(&assertion.target) => problems.push(format!(
+                    "{} points at {}, expected {}",
+                    assertion.path,
+                    target.display(),
+                    assertion.target
+                )),
+                Ok(_) => {}
+                Err(error) => problems.push(format!("reading link {}: {error}", assertion.path)),
+            },
+            Err(error) => problems.push(format!("stat {}: {error}", assertion.path)),
         }
     }
 

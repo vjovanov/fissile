@@ -1,3 +1,3 @@
-# Project
+# My Project
 
-Existing instructions.
+House rules an agent must read.

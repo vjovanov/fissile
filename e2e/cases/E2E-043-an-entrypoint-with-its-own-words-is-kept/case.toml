@@ -1,0 +1,10 @@
+args = ["init", "--no-hook"]
+exit = 0
+# CLAUDE.md says something AGENTS.md does not, so a link would destroy it.
+stderr_contains = ["kept ./CLAUDE.md"]
+[[files]]
+path = "CLAUDE.md"
+contains = [
+  "Something this repository means to say only to Claude.",
+  "## Keeping Files Small With fissile (v3)",
+]

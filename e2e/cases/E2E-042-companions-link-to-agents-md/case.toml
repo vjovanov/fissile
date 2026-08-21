@@ -1,0 +1,13 @@
+args = ["init", "--claude", "--no-hook"]
+exit = 0
+# Symbolic links need Developer Mode on Windows, where init writes the block
+# into the file instead (§FS-002-init.3).
+unix_only = true
+stderr_contains = ["wrote ./AGENTS.md", "linked ./CLAUDE.md"]
+creates = ["AGENTS.md", "CLAUDE.md"]
+[[links]]
+path = "CLAUDE.md"
+target = "AGENTS.md"
+[[files]]
+path = "AGENTS.md"
+contains = ["## Keeping Files Small With fissile (v3)"]

@@ -140,6 +140,11 @@ pub enum Action {
     Appended,
     Updated,
     Exists,
+    /// Pointed at `AGENTS.md` (§FS-002-init.3, §DF-009-one-file-agents-read).
+    Linked,
+    /// Left a regular file: it holds bytes of its own, or the filesystem
+    /// refused a link, so the block was written into it (§FS-002-init.3).
+    Kept,
 }
 
 impl Action {
@@ -152,6 +157,10 @@ impl Action {
             (Action::Updated, false) => "updated",
             (Action::Updated, true) => "would-update",
             (Action::Exists, _) => "exists",
+            (Action::Linked, false) => "linked",
+            (Action::Linked, true) => "would-link",
+            (Action::Kept, false) => "kept",
+            (Action::Kept, true) => "would-keep",
         }
     }
 
@@ -311,12 +320,25 @@ pub fn run(options: &InitOptions) -> Result<Report, InitError> {
     // 3. Agent entrypoints and managed blocks (§FS-002-init.3).
     let name = project_name(options);
     let mut entrypoints = Vec::new();
-    for relative in resolve_entrypoints(&options.root, &options.agents) {
-        outcomes.push(write_managed_block(
-            &options.root.join(&relative),
-            &name,
-            options.dry_run,
-        )?);
+    // The block has to live in a real file and every link points at it, so the
+    // canonical entrypoint is always in the set (§FS-002-init.3).
+    let canonical = PathBuf::from(crate::entrypoint::CANONICAL);
+    let mut companions = resolve_entrypoints(&options.root, &options.agents);
+    companions.retain(|path| path != &canonical);
+
+    // Planned first: both answers read bytes that writing the block changes
+    // (§FS-002-init.3).
+    let plans = crate::entrypoint::plan(&options.root, &companions, options.dry_run)?;
+
+    outcomes.push(write_managed_block(
+        &options.root.join(&canonical),
+        &name,
+        options.dry_run,
+    )?);
+    entrypoints.push(canonical);
+
+    for (relative, plan) in companions.into_iter().zip(plans) {
+        outcomes.push(settle(options, &relative, plan, &name)?);
         entrypoints.push(relative);
     }
 
@@ -365,7 +387,7 @@ fn project_name(options: &InitOptions) -> String {
 }
 
 fn is_agents_md(path: &Path) -> bool {
-    path.file_name().and_then(|name| name.to_str()) == Some("AGENTS.md")
+    crate::entrypoint::is_canonical(path)
 }
 
 /// Decide which entrypoint files to touch (§FS-002-init.3).
@@ -431,6 +453,42 @@ fn write_new_file(path: &Path, contents: &str, dry_run: bool) -> Result<Outcome,
     Ok(Outcome {
         path: path.to_path_buf(),
         action: Action::Wrote,
+    })
+}
+
+/// Carry out one companion's plan: a link to `AGENTS.md`, or the file it
+/// already was with the block written in (§FS-002-init.3).
+fn settle(
+    options: &InitOptions,
+    relative: &Path,
+    plan: crate::entrypoint::Plan,
+    name: &str,
+) -> Result<Outcome, InitError> {
+    use crate::entrypoint::Plan;
+    let path = options.root.join(relative);
+
+    let linked = match plan {
+        Plan::Linked => {
+            return Ok(Outcome {
+                path,
+                action: Action::Exists,
+            });
+        }
+        Plan::Link => crate::entrypoint::write_link(&options.root, relative, options.dry_run)?,
+        Plan::Keep => false,
+    };
+
+    if linked {
+        return Ok(Outcome {
+            path,
+            action: Action::Linked,
+        });
+    }
+    // Bytes of its own, or a filesystem that refused the link.
+    let written = write_managed_block(&path, name, options.dry_run)?;
+    Ok(Outcome {
+        action: Action::Kept,
+        ..written
     })
 }
 

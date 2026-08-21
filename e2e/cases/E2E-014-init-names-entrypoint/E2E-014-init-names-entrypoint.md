@@ -1,9 +1,13 @@
-# E2E-014-init-names-entrypoint: the next block names the entrypoint it wrote
+# E2E-014-init-names-entrypoint: the next block names the file that holds the block
 
-`init` updates whichever agent entrypoints already exist and only falls back to
-`AGENTS.md` when none do (§FS-002-init.3). The closing `see <path> for the full
-workflow.` line must therefore name what this run actually handled: in a
-repository carrying `CLAUDE.md` and no `AGENTS.md`, sending the reader to
-`AGENTS.md` would point at a file that does not exist, at exactly the moment
-they are looking for the workflow they just installed (§FS-002-init.5,
-§GOAL-003-friendly-output).
+`AGENTS.md` is the one entrypoint carrying real bytes; every other one `init`
+touches is a link to it (§FS-002-init.3, §DF-009-one-file-agents-read). In a
+repository shipping `CLAUDE.md` and no `AGENTS.md`, that file's content *is*
+what the project already told agents, so it becomes `AGENTS.md` and `CLAUDE.md`
+becomes a link — nothing the author wrote is lost, and the two paths can no
+longer disagree.
+
+The closing `see <path> ...` line must name the file that holds the block, not
+the link (§FS-002-init.5, §GOAL-003-friendly-output). A reader following it is
+looking for the workflow they just installed, and the link's target is where
+editing it will stick.

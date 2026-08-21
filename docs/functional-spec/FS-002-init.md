@@ -60,9 +60,9 @@ even with `--force`.
 
 ## 3. Agent Entrypoints
 
-The canonical fallback is `<path>/AGENTS.md`. Automatic mode updates known
-existing entrypoints instead of creating a competing canonical file. The known
-set is:
+`AGENTS.md` is the one file that holds the block; every other entrypoint `init`
+touches is a symbolic link to it, so a project states its instructions once and
+every agent reads the same bytes (§DF-009-one-file-agents-read). The known set is:
 
 - `AGENTS.md`
 - `AGENTS.override.md`
@@ -80,7 +80,25 @@ workspace-triggered aliases only when the matching tool-specific directory
 already exists: `.claude/`, `.gemini/`, `.cursor/`, or `.zed/`. It does not
 create `.github/copilot-instructions.md` merely because `.github/` exists, and
 it does not create `.windsurfrules` or `.rules` without an explicit flag or
-workspace signal.
+workspace signal. `AGENTS.md` is written whichever families are asked for: a
+link has to point at something.
+
+Each link is relative to the file that carries it — `AGENTS.md` beside the root,
+`../AGENTS.md` from `.claude/` — so cloning or moving the tree keeps it resolving.
+
+A link is laid over a companion only when nothing is lost. It is created when the
+companion does not exist; left alone when it already links to `AGENTS.md`; and
+laid over a regular file in exactly two cases — the file's bytes match
+`AGENTS.md`, so a copy becomes a link to the original; or `AGENTS.md` does not
+exist yet and this is the only entrypoint that does, in which case its bytes
+*become* `AGENTS.md`, since that content is what the project already told agents.
+
+Any other companion holding bytes of its own is kept as a regular file with the
+block written into it, and the run says it was kept: overwriting would destroy
+what §4 promises to preserve, and `init` cannot know whether two entrypoints
+disagree on purpose. Where the filesystem refuses a link — Windows without
+Developer Mode — `init` writes the block into the file and says so rather than
+failing, because a duplicated block beats no instructions.
 
 ## 4. Managed Block
 
