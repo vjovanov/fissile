@@ -8,7 +8,9 @@ A case directory holds:
 
 - `E2E-NNN-slug.md` — the scenario declaration, citing the behavior it verifies;
 - `case.toml` — the manifest: `args`, expected `exit`, optional `git`, and
-  stdout/stderr/`creates` assertions;
+  stdout/stderr/`creates` assertions, plus `[[files]]` blocks asserting the bytes
+  a command left behind — `contains` and `excludes` needles against one path,
+  which is how a scenario checks a rewrite rather than the claim about it;
 - `repo/` — the working tree copied into a throwaway directory before the run
   (omitted when the scenario starts from an empty repo, like `init`).
 
@@ -40,3 +42,13 @@ The harness drives the real `fissile` binary, so every documented behavior under
 - §E2E-021-measure-reports-headroom — measure reports the count and the distance to what binds.
 - §E2E-022-exception-retune-moves-a-ceiling — retune moves a recorded ceiling to the quantized value.
 - §E2E-023-audit-reports-loose-ceilings — audit reports a ceiling that has drifted above its file.
+- §E2E-024-retune-preserves-the-registry — retune moves one line and reads the rest as TOML.
+- §E2E-025-retune-refuses-a-mismatched-matcher — a glob address does not retune an exact entry.
+- §E2E-026-audit-top-ranks-unruled-files — the largest file ranks even when no rule reaches it.
+- §E2E-027-measure-headroom-is-spendable — the headroom is room a caller can actually spend.
+- §E2E-028-measure-agrees-at-a-ceiling — a file exactly at its ceiling is accepted, and reads that way.
+- §E2E-029-exception-add-names-the-entry-to-edit — a glob over two entries is a conflict, not a broken registry.
+- §E2E-030-retune-of-a-shrunk-file-names-removal — a file under its limit cannot be followed down.
+- §E2E-031-exception-add-measures-once — a refusal reuses the measurement it already took.
+- §E2E-032-bump-defaults-to-the-configured-step — a ceiling is quantized even when nothing configures the step.
+- §E2E-033-measure-staged-shares-check-selection — measure --staged selects what check --staged selects.

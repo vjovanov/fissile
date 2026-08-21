@@ -1,0 +1,19 @@
+unix_only = true
+args = [
+  "exception", "add", "src/big.txt",
+  "--severity", "soft",
+  "--rule", "prose",
+  "--kind", "structural",
+  "--reason", "Structural: one quoted excerpt.",
+  "--dry-run",
+]
+exit = 2
+# The refusal still quotes the measurement, so the caller can see the ceiling
+# against the file (§FS-005-exception-add.4).
+stderr_contains = ["accepts up to 10 tokens; the file is 6"]
+
+# One line, not two: the file was measured once and the refusal reused it.
+[[files]]
+path = "counted.log"
+contains = ["src/big.txt\n"]
+excludes = ["src/big.txt\nsrc/big.txt"]

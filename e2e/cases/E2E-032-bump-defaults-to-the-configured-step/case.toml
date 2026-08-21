@@ -1,0 +1,18 @@
+args = [
+  "exception", "add", "src/big.rs",
+  "--severity", "soft",
+  "--rule", "rust",
+  "--kind", "deferred",
+  "--reason", "Missing boundary: the module this belongs in does not exist yet.",
+  "--until", "the case-builder module lands",
+]
+exit = 0
+stdout_equals = """
+appended src/big.rs to docs/file-size-agent-exceptions.toml (accepted up to 200 lines)"""
+
+# No [exceptions.bump] in the config: the 100-line default step turned a 105-line
+# measurement into a ceiling of 200, not 105.
+[[files]]
+path = "docs/file-size-agent-exceptions.toml"
+contains = ["max_accepted = { value = 200, unit = \"lines\" }"]
+excludes = ["value = 105"]

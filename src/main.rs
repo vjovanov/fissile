@@ -228,39 +228,70 @@ fn run_init(args: &[String]) -> ExitCode {
     }
 }
 
-fn run_check(args: &[String]) -> ExitCode {
-    let mut options = CheckOptions {
-        root: PathBuf::from("."),
-        config_path: None,
-        staged: false,
-        format: None,
-        no_color: false,
-        paths: Vec::new(),
-    };
+/// The flags `check` and `measure` share: one file-set selection and one set of
+/// output controls, parsed once so the two commands cannot drift on what
+/// `--staged` or `--format` mean (§FS-007-measure.1, §FS-006-cli.1).
+#[derive(Default)]
+struct FileSetArgs {
+    config_path: Option<PathBuf>,
+    staged: bool,
+    format: Option<Format>,
+    no_color: bool,
+    paths: Vec<String>,
+}
+
+/// `Ok(None)` means `--help` was handled and the command is done.
+fn parse_file_set(
+    command: &str,
+    usage: &str,
+    args: &[String],
+) -> Result<Option<FileSetArgs>, ExitCode> {
+    let mut parsed = FileSetArgs::default();
     let mut iter = args.iter();
 
     while let Some(arg) = iter.next() {
         match arg.as_str() {
             "--help" | "-h" => {
-                println!("{CHECK_USAGE}");
-                return ExitCode::SUCCESS;
+                println!("{usage}");
+                return Ok(None);
             }
-            "--staged" => options.staged = true,
-            "--no-color" => options.no_color = true,
+            "--staged" => parsed.staged = true,
+            "--no-color" => parsed.no_color = true,
             "--config" => match value(&mut iter, "--config") {
-                Ok(path) => options.config_path = Some(PathBuf::from(path)),
-                Err(message) => return usage_fail("check", &message, CHECK_USAGE),
+                Ok(path) => parsed.config_path = Some(PathBuf::from(path)),
+                Err(message) => return Err(usage_fail(command, &message, usage)),
             },
             "--format" => match value(&mut iter, "--format").and_then(|raw| parse_format(&raw)) {
-                Ok(format) => options.format = Some(format),
-                Err(message) => return usage_fail("check", &message, CHECK_USAGE),
+                Ok(format) => parsed.format = Some(format),
+                Err(message) => return Err(usage_fail(command, &message, usage)),
             },
             other if other.starts_with('-') => {
-                return usage_fail("check", &format!("unknown option `{other}`"), CHECK_USAGE);
+                return Err(usage_fail(
+                    command,
+                    &format!("unknown option `{other}`"),
+                    usage,
+                ));
             }
-            other => options.paths.push(other.to_owned()),
+            other => parsed.paths.push(other.to_owned()),
         }
     }
+    Ok(Some(parsed))
+}
+
+fn run_check(args: &[String]) -> ExitCode {
+    let parsed = match parse_file_set("check", CHECK_USAGE, args) {
+        Ok(Some(parsed)) => parsed,
+        Ok(None) => return ExitCode::SUCCESS,
+        Err(code) => return code,
+    };
+    let options = CheckOptions {
+        root: PathBuf::from("."),
+        config_path: parsed.config_path,
+        staged: parsed.staged,
+        format: parsed.format,
+        no_color: parsed.no_color,
+        paths: parsed.paths,
+    };
 
     match check::run(&options) {
         Ok(run) => finish_run("check", &run.output, run.failed, &run.errors),
@@ -272,42 +303,19 @@ fn run_check(args: &[String]) -> ExitCode {
 }
 
 fn run_measure(args: &[String]) -> ExitCode {
-    let mut options = MeasureOptions {
-        root: PathBuf::from("."),
-        config_path: None,
-        staged: false,
-        format: None,
-        no_color: false,
-        paths: Vec::new(),
+    let parsed = match parse_file_set("measure", MEASURE_USAGE, args) {
+        Ok(Some(parsed)) => parsed,
+        Ok(None) => return ExitCode::SUCCESS,
+        Err(code) => return code,
     };
-    let mut iter = args.iter();
-
-    while let Some(arg) = iter.next() {
-        match arg.as_str() {
-            "--help" | "-h" => {
-                println!("{MEASURE_USAGE}");
-                return ExitCode::SUCCESS;
-            }
-            "--staged" => options.staged = true,
-            "--no-color" => options.no_color = true,
-            "--config" => match value(&mut iter, "--config") {
-                Ok(path) => options.config_path = Some(PathBuf::from(path)),
-                Err(message) => return usage_fail("measure", &message, MEASURE_USAGE),
-            },
-            "--format" => match value(&mut iter, "--format").and_then(|raw| parse_format(&raw)) {
-                Ok(format) => options.format = Some(format),
-                Err(message) => return usage_fail("measure", &message, MEASURE_USAGE),
-            },
-            other if other.starts_with('-') => {
-                return usage_fail(
-                    "measure",
-                    &format!("unknown option `{other}`"),
-                    MEASURE_USAGE,
-                );
-            }
-            other => options.paths.push(other.to_owned()),
-        }
-    }
+    let options = MeasureOptions {
+        root: PathBuf::from("."),
+        config_path: parsed.config_path,
+        staged: parsed.staged,
+        format: parsed.format,
+        no_color: parsed.no_color,
+        paths: parsed.paths,
+    };
 
     match measure::run(&options) {
         // Never `failed`: measuring is inspection, and a file over a hard limit

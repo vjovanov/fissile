@@ -1,0 +1,22 @@
+fissile_config_version = 1
+
+[scan]
+include = ["src"]
+exclude = []
+respect_gitignore = false
+
+[tokens]
+enabled = true
+command = ["sh", "tokcount.sh", "{path}"]
+
+[[messages]]
+id = "m"
+text = "Trim {path} to fit the token budget."
+
+[[rules]]
+id = "prose"
+include = ["src/**/*.txt"]
+unit = "tokens"
+soft = 2
+hard = 4
+message = "m"

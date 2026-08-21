@@ -115,6 +115,30 @@ pub fn selected_files(
         .map_err(CommandError::Io)
 }
 
+/// Measure a selected file set — staged blobs under `--staged`, working-tree
+/// bytes otherwise — collecting rather than raising the errors of paths that
+/// cannot be measured (§FS-004-check-audit.5). Shared by `check` and `measure`.
+pub fn measure_each(
+    loaded: &Loaded,
+    staged: bool,
+    files: &[String],
+) -> (Vec<crate::FileMeasurement>, Vec<String>) {
+    let mut measurements = Vec::with_capacity(files.len());
+    let mut errors = Vec::new();
+    for rel in files {
+        let measured = if staged {
+            crate::scan::measure_staged_file(&loaded.root, rel, &loaded.config.tokens)
+        } else {
+            crate::scan::measure_file(&loaded.root, rel, &loaded.config.tokens)
+        };
+        match measured {
+            Ok(measurement) => measurements.push(measurement),
+            Err(error) => errors.push(crate::scan::measure_error_line(rel, &error)),
+        }
+    }
+    (measurements, errors)
+}
+
 /// Tag a registry read failure with the file it came from (§FS-004-check-audit.5).
 fn named(path: &Path, error: io::Error) -> io::Error {
     io::Error::new(error.kind(), format!("{}: {error}", path.display()))

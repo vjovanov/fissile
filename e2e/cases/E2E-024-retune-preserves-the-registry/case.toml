@@ -1,0 +1,22 @@
+args = [
+  "exception", "retune", "src/big.rs",
+  "--severity", "hard",
+  "--rule", "rust",
+]
+exit = 0
+stdout_equals = """
+docs/file-size-human-exceptions.toml: src/big.rs 8 -> 12 lines"""
+
+# What the command claims is on stdout; what it wrote is here. Every needle
+# carries the `\r` the file is stored with, so a rewrite that rebuilt the line
+# and dropped it fails even though the value is right.
+[[files]]
+path = "docs/file-size-human-exceptions.toml"
+contains = [
+  # The addressed entry moved, and kept its line ending.
+  "max_accepted = { value = 12, unit = \"lines\" }\r\n",
+  # The other entry's ceiling stands: the prose in its reason shifted no index.
+  "max_accepted = { value = 8, unit = \"lines\" }\r\n",
+  # And the registry that reason quotes is still prose, not a field that moved.
+  "max_accepted = { value = 1, unit = \"lines\" }\r\n",
+]

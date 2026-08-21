@@ -3,7 +3,7 @@
 //! line budget, the way `report.rs` and `exceptions.rs` already do.
 
 use super::*;
-use crate::{Severity, measure_bytes};
+use crate::{Severity, Unit, measure_bytes};
 
 const SAMPLE: &str = r#"
 fissile_config_version = 1
@@ -35,6 +35,32 @@ fn parses_defaults_when_tables_absent() {
     );
     assert_eq!(config.exceptions.stale, Stale::Warn);
     assert!(!config.tokens.enabled);
+    // Every ceiling `add` and `retune` write is a multiple of these
+    // (§DF-006-quantized-ceilings.1), so a drift here is a silent change to
+    // every registry fissile touches.
+    assert_eq!(config.exceptions.bump.step(Unit::Lines), 100);
+    assert_eq!(config.exceptions.bump.step(Unit::Bytes), 4096);
+    assert_eq!(config.exceptions.bump.step(Unit::Tokens), 1000);
+}
+
+/// §FS-001-config.5: the table is per-unit and each field defaults on its own,
+/// so naming one step does not silently reset the other two.
+#[test]
+fn parses_a_partial_bump_table() {
+    let config =
+        Config::parse(&format!("{SAMPLE}\n[exceptions.bump]\nlines = 25\n")).expect("valid config");
+    assert_eq!(config.exceptions.bump.step(Unit::Lines), 25);
+    assert_eq!(config.exceptions.bump.step(Unit::Bytes), 4096);
+    assert_eq!(config.exceptions.bump.step(Unit::Tokens), 1000);
+}
+
+/// A typo in a step is a config that quantizes to something the author did not
+/// choose, which is exactly the reading §DF-006-quantized-ceilings retires.
+#[test]
+fn rejects_an_unknown_bump_field() {
+    let error = Config::parse(&format!("{SAMPLE}\n[exceptions.bump]\nline = 25\n"))
+        .expect_err("a misspelled unit is rejected");
+    assert!(matches!(error, ConfigError::Parse { .. }));
 }
 
 #[test]

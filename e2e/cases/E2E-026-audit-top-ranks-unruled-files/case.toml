@@ -1,0 +1,8 @@
+args = ["audit", "--top", "2", "--no-color"]
+exit = 0
+stdout_contains = [
+  """
+top lines:
+  40 src/generated.txt
+  3 src/small.rs""",
+]

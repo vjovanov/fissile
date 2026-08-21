@@ -1,0 +1,7 @@
+git = true
+args = ["measure", "--staged", "--no-color"]
+exit = 0
+# The generated file is staged too, and dropped by `[scan].exclude` — the same
+# selection §E2E-001-check-clean gets, because it is the same code.
+stdout_equals = """
+src/staged.rs 3 lines [rust] soft 2 hard 8 — 4 to hard"""

@@ -1,0 +1,12 @@
+args = [
+  "exception", "retune", "src/big.rs",
+  "--severity", "soft",
+  "--rule", "rust",
+]
+exit = 2
+# No --max was passed, so no --max is blamed; the remedy matches the one
+# §E2E-023-audit-reports-loose-ceilings prints for the same entry.
+stderr_contains = [
+  "src/big.rs measures 1 lines, under rule rust soft limit 2",
+  "silence nothing — remove the entry rather than retuning it",
+]

@@ -38,24 +38,16 @@ pub fn run(options: &CheckOptions) -> Result<Run, CommandError> {
         .format
         .unwrap_or_else(|| loaded.config.output.format.into());
 
+    // A path that cannot be measured is skipped, not fatal: one odd file must not
+    // hide every other finding (§FS-004-check-audit.5).
+    let (measurements, errors) = cli::measure_each(&loaded, options.staged, &files);
     let mut outcomes = Vec::new();
-    let mut errors = Vec::new();
-    for rel in files {
-        let measurement = if options.staged {
-            scan::measure_staged_file(&loaded.root, &rel, &loaded.config.tokens)
-        } else {
-            scan::measure_file(&loaded.root, &rel, &loaded.config.tokens)
-        };
-        // A path that cannot be measured is skipped, not fatal: one odd file
-        // must not hide every other finding (§FS-004-check-audit.5).
-        match measurement {
-            Ok(measurement) => outcomes.extend(report::evaluate_file(
-                &loaded.checker,
-                &loaded.registries,
-                &measurement,
-            )?),
-            Err(error) => errors.push(scan::measure_error_line(&rel, &error)),
-        }
+    for measurement in &measurements {
+        outcomes.extend(report::evaluate_file(
+            &loaded.checker,
+            &loaded.registries,
+            measurement,
+        )?);
     }
 
     let failed = report::has_hard_failure(&outcomes);

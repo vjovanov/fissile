@@ -90,10 +90,12 @@ state. It is for adoption and maintenance, not just pass/fail.
   object, because a consumer should not have to distinguish "no exceptions" from
   "this build does not report them".
 - `--top <N>` reports the largest measured files per unit, after exclusions, even
-  when they are under limit. A file appears in a unit's ranking only when a rule
-  measures it in that unit, and the value is the one that rule counts — its line
-  policy decides what a line is (§FS-001-config.3.1) — so a `--top` number and a
-  finding never disagree about one file.
+  when they are under limit. Where a rule measures the file in that unit, the
+  value is the one that rule counts — its line policy decides what a line is
+  (§FS-001-config.3.1) — so a `--top` number and a finding never disagree about
+  one file. Every other scanned file still ranks, under the default line policy:
+  `--top` is the adoption surface, and a repository whose rules do not yet reach
+  its largest file is the repository that most needs to be told about it.
 - `--stale-exceptions` reports every exception entry whose path or glob matches
   no scanned file, each named by its registry and its `path` (§FS-003-exceptions.4)
   — the list spans both registries, and the same path can be stale in each. It

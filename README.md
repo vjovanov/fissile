@@ -187,12 +187,14 @@ not, and never fails a build:
 ```text
 $ fissile measure src/orders.rs src/util.rs
 src/orders.rs 620 lines [source] soft 350 hard 550 hard-accepted 700 — 80 to hard-accepted
-src/util.rs 410 lines [source] soft 350 hard 550 — 140 to hard
+src/util.rs 410 lines [source] soft 350 hard 550 — 139 to hard
 ```
 
-The clause after the dash is the distance to whichever threshold binds first —
-a limit, or the ceiling an exception records. That is the number you need
-*before* deciding whether the new test goes in this file or a new one.
+The clause after the dash is the room left before whichever threshold binds
+first — a limit, or the ceiling an exception records. It is room you can
+actually use: `0 to hard` means the next line fails the commit, because a limit
+fires at the limit. That is the number you need *before* deciding whether the
+new test goes in this file or a new one.
 
 ## Justified exceptions
 

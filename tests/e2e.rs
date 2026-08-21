@@ -34,6 +34,10 @@ struct Case {
     /// Repo-relative paths that must exist after the run (for `init`).
     #[serde(default)]
     creates: Vec<String>,
+    /// Assertions on a file's bytes after the run. Stdout says what a command
+    /// claims it did; these say what it actually wrote (§FS-008-exception-retune.3).
+    #[serde(default)]
+    files: Vec<FileAssert>,
     /// Skip on non-Unix hosts. Used by the token-unit case, whose external
     /// counter is a POSIX shell stub (§DA-001-token-external-command); token
     /// mode itself is cross-platform, but a portable counter stub is not, so
@@ -41,6 +45,19 @@ struct Case {
     /// (§DA-002-instruction-count-benchmarks).
     #[serde(default)]
     unix_only: bool,
+}
+
+/// One post-run assertion about a file the command wrote. Needles are compared
+/// against the raw bytes as text, so a `\r` in a needle asserts the line ending.
+#[derive(Deserialize)]
+struct FileAssert {
+    /// Repo-relative path within the throwaway tree.
+    path: String,
+    #[serde(default)]
+    contains: Vec<String>,
+    /// Substrings that must be absent — the shape of "this line was not touched".
+    #[serde(default)]
+    excludes: Vec<String>,
 }
 
 fn cases_dir() -> PathBuf {
@@ -138,6 +155,24 @@ fn run_case(dir: &Path) -> Result<(), String> {
     for relative in &case.creates {
         if !work.join(relative).exists() {
             problems.push(format!("expected {relative} to be created"));
+        }
+    }
+    for assertion in &case.files {
+        match fs::read(work.join(&assertion.path)) {
+            Ok(bytes) => {
+                let text = String::from_utf8_lossy(&bytes);
+                for needle in &assertion.contains {
+                    if !text.contains(needle.as_str()) {
+                        problems.push(format!("{} missing {needle:?}", assertion.path));
+                    }
+                }
+                for needle in &assertion.excludes {
+                    if text.contains(needle.as_str()) {
+                        problems.push(format!("{} still contains {needle:?}", assertion.path));
+                    }
+                }
+            }
+            Err(error) => problems.push(format!("reading {}: {error}", assertion.path)),
         }
     }
 
