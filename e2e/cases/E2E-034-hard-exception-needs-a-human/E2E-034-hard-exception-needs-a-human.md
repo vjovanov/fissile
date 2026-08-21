@@ -9,3 +9,8 @@ agent can take on its own — the same entry at soft severity, which leaves the
 finding standing — and the flag a script legitimately uses. A refusal that named
 neither would leave hand-edited registry TOML as the only way forward, which is
 the outcome `fissile exception add` exists to prevent.
+
+The offered route is asserted whole rather than by fragments, because what it
+owes the caller is that it runs: it carries this call's own `--kind` and
+`--reason` through, changing the one flag the gate is about.
+§E2E-039-the-offered-soft-route-runs runs those exact bytes.

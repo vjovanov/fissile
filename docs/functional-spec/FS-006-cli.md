@@ -42,6 +42,10 @@ the finding: it names the file, the severity, the crossed limit, the remediation
 this repository configured, and the command that records an exception. A test
 pins the screen's load-bearing clauses.
 
+What left the top-level screen is the pointer at `fissile init --dry-run`, the
+one way to read the managed block without writing a file (§FS-002-init.4). It
+moves to `fissile init --help`, where the flag it describes already lives.
+
 ## 3. Version
 
 `fissile --version` (alias `-V`) prints exactly one line to stdout and exits `0`:

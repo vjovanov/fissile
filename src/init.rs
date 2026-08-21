@@ -233,7 +233,9 @@ const NEXT_HOOK_STEP_NO_GIT: &str = "Run git init && fissile init to install the
 #[derive(Debug)]
 pub enum InitError {
     Io(io::Error),
-    UnsupportedBlock { path: PathBuf, version: u32 },
+    /// `None` when the block declares no version this build can read: a later
+    /// generation renamed the heading that carries it (§FS-002-init.4).
+    UnsupportedBlock { path: PathBuf, version: Option<u32> },
     NotAGitRepo { root: PathBuf },
 }
 
@@ -241,9 +243,17 @@ impl std::fmt::Display for InitError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             InitError::Io(error) => write!(f, "{error}"),
-            InitError::UnsupportedBlock { path, version } => write!(
+            InitError::UnsupportedBlock {
+                path,
+                version: Some(version),
+            } => write!(
                 f,
                 "{} has an unsupported managed block version v{version}; this build writes v{SUPPORTED_BLOCK_VERSION}",
+                path.display()
+            ),
+            InitError::UnsupportedBlock { path, version: None } => write!(
+                f,
+                "{} has a managed block that declares no version this build can read; this build writes v{SUPPORTED_BLOCK_VERSION}",
                 path.display()
             ),
             InitError::NotAGitRepo { root } => write!(
@@ -525,13 +535,27 @@ mod tests {
 
     #[test]
     fn replaces_existing_managed_block_and_preserves_surroundings() {
-        let existing = "# Project\n\n<!-- BEGIN FISSILE MANAGED BLOCK -->\nold body\n<!-- END FISSILE MANAGED BLOCK -->\n\n## Other\n\nkeep me\n";
+        let existing = "# Project\n\n<!-- BEGIN FISSILE MANAGED BLOCK -->\n## Keeping Files Small With fissile (v3)\n\nold body\n<!-- END FISSILE MANAGED BLOCK -->\n\n## Other\n\nkeep me\n";
         let (result, action) =
             apply_managed_block(existing, Path::new("AGENTS.md")).expect("replace succeeds");
         assert_eq!(action, Action::Updated);
         assert!(result.contains("## Other\n\nkeep me"));
         assert!(!result.contains("old body"));
         assert!(result.starts_with("# Project\n"));
+    }
+
+    /// Markers carry no version, so a block whose heading this build cannot read
+    /// leaves nothing to judge it by. Assuming it is current would overwrite a
+    /// newer generation wholesale (§FS-002-init.4).
+    #[test]
+    fn rejects_a_delimited_block_that_declares_no_version() {
+        let existing = "<!-- BEGIN FISSILE MANAGED BLOCK -->\n## Some Future Heading\n\nfuture body\n<!-- END FISSILE MANAGED BLOCK -->\n";
+        let error = apply_managed_block(existing, Path::new("AGENTS.md"))
+            .expect_err("an unreadable version is unsupported");
+        assert!(matches!(
+            error,
+            InitError::UnsupportedBlock { version: None, .. }
+        ));
     }
 
     #[test]
@@ -541,7 +565,10 @@ mod tests {
             apply_managed_block(existing, Path::new("AGENTS.md")).expect_err("v4 unsupported");
         assert!(matches!(
             error,
-            InitError::UnsupportedBlock { version: 4, .. }
+            InitError::UnsupportedBlock {
+                version: Some(4),
+                ..
+            }
         ));
     }
 

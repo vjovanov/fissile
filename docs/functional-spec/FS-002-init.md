@@ -115,9 +115,23 @@ If an entrypoint has no managed block, `init` appends the current block. If it
 has a supported block version, `init` replaces only the block and preserves the
 bytes before and after it, including the block position. If it has a newer
 unsupported block version, `init` exits with a schema error and leaves the file
-unchanged. A begin marker with no end marker is a truncated block: it runs to
-the next H1 or H2 heading that is not the block's own, or to end of file, and is
-replaced wholesale.
+unchanged.
+
+A block between our markers that states no version this build can read is
+unsupported too. The markers carry no version, so there is nothing to fall back
+to: a later generation that renames the heading would otherwise be read as
+current and overwritten wholesale, which is the downgrade the paragraph above
+rules out. The error names the file and says the block declares no readable
+version.
+
+A begin marker with no end marker is a truncated block, and it is replaced
+wholesale — leaving part of the old body outside the new markers would put a
+duplicate in the file that no later run can clean up. How far it runs depends on
+what else bounds a block in that file. In Markdown, headings do: the span ends
+at the next H1 or H2 that is not the block's own, or at end of file, so sections
+a user wrote below survive. The hook block (§6) has no such boundary — a shell
+file has no headings, and every `# ` comment in one would be mistaken for one —
+so its truncated span runs to end of file.
 
 Blocks v1 and v2 had no markers; the heading was the whole boundary, and the
 span ran to the next H1 or H2 heading, or end of file. `init` still recognizes
@@ -136,6 +150,12 @@ The v3 block teaches three things, and deliberately no more
   the repositories where no hook fires (§6);
 - that the gate is not bypassed with `--no-verify`.
 
+The block is written by every `init` run, including the ones that install no
+hook — `--no-hook`, and a target that is not a git repository (§6) — so it
+states the habit as the instruction and the hook as the conditional. A block
+asserting a pre-commit hook that the same run just reported it did not install
+(§5) would be the first thing an agent read about this repository and false.
+
 Everything the v2 block said about severities, seams, exceptions, ceilings, and
 stale entries is said by the surface that raises each one: the finding and its
 guidance (§FS-004-check-audit.1), the `exception add` refusals
@@ -145,7 +165,9 @@ An example rendered block lives at `examples/AGENTS.fissile.md`.
 
 `--dry-run` prints that block to stdout, under the planned writes, which is the
 one way to read it without changing a file. The text is the same constant `init`
-installs, so the printed and the written block cannot drift.
+installs, so the printed and the written block cannot drift. `fissile init
+--help` says so, since the top-level screen leads to a run rather than to a
+document (§FS-006-cli.2) and would otherwise leave the flag undiscoverable.
 
 ## 5. Reporting
 

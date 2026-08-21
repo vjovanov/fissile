@@ -1,0 +1,12 @@
+fissile_exceptions_version = 2
+
+[[exceptions]]
+path = "src/vendor/big.rs"
+match = "exact"
+rules = ["rust"]
+kind = "deferred"
+max_accepted = { value = 100, unit = "lines" }
+until = "the reader module lands"
+reason = """
+Missing boundary: nothing owns the staged-blob reader yet.
+"""

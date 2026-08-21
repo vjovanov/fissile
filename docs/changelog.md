@@ -32,20 +32,33 @@ with a migration note.
 
 ### Added
 
-- §FS-004-check-audit.1.1: a run that reports a finding closes with one `hint:`
-  line naming `fissile measure`. The finding already carries the offending
-  file's size; the hint is about the files a split moves code *into*, whose
-  headroom decides where the seam can go.
-- §FS-004-check-audit.1.2: `check --staged` that ends in a standing hard
-  overflow closes with a commit-gate epilogue — the commit is blocked, a
-  reviewed hard exception is the other way through, and `--no-verify` only moves
-  the overflow into the branch. Only `--staged` prints it: a CI or manual run is
-  not blocking anything a caller is about to bypass.
-- §FS-004-check-audit.1.3: `check` reports exact-path exception entries whose
-  file is not on disk, under `[exceptions].stale`. `check --staged` sees a
-  partial file set, so it reports only what a partial view proves — an absent
-  exact path. The glob and scan-scope inventory stays in
-  `audit --stale-exceptions`.
+- §FS-004-check-audit.1.1: a run that reports a finding adds one `hint:` line
+  naming `fissile measure`, beneath the findings it is about. The finding
+  already carries the offending file's size; the hint is about the files a split
+  moves code *into*, whose headroom decides where the seam can go.
+- §FS-004-check-audit.1.2: a `check --staged` run that exits non-zero closes
+  with a commit-gate epilogue naming what blocked it — a split and a reviewed
+  hard exception for an overflow, the registry for a dead entry — and in both
+  cases that `--no-verify` only moves the problem into the branch — and, when a
+  staged file could not be measured at all (§FS-004-check-audit.5), that nothing
+  above accounts for it. Every reason the run has to fail has an epilogue, and
+  the two are decided together: a blocked commit whose output reads as advisory
+  is the failure mode this closes.
+  Only `--staged` prints it: a CI or manual run is not blocking anything a
+  caller is about to bypass.
+- §FS-004-check-audit.1.3: `check` reports exact-path exception entries its own
+  run proves have outlived their file, under `[exceptions].stale` — a staged
+  deletion or rename under `--staged`, and — on a full scan — an entry matching
+  nothing in the inventory with no file at its path. Absence from the working
+  tree is deliberately not the test on its own: a generated file a build has not
+  written, or one deleted without staging the deletion, has outlived no entry.
+  Neither has one the scan scope excludes or git ignores, which is missing from
+  the inventory while sitting exactly where the entry says. The glob and scan-scope inventory
+  stays in `audit --stale-exceptions`.
+  **Migration: `[exceptions].stale = "error"` now fails `check`, not only
+  `audit --stale-exceptions`.** Through the pre-commit hook that blocks the
+  commit. Repositories that set `error` to make a CI audit strict, and do not
+  want it at commit time, should set `warn`.
 - §FS-005-exception-add.4: `--reason` that says nothing beyond the finding's own
   facts now warns. It never refuses: the test catches only a reason that is
   entirely restatement, and rejecting a terse honest claim would teach callers
@@ -62,9 +75,14 @@ with a migration note.
   to upgrade.** A v1 or v2 unmarked block is recognized and replaced in place,
   so a repository upgrades rather than growing a second block. Since the span is
   now the markers and not "everything up to the next H1 or H2", a heading a user
-  writes directly beneath the block is outside it and survives a refresh.
+  writes directly beneath the block is outside it and survives a refresh. A
+  delimited block whose heading states no version this build can read is refused
+  rather than overwritten: the markers carry no version, so there is nothing to
+  fall back to, and assuming "current" would silently downgrade a newer block.
 - §FS-005-exception-add.4: `exception add --severity hard` is refused when
-  standard input is not a terminal, naming the soft-severity route and `--force`
+  standard input is not a terminal, offering this call with `--severity soft` —
+  every other flag, `--kind` and `--reason` included, carried through so the
+  command runs as printed — and naming `--force`
   (§DF-008-hard-severity-needs-a-terminal). **Migration: scripted hard adds need
   `--force`.** A hard exception is the only way past a stop-the-line gate, and
   §DF-003-severity-guidance.1 already held that it is not an agent's to grant
@@ -76,6 +94,10 @@ with a migration note.
   exception.
 - §FS-002-init.5: the `next:` block closes with `see <path> for what agents are
   told; the findings carry the rest.`
+- §FS-003-exceptions.4: `[exceptions].stale` is documented as governing the
+  subject rather than one command, and the generated config says so. The
+  validator's own rule is stated plainly: an entry is well-formed whether or not
+  its path is on disk today.
 
 ## 2. [0.6.0] — 2026-08-21
 

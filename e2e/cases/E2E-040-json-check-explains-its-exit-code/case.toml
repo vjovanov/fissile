@@ -1,0 +1,10 @@
+args = ["check", "--staged", "--format", "json"]
+exit = 1
+git = true
+git_removes = ["src/moved.rs"]
+# stdout keeps the findings array; the reason for the exit code is on stderr.
+stdout_equals = "[]"
+stderr_contains = [
+  "stale: 1 exception accepts a file that is not there [registry: docs/file-size-agent-exceptions.toml]",
+  "src/moved.rs [soft, rule: rust]",
+]

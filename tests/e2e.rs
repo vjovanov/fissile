@@ -23,6 +23,12 @@ struct Case {
     /// checks and the pre-commit hook install).
     #[serde(default)]
     git: bool,
+    /// Paths whose removal this commit stages: the tree is committed first, then
+    /// each path is `git rm`-ed. The shape of a commit that deletes or moves a
+    /// file, which is not the same as a file simply missing from the working
+    /// tree (§FS-004-check-audit.1.3). Requires `git`.
+    #[serde(default)]
+    git_removes: Vec<String>,
     /// Substrings that must appear in stdout.
     #[serde(default)]
     stdout_contains: Vec<String>,
@@ -115,9 +121,41 @@ fn run_case(dir: &Path) -> Result<(), String> {
         fs::create_dir_all(&work).unwrap();
     }
 
+    // The removal has to be staged against a commit, so a case that asks for one
+    // without a repository would run with no removal staged at all — and could
+    // pass for the wrong reason (§FS-004-check-audit.1.3).
+    if !case.git_removes.is_empty() && !case.git {
+        return Err("git_removes requires git = true".to_owned());
+    }
+
     if case.git {
         git(&work, &["init", "-q"]);
         git(&work, &["add", "-A"]);
+        if !case.git_removes.is_empty() {
+            // The developer's own git configuration is neutralized: a global
+            // signing key or hooks path would fail this commit for reasons that
+            // have nothing to do with what the case asserts.
+            git(
+                &work,
+                &[
+                    "-c",
+                    "user.email=e2e@fissile.invalid",
+                    "-c",
+                    "user.name=e2e",
+                    "-c",
+                    "commit.gpgsign=false",
+                    "-c",
+                    "core.hooksPath=e2e-no-hooks",
+                    "commit",
+                    "-q",
+                    "-m",
+                    "base",
+                ],
+            );
+            for path in &case.git_removes {
+                git(&work, &["rm", "-q", path]);
+            }
+        }
     }
 
     let args: Vec<&str> = case.args.iter().map(String::as_str).collect();

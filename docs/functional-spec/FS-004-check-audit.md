@@ -51,8 +51,8 @@ byte-identical in a narrow terminal and in CI (§GOAL-006-graded-limits.2).
 
 ### 1.1 The hint line
 
-A `check` run that reports at least one finding closes with one `hint:` line
-naming `fissile measure`:
+A `check` run that reports at least one finding adds one `hint:` line naming
+`fissile measure`, directly beneath the findings it is about:
 
 ```text
 hint: fissile measure <path>... reports size and headroom for the files you split into.
@@ -62,7 +62,8 @@ The finding already carries the offending file's measurement and the limit it
 crossed, so the hint is not about that file. It is about the ones the split
 moves code *into*, whose headroom decides where the seam can go and which no
 other tool computes (§FS-007-measure). One line, once per run, never per file,
-and only when something was reported — a clean run stays exactly `ok`.
+and only when a *finding* was reported — a run whose only block is the stale
+inventory of §1.3 has no split to place, and a clean run stays exactly `ok`.
 
 This line and §1.2 are the two things `check` prints that are not findings. Both
 exist because the instructions they carry left the managed agent block
@@ -72,24 +73,51 @@ files.
 
 ### 1.2 The commit-gate epilogue
 
-`check --staged` that ends in a standing hard overflow closes with:
+A `check --staged` run that exits non-zero closes by saying so. Every reason to
+fail has an epilogue, and the two are decided together: an epilogue printed
+without failing is a false alarm, and a failure printed without one aborts the
+commit with output that reads as advisory.
+
+A standing hard overflow:
 
 ```text
 commit blocked by fissile. Split the file, or ask a human for a reviewed hard
 exception. Bypassing with --no-verify leaves the overflow for review or CI.
 ```
 
-Only `--staged` prints it, because only `--staged` is a commit: the same
-findings from a CI run or a manual `fissile check src/` are not blocking
+A dead exception entry under `[exceptions].stale = "error"` (§1.3), where there
+is no file to split and the fix is in the registry the block above names:
+
+```text
+commit blocked by fissile. Remove the exception entry above, or point it at the
+path its file moved to. Bypassing with --no-verify leaves a dead entry in the
+registry.
+```
+
+A staged file that could not be measured, which exits 2 (§5) with nothing above
+accounting for it:
+
+```text
+commit blocked by fissile. A staged file could not be measured, so nothing above
+accounts for it — fix the path the error names, or unstage it. Bypassing with
+--no-verify commits a file fissile never checked.
+```
+
+A run blocked by more than one leads with the overflow, then the dead entry: the
+split is the largest thing to do, and each block is on screen above the epilogue
+either way.
+
+Only `--staged` prints an epilogue, because only `--staged` is a commit: the
+same findings from a CI run or a manual `fissile check src/` are not blocking
 anything a caller is about to bypass. It says the one thing the finding's own
 guidance cannot, since a project rewrites that guidance (§DF-003-severity-guidance.1)
 and it is the wrong voice regardless — `--no-verify` is reached for by a caller
 who has just decided the gate is in the way.
 
-### 1.3 Dangling exceptions
+### 1.3 Stale exceptions
 
-`check` reports every `match = "exact"` exception entry whose path does not
-exist on disk, in a block of its own:
+`check` reports every `match = "exact"` exception entry its own file set proves
+has outlived its file, in a block of its own:
 
 ```text
 stale: 1 exception accepts a file that is not there [registry: docs/file-size-agent-exceptions.toml]
@@ -99,14 +127,35 @@ stale: 1 exception accepts a file that is not there [registry: docs/file-size-ag
 ```
 
 Entries are reported under `[exceptions].stale`: `warn` reports them, `error`
-also fails the run, `ignore` says nothing (§FS-003-exceptions.4).
+also fails the run — and through the pre-commit hook, blocks the commit (§1.2) —
+`ignore` says nothing (§FS-003-exceptions.4).
 
-`check` reports only what its file set proves. Under `--staged` it sees the
-staged paths alone, so an entry matching nothing in that set is not thereby
-stale — but an exact path that is not on the filesystem is gone whatever the
-file set was. Globs are not judged here at all: a glob matching no file today is
-a question about the scan scope, which is `audit`'s inventory to answer
-(§FS-004-check-audit.2), not a fact a commit hook can establish.
+`check` reports only what its file set proves, and its three file sets prove
+different things:
+
+- **`--staged`** is a commit, and a commit proves what it removes: the entry is
+  reported when the run stages the deletion of its path or a rename away from
+  it — the moment it died, with the diff that killed it on screen.
+- **The configured scan scope** — plain `fissile check` — is the whole
+  inventory, so an entry matching nothing in it is stale by §2's comparison,
+  provided no file stands at its path: one the scope excludes or git ignores is
+  right where the entry says, and §2 reports it without blocking a build.
+- **Caller-passed paths** are a window, not an inventory, and prove nothing
+  about an entry naming some other file. Nothing is reported.
+
+Absence from the working tree is deliberately *not* the test on its own. A path can be
+missing because a build has not written it, or because someone deleted it
+without staging the deletion; neither means the entry has outlived anything, and
+under `error` each would stand between the author and every later commit over an
+entry that is still correct.
+
+Globs are not judged here: a glob matching no file today is a question about the
+scan scope, which is `audit`'s inventory to answer (§2), not a fact a commit
+hook can establish.
+
+So this is the staleness §2 reports, under the same setting and by the same
+comparison — one fact, not two (§FS-003-exceptions.4). `check` only ever says
+less: a narrower file set, and never a file that is still there.
 
 JSON output emits one record per overflow with at least:
 
@@ -122,6 +171,13 @@ JSON output emits one record per overflow with at least:
 
 When no findings are emitted, text output prints exactly `ok`; JSON output emits
 no success envelope.
+
+A `check` run can exit non-zero for something that is not an overflow — a dead
+exception entry under `[exceptions].stale = "error"` (§1.3). The findings array
+is the stable machine contract and grows no second record shape for it: the
+stale block goes to stderr, which already owns every diagnostic a JSON run emits
+(§5). What is ruled out is the one shape a consumer cannot act on — an empty
+array, a failing exit code, and nothing anywhere saying why.
 
 ## 2. Audit
 

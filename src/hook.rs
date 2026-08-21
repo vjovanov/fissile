@@ -119,13 +119,29 @@ mod tests {
         assert_eq!(action, Action::Exists);
     }
 
+    /// A begin marker whose end marker someone deleted. The heading rule would
+    /// stop at the next `# ` comment and orphan the rest of the old body below
+    /// the new block, in every later run; this one runs to EOF (§FS-002-init.6).
+    #[test]
+    fn replaces_a_truncated_block_wholesale() {
+        let existing = "#!/bin/sh\n# >>> fissile managed block (v1) >>>\n# Managed by `fissile init`; re-run init to update.\nfissile check --staged || exit 1\n";
+        let (result, action) =
+            apply_block(existing, Path::new("pre-commit")).expect("replace succeeds");
+        assert_eq!(action, Action::Updated);
+        assert_eq!(result, format!("{SHEBANG}\n{BLOCK}\n"));
+        assert_eq!(result.matches("fissile check --staged").count(), 1);
+    }
+
     #[test]
     fn rejects_newer_block_version() {
         let existing = "#!/bin/sh\n# >>> fissile managed block (v2) >>>\nfuture\n# <<< fissile managed block (v2) <<<\n";
         let error = apply_block(existing, Path::new("pre-commit")).expect_err("v2 unsupported");
         assert!(matches!(
             error,
-            InitError::UnsupportedBlock { version: 2, .. }
+            InitError::UnsupportedBlock {
+                version: Some(2),
+                ..
+            }
         ));
     }
 }

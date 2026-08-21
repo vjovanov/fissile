@@ -1,0 +1,18 @@
+# The exact command §E2E-034-hard-exception-needs-a-human asserts the refusal
+# prints, run verbatim against the same repository.
+args = [
+  "exception", "add", "src/big.rs",
+  "--severity", "soft",
+  "--rule", "rust",
+  "--kind", "structural",
+  "--reason", "the generator owns this file and asserts it byte-identical",
+]
+exit = 0
+stdout_contains = ["appended src/big.rs to docs/file-size-agent-exceptions.toml"]
+[[files]]
+path = "docs/file-size-agent-exceptions.toml"
+contains = [
+  'path = "src/big.rs"',
+  'kind = "structural"',
+  'until = "indefinite"',
+]

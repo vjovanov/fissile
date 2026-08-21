@@ -43,6 +43,9 @@ usage: fissile init [<path>] [--name <name>] [--config <path>] [--exceptions]
                     [--hook] [--no-hook] [--force] [--dry-run] [--agents-md]
                     [--claude] [--gemini] [--copilot] [--cursor] [--windsurf] [--zed]
 
+--dry-run reports the planned writes and prints the managed agent block, which
+is the one way to read what agents are told without writing a file.
+
 examples:
   fissile init --exceptions
   fissile init . --agents-md --claude";
@@ -217,7 +220,7 @@ fn run_init(args: &[String]) -> ExitCode {
             eprintln!("{}", report.render());
             // A dry run is the one way to read the instructions without writing
             // a file, so it prints them — on stdout, keeping the planned writes
-            // on stderr separable (§FS-002-init.4, §FS-006-cli.2).
+            // on stderr separable (§FS-002-init.4).
             if dry_run {
                 println!("{}", init::MANAGED_BLOCK.trim_end());
             }
@@ -296,7 +299,15 @@ fn run_check(args: &[String]) -> ExitCode {
     };
 
     match check::run(&options) {
-        Ok(run) => finish_run("check", &run.output, run.failed, &run.errors),
+        Ok(run) => {
+            // Under `--format json` stdout is holding a machine shape, so the
+            // run's account of a registry it can no longer read comes out here
+            // rather than being lost (§FS-004-check-audit.5).
+            for note in &run.notes {
+                eprintln!("{note}");
+            }
+            finish_run("check", &run.output, run.failed, &run.errors)
+        }
         Err(error) => {
             eprintln!("fissile check: {error}");
             ExitCode::from(2)
@@ -460,7 +471,9 @@ fn run_exception_add(args: &[String]) -> ExitCode {
         }
     }
 
-    let options = match builder.build() {
+    // A person adding an exception is at a terminal; an agent, a hook, and CI
+    // are not (§DF-008-hard-severity-needs-a-terminal.1).
+    let options = match builder.build(std::io::stdin().is_terminal()) {
         Ok(options) => options,
         Err(message) => return usage_fail("exception add", &message, EXCEPTION_ADD_USAGE),
     };
@@ -644,7 +657,10 @@ impl AddBuilder {
         Ok(())
     }
 
-    fn build(self) -> Result<AddOptions, String> {
+    /// `interactive` is passed in rather than probed: this turns parsed flags
+    /// into options and nothing else, so what it returns does not depend on how
+    /// the process was launched (§DF-008-hard-severity-needs-a-terminal.1).
+    fn build(self, interactive: bool) -> Result<AddOptions, String> {
         Ok(AddOptions {
             root: PathBuf::from("."),
             config_path: self.config.map(PathBuf::from),
@@ -666,9 +682,7 @@ impl AddBuilder {
             issue: self.issue,
             max: self.max,
             unit: self.unit,
-            // A person adding an exception is at a terminal; an agent, a hook,
-            // and CI are not (§DF-008-hard-severity-needs-a-terminal.1).
-            interactive: std::io::stdin().is_terminal(),
+            interactive,
             force: self.force,
             dry_run: self.dry_run,
         })

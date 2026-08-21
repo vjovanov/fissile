@@ -208,9 +208,25 @@ pub const COMMIT_GATE: &str = "\
 commit blocked by fissile. Split the file, or ask a human for a reviewed hard
 exception. Bypassing with --no-verify leaves the overflow for review or CI.";
 
-/// The block naming exact-path entries whose file is gone (§FS-004-check-audit.1.3).
+/// The same epilogue when a dead registry entry is the only thing blocking the
+/// commit: there is no file to split, and the fix is in the registry the block
+/// above names (§FS-004-check-audit.1.2, §FS-004-check-audit.1.3).
+pub const COMMIT_GATE_STALE: &str = "\
+commit blocked by fissile. Remove the exception entry above, or point it at the
+path its file moved to. Bypassing with --no-verify leaves a dead entry in the
+registry.";
+
+/// The same epilogue when the commit is blocked by a staged file that could not
+/// be measured: nothing above accounts for it, so the exit code is all the
+/// caller would otherwise have (§FS-004-check-audit.1.2, §FS-004-check-audit.5).
+pub const COMMIT_GATE_UNMEASURED: &str = "\
+commit blocked by fissile. A staged file could not be measured, so nothing above
+accounts for it — fix the path the error names, or unstage it. Bypassing with
+--no-verify commits a file fissile never checked.";
+
+/// The block naming entries that have outlived their file (§FS-004-check-audit.1.3).
 /// One block per registry, so a reader opens the file the line names.
-pub fn dangling_blocks(entries: &[&Exception], color: bool) -> Vec<String> {
+pub fn stale_blocks(entries: &[&Exception], color: bool) -> Vec<String> {
     let mut registries: Vec<&str> = Vec::new();
     for entry in entries {
         if !registries.contains(&entry.registry.as_str()) {
@@ -225,17 +241,19 @@ pub fn dangling_blocks(entries: &[&Exception], color: bool) -> Vec<String> {
                 .iter()
                 .filter(|entry| entry.registry == registry)
                 .collect();
-            let count = if mine.len() == 1 {
-                "1 exception accepts a file".to_owned()
+            // The whole clause agrees, not just the count: "files that is not
+            // there" is the shape of a sentence assembled from two halves.
+            let headline = if mine.len() == 1 {
+                "1 exception accepts a file that is not there".to_owned()
             } else {
-                format!("{} exceptions accept files", mine.len())
+                format!("{} exceptions accept files that are not there", mine.len())
             };
             let mut block = paint(
                 color,
                 BOLD_YELLOW,
-                &format!("stale: {count} that is not there [registry: {registry}]"),
+                &format!("stale: {headline} [registry: {registry}]"),
             );
-            for line in wrap(DANGLING_GUIDANCE, GUIDANCE_COLUMNS) {
+            for line in wrap(STALE_GUIDANCE, GUIDANCE_COLUMNS) {
                 block.push_str("\n  ");
                 block.push_str(&line);
             }
@@ -252,7 +270,7 @@ pub fn dangling_blocks(entries: &[&Exception], color: bool) -> Vec<String> {
         .collect()
 }
 
-const DANGLING_GUIDANCE: &str = "The file moved or was deleted, so the entry silences nothing. Remove it, or point it at the path the file moved to.";
+const STALE_GUIDANCE: &str = "The file moved or was deleted, so the entry silences nothing. Remove it, or point it at the path the file moved to.";
 
 /// The findings that share a severity, a rule, and one rendered guidance string.
 struct Group<'a> {

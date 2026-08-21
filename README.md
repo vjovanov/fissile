@@ -168,9 +168,9 @@ top lines:
 The two exception counts are deliberately not one total: three files nobody will
 ever split and thirty-two waiting on work are different facts about a codebase.
 
-`check` already names an exact-path entry whose file is not on disk, so the
-commit that moved or deleted the file is where the leftover entry surfaces. Add
-`--stale-exceptions` for the rest of the inventory — globs matching nothing, and
+`check` already names an exact-path entry whose file the commit removes, so a
+leftover entry surfaces in the diff that killed it. Add `--stale-exceptions` for
+the rest of the inventory — globs matching nothing, and
 ceilings that have drifted far above the file they still accept, which is the
 ratchet slipping back:
 

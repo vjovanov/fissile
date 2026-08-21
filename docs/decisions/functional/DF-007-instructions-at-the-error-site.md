@@ -61,9 +61,12 @@ same goal read forward instead of backward.
 
 ## 4. Consequences
 
-The managed block goes from thirty-five lines to five, and the version moves
-into begin/end markers so a shortened block can be recognized and replaced
-without depending on what its heading says (§FS-002-init.4).
+The managed block goes from thirty-five lines to five, and begin/end markers now
+bound it, so the shortened block is recognized and replaced by its own delimiters
+rather than by wherever the next heading happens to fall. The version stays in
+the heading — the markers say which tool owns the span, the heading says which
+generation of the text it is — and a block between our markers whose heading this
+build cannot read is refused rather than overwritten (§FS-002-init.4).
 
 New guidance now needs a home before it can be written: an instruction with no
 error surface either gets one or is not shipped. That is a constraint on the

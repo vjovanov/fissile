@@ -92,7 +92,9 @@ pub fn run(options: &AddOptions) -> Result<Run, CommandError> {
     // Final guard: the combined registry must still validate (§FS-005-exception-add.4).
     entry::validate_combined(&loaded, options.severity, &new_text)?;
 
-    let warnings = restatement_warning(options, &path).into_iter().collect();
+    let warnings = restatement_warning(options, &path, unit)
+        .into_iter()
+        .collect();
 
     if options.dry_run {
         return Ok(Run {
@@ -124,31 +126,97 @@ fn check_severity_gate(options: &AddOptions) -> Result<(), CommandError> {
     Err(CommandError::Usage(format!(
         "--severity hard records a human decision, and this is not a terminal. \
          A hard exception is the only way past a stop-the-line gate, so a person \
-         reviews it. Record the debt at soft severity instead:\n  \
-         fissile exception add {} --severity soft --rule {} --kind deferred --until <what retires it>\n\
+         reviews it. Record the debt at soft severity instead:\n  {}\n\
          Pass --force to add it anyway from a script.",
-        options.path,
-        options.rules.first().map_or("<id>", String::as_str),
+        soft_route(options),
     )))
+}
+
+/// The offered command: this call with `--severity soft`, every other flag
+/// carried through — it has to run as printed, and the `--kind` is the caller's
+/// claim, not the gate's to substitute (§FS-005-exception-add.4).
+fn soft_route(options: &AddOptions) -> String {
+    let mut command = format!("fissile exception add {}", shell_quote(&options.path));
+    command.push_str(" --severity soft");
+    // Without the config the rerun loads a different one, and the rules the
+    // caller named stop existing: a second refusal, which is the thing this
+    // route is offered to avoid (§FS-005-exception-add.4).
+    if let Some(config) = &options.config_path {
+        command.push_str(&format!(
+            " --config {}",
+            shell_quote(&config.to_string_lossy())
+        ));
+    }
+    for rule in &options.rules {
+        command.push_str(&format!(" --rule {}", shell_quote(rule)));
+    }
+    if options.match_kind == MatchKind::Glob {
+        command.push_str(" --match glob");
+    }
+    command.push_str(&format!(" --kind {}", options.kind));
+    // A structural entry never expires and takes no `--until` (§FS-005-exception-add.1).
+    if options.kind == Kind::Deferred {
+        let until = options.until.as_deref().map(str::trim).unwrap_or("");
+        command.push_str(&format!(
+            " --until {}",
+            // Quoted like any other value: `<what retires it>` bare is a
+            // redirection, and a template the shell chokes on is not fillable.
+            if until.is_empty() {
+                shell_quote("<what retires it>")
+            } else {
+                shell_quote(until)
+            }
+        ));
+    }
+    command.push_str(&format!(" --reason {}", shell_quote(&options.reason)));
+    if let (Some(max), Some(unit)) = (options.max, options.unit) {
+        command.push_str(&format!(" --max {max} --unit {unit}"));
+    }
+    // Metadata the entry would otherwise lose on the rerun.
+    for (flag, value) in [
+        ("--title", &options.title),
+        ("--owner", &options.owner),
+        ("--issue", &options.issue),
+    ] {
+        if let Some(value) = value {
+            command.push_str(&format!(" {flag} {}", shell_quote(value)));
+        }
+    }
+    command
+}
+
+/// A `sh`-safe rendering: bare when every character is safe unquoted,
+/// single-quoted otherwise. A glob, a path with a space, and a reason with
+/// punctuation all have to survive being copied out of the refusal, and quoting
+/// only what needs it keeps the common line readable.
+fn shell_quote(value: &str) -> String {
+    let safe = |c: char| c.is_ascii_alphanumeric() || "-_./:,+@".contains(c);
+    if !value.is_empty() && value.chars().all(safe) {
+        return value.to_owned();
+    }
+    format!("'{}'", value.replace('\'', "'\\''"))
 }
 
 /// A reason that says nothing the finding did not (§FS-005-exception-add.4).
 /// Strip the entry's own facts and count what is left: this catches a reason
 /// that is *entirely* restatement, which is why it warns rather than refuses.
-fn restatement_warning(options: &AddOptions, path: &str) -> Option<String> {
+fn restatement_warning(options: &AddOptions, path: &str, unit: Unit) -> Option<String> {
     let mut remaining = options.reason.to_lowercase();
+    // Paths and rule ids are multi-token identifiers, so they come out as
+    // substrings; the unit is one word and comes out as one, or `pipeline`
+    // would be scored as `pipe` (§FS-005-exception-add.4).
     for fact in [path, &options.path] {
         remaining = remaining.replace(&fact.to_lowercase(), " ");
     }
     for rule in &options.rules {
         remaining = remaining.replace(&rule.to_lowercase(), " ");
     }
-    for unit in ["bytes", "byte", "lines", "line", "tokens", "token"] {
-        remaining = remaining.replace(unit, " ");
-    }
+    let plural = unit.to_string();
+    let singular = plural.strip_suffix('s').unwrap_or(&plural);
     let words = remaining
         .split(|character: char| !character.is_alphabetic())
         .filter(|word| !word.is_empty())
+        .filter(|word| *word != plural && *word != singular)
         .count();
     if words >= RESTATEMENT_WORDS {
         return None;
@@ -316,7 +384,7 @@ mod tests {
     #[test]
     fn a_reason_made_of_the_findings_facts_warns() {
         let options = options("src/big.rs is 612 lines, over the 550-line limit");
-        assert!(restatement_warning(&options, "src/big.rs").is_some());
+        assert!(restatement_warning(&options, "src/big.rs", Unit::Lines).is_some());
     }
 
     /// A claim a reviewer can disagree with survives the same subtraction.
@@ -326,7 +394,15 @@ mod tests {
             "The generator owns this whole file and asserts it byte-identical; \
              a split loses the incident-to-case mapping.",
         );
-        assert!(restatement_warning(&options, "src/big.rs").is_none());
+        assert!(restatement_warning(&options, "src/big.rs", Unit::Lines).is_none());
+    }
+
+    /// The unit name is one word, not a substring: a reason whose distinguishing
+    /// words merely contain it keeps them (§FS-005-exception-add.4).
+    #[test]
+    fn the_unit_name_is_subtracted_as_a_word() {
+        let options = options("The inline pipeline baseline is asserted here");
+        assert!(restatement_warning(&options, "src/big.rs", Unit::Lines).is_none());
     }
 
     /// The gate reads the caller, not the severity alone: soft is the agent's
@@ -346,5 +422,72 @@ mod tests {
         let mut human = scripted.clone();
         human.interactive = true;
         assert!(check_severity_gate(&human).is_ok());
+    }
+
+    /// The refusal's offered command must run as printed, and must not restate
+    /// the caller's claim as a different one (§FS-005-exception-add.4).
+    #[test]
+    fn the_offered_route_carries_the_calls_own_flags() {
+        let mut scripted = options("the generator owns this file byte-identically");
+        scripted.severity = Severity::Hard;
+
+        let structural = soft_route(&scripted);
+        assert_eq!(
+            structural,
+            "fissile exception add src/big.rs --severity soft --rule rust-source \
+             --kind structural --reason 'the generator owns this file byte-identically'"
+        );
+
+        let mut deferred = scripted.clone();
+        deferred.kind = Kind::Deferred;
+        deferred.until = Some("the parser moves to its own module".to_owned());
+        assert!(
+            soft_route(&deferred)
+                .contains("--kind deferred --until 'the parser moves to its own module'")
+        );
+
+        // No `--until` to carry: the placeholder stands in, and the flag stays.
+        // It is quoted, or `<what` is a redirection and the line will not parse.
+        let mut open = deferred.clone();
+        open.until = None;
+        assert!(soft_route(&open).contains("--kind deferred --until '<what retires it>'"));
+    }
+
+    /// Every flag that changes what the rerun loads or writes is carried, or the
+    /// offered command produces a different entry — or a second refusal
+    /// (§FS-005-exception-add.4).
+    #[test]
+    fn the_offered_route_carries_the_config_and_the_metadata() {
+        let mut scripted = options("the generator owns this file byte-identically");
+        scripted.severity = Severity::Hard;
+        scripted.config_path = Some(PathBuf::from("build/fissile.toml"));
+        scripted.title = Some("generated orders".to_owned());
+        scripted.owner = Some("payments".to_owned());
+        scripted.issue = Some("#12".to_owned());
+
+        let command = soft_route(&scripted);
+        assert!(command.contains(" --config build/fissile.toml"));
+        assert!(command.contains(" --title 'generated orders'"));
+        assert!(command.contains(" --owner payments"));
+        assert!(command.contains(" --issue '#12'"));
+    }
+
+    /// A value the shell would rewrite is quoted; one it would not is left bare
+    /// (§FS-005-exception-add.4).
+    #[test]
+    fn a_glob_or_a_spaced_path_survives_the_shell() {
+        let mut glob = options("the generated modules are asserted byte-identical");
+        glob.severity = Severity::Hard;
+        glob.path = "src/*.rs".to_owned();
+        glob.match_kind = MatchKind::Glob;
+        assert!(soft_route(&glob).starts_with("fissile exception add 'src/*.rs' --severity soft"));
+
+        let mut spaced = glob.clone();
+        spaced.path = "src/odd dir/big.rs".to_owned();
+        spaced.match_kind = MatchKind::Exact;
+        assert!(soft_route(&spaced).contains("add 'src/odd dir/big.rs' "));
+
+        // A plain path is not worth quoting, and E2E-034 asserts it bare.
+        assert!(soft_route(&glob).contains(" --rule rust-source "));
     }
 }

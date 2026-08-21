@@ -1,0 +1,5 @@
+args = ["check", "--no-color"]
+exit = 0
+# `src/vendor/big.rs` is in the working tree; only the scan scope excludes it.
+# `stale = "error"` must not read "not in the inventory" as "not there".
+stdout_equals = "ok"

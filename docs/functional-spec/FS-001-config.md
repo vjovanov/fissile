@@ -244,7 +244,12 @@ registries:
   `docs/file-size-agent-exceptions.toml`;
 - `hard_registry`: TOML path for hard-limit exceptions, default
   `docs/file-size-human-exceptions.toml`;
-- `stale`: `warn`, `error`, or `ignore` for entries that match no scanned file.
+- `stale`: `warn`, `error`, or `ignore` for an exception entry that has outlived
+  its file. It governs the subject, not one command: `check` reports the entries
+  its own run proves are dead (§FS-004-check-audit.1.3) and
+  `audit --stale-exceptions` reports the whole inventory
+  (§FS-004-check-audit.2), and `error` fails whichever run raised it — including
+  a commit, through the pre-commit hook.
 
 `[exceptions.bump]` sets the step each unit's ceilings are quantized to:
 

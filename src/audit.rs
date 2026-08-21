@@ -6,7 +6,6 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use crate::cli::{self, CommandError, Format, Loaded};
-use crate::config::Stale;
 use crate::entry;
 use crate::exceptions::{EntrySite, Exception, KindCounts, MatchKind};
 use crate::json::Json;
@@ -119,13 +118,13 @@ pub fn run(options: &AuditOptions) -> Result<Run, CommandError> {
             .iter()
             .map(|entry| Exception::site(entry))
             .collect();
-        if !entries.is_empty() && loaded.config.exceptions.stale == Stale::Error {
+        if !entries.is_empty() && loaded.config.exceptions.stale.fails() {
             failed = true;
         }
         entries
     });
     // `ignore` suppresses the report entirely (§FS-003-exceptions.4).
-    let stale = stale.filter(|_| loaded.config.exceptions.stale != Stale::Ignore);
+    let stale = stale.filter(|_| loaded.config.exceptions.stale.reports());
 
     // Path and hits paired once, for the two sections that read them by file.
     let files: Vec<Measured<'_>> = measurements

@@ -46,14 +46,26 @@ impl Block<'_> {
     ) -> Result<Option<std::ops::Range<usize>>, InitError> {
         if let Some(begin) = lines.iter().position(|line| self.is_begin(line)) {
             // One past the matching end marker; a truncated block — a begin
-            // marker with no end — falls back to the heading rule, so trailing
-            // user sections are not swallowed (§FS-002-init.4).
+            // marker with no end — falls back to §FS-002-init.4's rule for the
+            // kind of file this block lives in.
             let end = lines[begin + 1..]
                 .iter()
                 .position(|line| self.is_end(line))
                 .map(|offset| begin + 1 + offset + 1)
-                .unwrap_or_else(|| self.heading_span_end(lines, begin));
-            self.check_version(self.version_in(&lines[begin..end]), path)?;
+                .unwrap_or_else(|| self.truncated_span_end(lines, begin));
+            match self.version_in(&lines[begin..end]) {
+                Some(version) => self.check_version(version, path)?,
+                // Our markers around a heading this build cannot read: a later
+                // generation renamed or dropped it, so this block is not ours to
+                // overwrite. There is no version to fall back to — the markers
+                // deliberately carry none (§FS-002-init.4).
+                None => {
+                    return Err(InitError::UnsupportedBlock {
+                        path: path.to_path_buf(),
+                        version: None,
+                    });
+                }
+            }
             return Ok(Some(begin..end));
         }
 
@@ -73,18 +85,28 @@ impl Block<'_> {
     }
 
     /// The version a located block declares: from its heading when it carries
-    /// one, else from the begin marker. An undeclared version reads as current.
-    fn version_in(&self, span: &[&str]) -> u32 {
+    /// one, else from the begin marker. `None` when a block that states its
+    /// version in a heading has none this build can read — the one case where
+    /// "assume current" would silently downgrade a newer block.
+    fn version_in(&self, span: &[&str]) -> Option<u32> {
         let Some(prefix) = self.version_heading else {
-            return version_after(span[0], self.begin_prefix).unwrap_or(self.version);
+            return Some(version_after(span[0], self.begin_prefix).unwrap_or(self.version));
         };
-        span.iter()
-            .find_map(|line| version_after(line, prefix))
-            .unwrap_or(self.version)
+        span.iter().find_map(|line| version_after(line, prefix))
     }
 
-    /// Where an unmarked or truncated span starting at `start` ends: the next
-    /// H1 or H2, or end of file. The block's own heading does not end it.
+    /// Where a begin marker with no end marker ends: the heading rule below for
+    /// Markdown, end of file for a marker-only block, whose file has no headings
+    /// to find — in a shell hook every `# ` comment reads as one (§FS-002-init.4).
+    fn truncated_span_end(&self, lines: &[&str], start: usize) -> usize {
+        if self.version_heading.is_none() {
+            return lines.len();
+        }
+        self.heading_span_end(lines, start)
+    }
+
+    /// Where a heading-bounded span starting at `start` ends: the next H1 or
+    /// H2, or end of file. The block's own heading does not end it.
     fn heading_span_end(&self, lines: &[&str], start: usize) -> usize {
         lines
             .iter()
@@ -103,7 +125,7 @@ impl Block<'_> {
         if version > self.version {
             return Err(InitError::UnsupportedBlock {
                 path: path.to_path_buf(),
-                version,
+                version: Some(version),
             });
         }
         Ok(())

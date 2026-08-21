@@ -134,6 +134,14 @@ modifying files when:
   is refused on the same terms: a dry run that printed the entry would answer
   the question the gate exists to route to a person.
 
+  The route is offered as a command, and it is this call with `--severity soft`:
+  every other flag carried through, including the `--reason` the caller already
+  wrote and the `--kind` they claimed. Both matter. A command missing a required
+  flag ends in a second refusal, which teaches nothing and leaves hand-edited
+  registry TOML as the way forward; and substituting a kind rewrites the
+  caller's claim about the file into a different one — a structural constraint
+  told to name what retires it has nothing to name (§DF-004-exception-kind).
+
 After those checks pass, one condition warns without refusing. A `--reason` is a
 **restatement** when, with the entry's own facts removed — the `<path>`, the
 selected rule ids, the unit name, and every number — fewer than five words are
