@@ -235,8 +235,13 @@ pub enum InitError {
     Io(io::Error),
     /// `None` when the block declares no version this build can read: a later
     /// generation renamed the heading that carries it (§FS-002-init.4).
-    UnsupportedBlock { path: PathBuf, version: Option<u32> },
-    NotAGitRepo { root: PathBuf },
+    UnsupportedBlock {
+        path: PathBuf,
+        version: Option<u32>,
+    },
+    NotAGitRepo {
+        root: PathBuf,
+    },
 }
 
 impl std::fmt::Display for InitError {
@@ -251,7 +256,10 @@ impl std::fmt::Display for InitError {
                 "{} has an unsupported managed block version v{version}; this build writes v{SUPPORTED_BLOCK_VERSION}",
                 path.display()
             ),
-            InitError::UnsupportedBlock { path, version: None } => write!(
+            InitError::UnsupportedBlock {
+                path,
+                version: None,
+            } => write!(
                 f,
                 "{} has a managed block that declares no version this build can read; this build writes v{SUPPORTED_BLOCK_VERSION}",
                 path.display()

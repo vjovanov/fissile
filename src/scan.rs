@@ -258,7 +258,13 @@ pub fn staged_removals(root: &Path) -> io::Result<Vec<String>> {
     let output = Command::new("git")
         .arg("-C")
         .arg(root)
-        .args(["diff", "--cached", "--name-status", "-z", "--diff-filter=DR"])
+        .args([
+            "diff",
+            "--cached",
+            "--name-status",
+            "-z",
+            "--diff-filter=DR",
+        ])
         .output()?;
     if !output.status.success() {
         return Err(io::Error::other(git_failure(
