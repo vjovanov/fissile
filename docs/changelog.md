@@ -30,6 +30,53 @@ with a migration note.
 
 ## Unreleased
 
+### Added
+
+- §FS-004-check-audit.1.1: a run that reports a finding closes with one `hint:`
+  line naming `fissile measure`. The finding already carries the offending
+  file's size; the hint is about the files a split moves code *into*, whose
+  headroom decides where the seam can go.
+- §FS-004-check-audit.1.2: `check --staged` that ends in a standing hard
+  overflow closes with a commit-gate epilogue — the commit is blocked, a
+  reviewed hard exception is the other way through, and `--no-verify` only moves
+  the overflow into the branch. Only `--staged` prints it: a CI or manual run is
+  not blocking anything a caller is about to bypass.
+- §FS-004-check-audit.1.3: `check` reports exact-path exception entries whose
+  file is not on disk, under `[exceptions].stale`. `check --staged` sees a
+  partial file set, so it reports only what a partial view proves — an absent
+  exact path. The glob and scan-scope inventory stays in
+  `audit --stale-exceptions`.
+- §FS-005-exception-add.4: `--reason` that says nothing beyond the finding's own
+  facts now warns. It never refuses: the test catches only a reason that is
+  entirely restatement, and rejecting a terse honest claim would teach callers
+  to pad it.
+
+### Changed
+
+- §FS-002-init.4: the managed agent block is now **v3**, and delimited by
+  `<!-- >>> fissile managed block (v3) >>> -->` / `<!-- <<< ... <<< -->` markers
+  like the hook block, with the version in the marker rather than the heading.
+  The block is five lines rather than thirty-five: the instructions moved to the
+  surfaces that raise each question (§DF-007-instructions-at-the-error-site).
+  **Migration: re-run `fissile init` to upgrade.** A v1 or v2 heading-only block
+  is recognized and replaced in place, so a repository upgrades rather than
+  growing a second block. Since the span is now the markers and not "everything
+  up to the next H1 or H2", a heading a user writes directly beneath the block is
+  outside it and survives a refresh.
+- §FS-005-exception-add.4: `exception add --severity hard` is refused when
+  standard input is not a terminal, naming the soft-severity route and `--force`
+  (§DF-008-hard-severity-needs-a-terminal). **Migration: scripted hard adds need
+  `--force`.** A hard exception is the only way past a stop-the-line gate, and
+  §DF-003-severity-guidance.1 already held that it is not an agent's to grant
+  itself; until now nothing enforced it.
+- §FS-006-cli.2: the usage screen closes by pointing at `fissile check --staged`
+  rather than at `fissile init --dry-run` for the full instructions. The
+  complete answer is a run, not a document: the finding names the file, the
+  limit, this repository's remediation, and the command that records an
+  exception.
+- §FS-002-init.5: the `next:` block closes with `see <path> for what agents are
+  told; the findings carry the rest.`
+
 ## 2. [0.6.0] — 2026-08-21
 
 ### Added

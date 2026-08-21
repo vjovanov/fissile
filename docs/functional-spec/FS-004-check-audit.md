@@ -49,6 +49,65 @@ are kept, so a project that configures a paragraph gets a readable block. The
 width is fixed rather than read from the terminal: the same finding must be
 byte-identical in a narrow terminal and in CI (§GOAL-006-graded-limits.2).
 
+### 1.1 The hint line
+
+A `check` run that reports at least one finding closes with one `hint:` line
+naming `fissile measure`:
+
+```text
+hint: fissile measure <path>... reports size and headroom for the files you split into.
+```
+
+The finding already carries the offending file's measurement and the limit it
+crossed, so the hint is not about that file. It is about the ones the split
+moves code *into*, whose headroom decides where the seam can go and which no
+other tool computes (§FS-007-measure). One line, once per run, never per file,
+and only when something was reported — a clean run stays exactly `ok`.
+
+This line and §1.2 are the two things `check` prints that are not findings. Both
+exist because the instructions they carry left the managed agent block
+(§DF-007-instructions-at-the-error-site.2), and both are bounded to a single
+line so that §GOAL-004-token-thrift still holds for a run that reports many
+files.
+
+### 1.2 The commit-gate epilogue
+
+`check --staged` that ends in a standing hard overflow closes with:
+
+```text
+commit blocked by fissile. Split the file, or ask a human for a reviewed hard
+exception. Bypassing with --no-verify leaves the overflow for review or CI.
+```
+
+Only `--staged` prints it, because only `--staged` is a commit: the same
+findings from a CI run or a manual `fissile check src/` are not blocking
+anything a caller is about to bypass. It says the one thing the finding's own
+guidance cannot, since a project rewrites that guidance (§DF-003-severity-guidance.1)
+and it is the wrong voice regardless — `--no-verify` is reached for by a caller
+who has just decided the gate is in the way.
+
+### 1.3 Dangling exceptions
+
+`check` reports every `match = "exact"` exception entry whose path does not
+exist on disk, in a block of its own:
+
+```text
+stale: 1 exception accepts a file that is not there [registry: docs/file-size-agent-exceptions.toml]
+  The file moved or was deleted, so the entry silences nothing. Remove it, or
+  point it at the path the file moved to.
+    src/domain/order.rs [soft, rule: rust-source]
+```
+
+Entries are reported under `[exceptions].stale`: `warn` reports them, `error`
+also fails the run, `ignore` says nothing (§FS-003-exceptions.4).
+
+`check` reports only what its file set proves. Under `--staged` it sees the
+staged paths alone, so an entry matching nothing in that set is not thereby
+stale — but an exact path that is not on the filesystem is gone whatever the
+file set was. Globs are not judged here at all: a glob matching no file today is
+a question about the scan scope, which is `audit`'s inventory to answer
+(§FS-004-check-audit.2), not a fact a commit hook can establish.
+
 JSON output emits one record per overflow with at least:
 
 - `path`

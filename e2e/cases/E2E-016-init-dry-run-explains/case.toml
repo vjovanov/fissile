@@ -2,10 +2,10 @@ args = ["init", "--dry-run"]
 exit = 0
 git = true
 stdout_contains = [
-  "## Keeping Files Small With fissile (v2)",
-  "Run `fissile check --staged` before claiming work is done.",
-  "A **soft** overflow means *should split*",
-  "A **hard** overflow means *must split*",
-  "`--severity hard` is theirs to add, not yours.",
+  "<!-- >>> fissile managed block (v3) >>> -->",
+  "## Keeping Files Small With fissile",
+  "`fissile check --staged`, and its findings say what to split and how",
+  "never get past it with `--no-verify`",
+  "<!-- <<< fissile managed block (v3) <<< -->",
 ]
 stderr_contains = ["would-write", "AGENTS.md"]

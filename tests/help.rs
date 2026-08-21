@@ -60,8 +60,9 @@ fn exception_subcommand_help_fits_one_screen() {
 }
 
 /// §FS-006-cli.2: the usage screen says what fissile is for, how to work with
-/// it, and where the full instructions are. It is the one surface guaranteed to
-/// exist in a repository whose agent entrypoint never received the block.
+/// it, and what to run to get the rest — the findings, not a document
+/// (§DF-007-instructions-at-the-error-site.1). It is the one surface guaranteed
+/// to exist in a repository whose agent entrypoint never received the block.
 #[test]
 fn top_level_help_states_the_workflow_and_points_at_the_instructions() {
     let text = help(&["--help"]);
@@ -69,7 +70,7 @@ fn top_level_help_states_the_workflow_and_points_at_the_instructions() {
         "soft warns",
         "hard fails the commit",
         "fissile check --staged",
-        "fissile init --dry-run",
+        "Its findings carry the rest",
     ] {
         assert!(
             text.contains(clause),

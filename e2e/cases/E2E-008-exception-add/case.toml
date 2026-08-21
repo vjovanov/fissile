@@ -4,6 +4,7 @@ args = [
   "--rule", "rust",
   "--kind", "structural",
   "--reason", "a generated table the snapshot test asserts byte-identical",
+  "--force",
 ]
 exit = 0
 stdout_contains = ["appended", "docs/file-size-human-exceptions.toml"]

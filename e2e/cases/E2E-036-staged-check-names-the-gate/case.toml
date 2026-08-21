@@ -1,0 +1,12 @@
+args = ["check", "--staged", "--no-color"]
+exit = 1
+git = true
+stdout_equals = """
+hard: 1 file over the 4-line budget [rule: rust, message: m]
+  Split the file.
+    src/big.rs: 5 lines
+
+hint: fissile measure <path>... reports size and headroom for the files you split into.
+
+commit blocked by fissile. Split the file, or ask a human for a reviewed hard
+exception. Bypassing with --no-verify leaves the overflow for review or CI."""

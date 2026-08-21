@@ -4,6 +4,7 @@
 
 use std::error::Error;
 use std::fmt;
+use std::path::Path;
 
 use serde::Deserialize;
 
@@ -324,6 +325,17 @@ impl Registries {
             }
         }
         counts
+    }
+
+    /// Exact-path entries whose file is not on disk (§FS-004-check-audit.1.3):
+    /// the staleness a partial file set still proves, since an absent path is
+    /// gone whatever was staged. A glob matching nothing is `audit`'s to judge.
+    pub fn dangling<'a>(&'a self, root: &Path) -> Vec<&'a Exception> {
+        self.all()
+            .filter(|entry| {
+                entry.match_kind == MatchKind::Exact && !root.join(&entry.path).exists()
+            })
+            .collect()
     }
 
     /// Entries whose path/glob matches none of `scanned` (§FS-004-check-audit.2).

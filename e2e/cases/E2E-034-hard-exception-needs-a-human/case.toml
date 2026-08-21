@@ -1,0 +1,14 @@
+args = [
+  "exception", "add", "src/big.rs",
+  "--severity", "hard",
+  "--rule", "rust",
+  "--kind", "structural",
+  "--reason", "the generator owns this file and asserts it byte-identical",
+]
+exit = 2
+# The harness pipes stdin, which is what an agent, a hook, and CI all look like.
+stderr_contains = [
+  "--severity hard records a human decision, and this is not a terminal",
+  "--severity soft --rule rust --kind deferred --until <what retires it>",
+  "Pass --force to add it anyway from a script.",
+]

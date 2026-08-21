@@ -154,6 +154,8 @@ fn audit_silenced_records_carry_documented_exception_fields() {
         issue: None,
         max: None,
         unit: None,
+        interactive: true,
+        force: false,
         dry_run: false,
     })
     .expect("exception add runs");
@@ -263,6 +265,8 @@ fn audit_reports_a_loose_ceiling_with_the_value_to_retune_to() {
         issue: None,
         max: Some(500),
         unit: Some(Unit::Lines),
+        interactive: true,
+        force: false,
         dry_run: false,
     })
     .expect("exception add runs");

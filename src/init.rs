@@ -6,6 +6,8 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use crate::managed::Block;
+
 /// The fully-populated starter config written by `init` (§DF-002-explicit-config).
 pub const DEFAULT_CONFIG: &str = include_str!("templates/fissile.default.toml");
 
@@ -15,12 +17,26 @@ pub const DEFAULT_SOFT_REGISTRY: &str = include_str!("templates/soft-exceptions.
 /// Starter hard (human) exception registry (§FS-003-exceptions).
 pub const DEFAULT_HARD_REGISTRY: &str = include_str!("templates/hard-exceptions.toml");
 
-/// The canonical v1 managed agent-instruction block, heading included
+/// The canonical managed agent-instruction block, markers included
 /// (§FS-002-init.4).
 pub const MANAGED_BLOCK: &str = include_str!("templates/agents-block.md");
 
-const BLOCK_HEADING_PREFIX: &str = "## Keeping Files Small With fissile (v";
-const SUPPORTED_BLOCK_VERSION: u32 = 2;
+const BLOCK_BEGIN_PREFIX: &str = "<!-- >>> fissile managed block (v";
+const BLOCK_END_PREFIX: &str = "<!-- <<< fissile managed block (v";
+/// The pre-marker heading v1 and v2 blocks were found by (§FS-002-init.4).
+const LEGACY_BLOCK_HEADING: &str = "## Keeping Files Small With fissile (v";
+const SUPPORTED_BLOCK_VERSION: u32 = 3;
+
+/// How `init` finds, versions, and rewrites the agent block (§FS-002-init.4).
+fn agent_block() -> Block<'static> {
+    Block {
+        begin_prefix: BLOCK_BEGIN_PREFIX,
+        end_prefix: BLOCK_END_PREFIX,
+        version: SUPPORTED_BLOCK_VERSION,
+        body: MANAGED_BLOCK.trim_end(),
+        legacy_heading: Some(LEGACY_BLOCK_HEADING),
+    }
+}
 
 /// Which agent entrypoint families to write (§FS-002-init.3).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -197,7 +213,7 @@ impl Report {
             // (§FS-002-init.5).
             if let Some(entrypoint) = self.entrypoints.first() {
                 block.push_str(&format!(
-                    "\nsee {} for the full workflow.",
+                    "\nsee {} for what agents are told; the findings carry the rest.",
                     entrypoint.display()
                 ));
             }
@@ -410,8 +426,11 @@ fn write_managed_block(path: &Path, name: &str, dry_run: bool) -> Result<Outcome
     let (new_contents, action) = match existing {
         // A fresh canonical AGENTS.md gets an unmanaged project H1 above the
         // block; companion entrypoints are block-only (§FS-002-init.4).
-        None if is_agents_md(path) => (format!("# {name}\n\n{MANAGED_BLOCK}\n"), Action::Wrote),
-        None => (format!("{MANAGED_BLOCK}\n"), Action::Wrote),
+        None if is_agents_md(path) => (
+            format!("# {name}\n\n{}\n", MANAGED_BLOCK.trim_end()),
+            Action::Wrote,
+        ),
+        None => (format!("{}\n", MANAGED_BLOCK.trim_end()), Action::Wrote),
         Some(existing) => apply_managed_block(&existing, path)?,
     };
 
@@ -431,73 +450,7 @@ fn write_managed_block(path: &Path, name: &str, dry_run: bool) -> Result<Outcome
 /// Compute the new file content after applying the managed block to existing
 /// text. Returns the content and the action taken (§FS-002-init.4).
 fn apply_managed_block(existing: &str, path: &Path) -> Result<(String, Action), InitError> {
-    let lines: Vec<&str> = existing.lines().collect();
-
-    let Some(start) = lines.iter().position(|line| is_block_heading(line)) else {
-        // No managed block: append it after the user-authored content.
-        let mut result = existing.trim_end().to_owned();
-        if !result.is_empty() {
-            result.push_str("\n\n");
-        }
-        result.push_str(MANAGED_BLOCK);
-        result.push('\n');
-        return Ok((result, Action::Appended));
-    };
-
-    let version = block_version(lines[start]).unwrap_or(SUPPORTED_BLOCK_VERSION);
-    if version > SUPPORTED_BLOCK_VERSION {
-        return Err(InitError::UnsupportedBlock {
-            path: path.to_path_buf(),
-            version,
-        });
-    }
-
-    // The block runs until the next H1/H2 heading or end of file.
-    let end = lines[start + 1..]
-        .iter()
-        .position(|line| is_heading(line))
-        .map(|offset| start + 1 + offset)
-        .unwrap_or(lines.len());
-
-    let before = lines[..start].join("\n");
-    let after = lines[end..].join("\n");
-
-    let mut result = String::new();
-    if !before.is_empty() {
-        result.push_str(&before);
-        result.push('\n');
-    }
-    result.push_str(MANAGED_BLOCK);
-    result.push('\n');
-    if !after.is_empty() {
-        result.push_str(&after);
-        result.push('\n');
-    }
-
-    let action = if result == existing {
-        Action::Exists
-    } else {
-        Action::Updated
-    };
-    Ok((result, action))
-}
-
-fn is_block_heading(line: &str) -> bool {
-    line.trim_end().starts_with(BLOCK_HEADING_PREFIX)
-}
-
-fn block_version(line: &str) -> Option<u32> {
-    let rest = line.trim_end().strip_prefix(BLOCK_HEADING_PREFIX)?;
-    let digits: String = rest
-        .chars()
-        .take_while(|character| character.is_ascii_digit())
-        .collect();
-    digits.parse().ok()
-}
-
-fn is_heading(line: &str) -> bool {
-    let trimmed = line.trim_start();
-    (trimmed.starts_with("# ") || trimmed.starts_with("## ")) && !trimmed.starts_with("### ")
+    agent_block().apply(existing, path)
 }
 
 #[cfg(test)]
@@ -544,18 +497,18 @@ mod tests {
         assert!(
             report_for(&["CLAUDE.md", ".claude/CLAUDE.md"])
                 .render()
-                .contains("see CLAUDE.md for the full workflow.")
+                .contains("see CLAUDE.md for what agents are told; the findings carry the rest.")
         );
         assert!(
             report_for(&["GEMINI.md"])
                 .render()
-                .contains("see GEMINI.md for the full workflow.")
+                .contains("see GEMINI.md for what agents are told; the findings carry the rest.")
         );
 
         // Nothing to point at: the line is omitted, not invented.
         let rendered = report_for(&[]).render();
         assert!(rendered.contains("next:"));
-        assert!(!rendered.contains("full workflow"));
+        assert!(!rendered.contains("what agents are told"));
     }
 
     #[test]
@@ -564,13 +517,14 @@ mod tests {
             apply_managed_block("# My Project\n\nHello.\n", Path::new("AGENTS.md"))
                 .expect("append succeeds");
         assert_eq!(action, Action::Appended);
-        assert!(result.starts_with("# My Project\n\nHello.\n\n## Keeping Files Small"));
+        let opened = "# My Project\n\nHello.\n\n<!-- >>> fissile managed block (v3) >>> -->";
+        assert!(result.starts_with(opened));
         assert!(result.contains("fissile check --staged"));
     }
 
     #[test]
     fn replaces_existing_managed_block_and_preserves_surroundings() {
-        let existing = "# Project\n\n## Keeping Files Small With fissile (v1)\n\nold body\n\n## Other\n\nkeep me\n";
+        let existing = "# Project\n\n<!-- >>> fissile managed block (v3) >>> -->\nold body\n<!-- <<< fissile managed block (v3) <<< -->\n\n## Other\n\nkeep me\n";
         let (result, action) =
             apply_managed_block(existing, Path::new("AGENTS.md")).expect("replace succeeds");
         assert_eq!(action, Action::Updated);
@@ -581,18 +535,44 @@ mod tests {
 
     #[test]
     fn rejects_newer_block_version() {
-        let existing = "## Keeping Files Small With fissile (v3)\n\nfuture body\n";
+        let existing = "<!-- >>> fissile managed block (v4) >>> -->\nfuture body\n<!-- <<< fissile managed block (v4) <<< -->\n";
         let error =
-            apply_managed_block(existing, Path::new("AGENTS.md")).expect_err("v3 unsupported");
+            apply_managed_block(existing, Path::new("AGENTS.md")).expect_err("v4 unsupported");
         assert!(matches!(
             error,
-            InitError::UnsupportedBlock { version: 3, .. }
+            InitError::UnsupportedBlock { version: 4, .. }
         ));
+    }
+
+    /// A v1/v2 block had no markers and ran to the next H1/H2. It is upgraded in
+    /// place, not left beside a second block (§FS-002-init.4).
+    #[test]
+    fn upgrades_a_legacy_heading_block_in_place() {
+        let existing = "# Project\n\n## Keeping Files Small With fissile (v2)\n\nold body\n\n## Other\n\nkeep me\n";
+        let (result, action) =
+            apply_managed_block(existing, Path::new("AGENTS.md")).expect("upgrade succeeds");
+        assert_eq!(action, Action::Updated);
+        assert!(!result.contains("old body"));
+        assert!(!result.contains("(v2)"));
+        let heading = "## Keeping Files Small With fissile";
+        assert_eq!(result.matches(heading).count(), 1);
+        assert!(result.contains("## Other\n\nkeep me"));
+    }
+
+    /// The markers, not the next heading, bound the block: what a user writes
+    /// under it is theirs (§FS-002-init.4).
+    #[test]
+    fn a_user_heading_below_the_block_survives_a_refresh() {
+        let block = MANAGED_BLOCK.trim_end();
+        let existing = format!("{block}\n\n### Our own note\n\nkeep me\n");
+        let (result, _) =
+            apply_managed_block(&existing, Path::new("AGENTS.md")).expect("refresh succeeds");
+        assert!(result.contains("### Our own note\n\nkeep me"));
     }
 
     #[test]
     fn unchanged_block_reports_exists() {
-        let existing = format!("# Project\n\n{MANAGED_BLOCK}\n");
+        let existing = format!("# Project\n\n{}\n", MANAGED_BLOCK.trim_end());
         let (_, action) =
             apply_managed_block(&existing, Path::new("AGENTS.md")).expect("idempotent");
         assert_eq!(action, Action::Exists);

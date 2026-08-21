@@ -84,60 +84,59 @@ workspace signal.
 
 ## 4. Managed Block
 
-The managed block heading is:
+The managed block is delimited by marker lines, as the hook block is (§6):
 
 ```markdown
-## Keeping Files Small With fissile (v2)
+<!-- >>> fissile managed block (v3) >>> -->
+## Keeping Files Small With fissile
+...
+<!-- <<< fissile managed block (v3) <<< -->
 ```
 
-That H2 line is the begin marker. The managed block runs until the next H1 or H2
-heading, or end of file. A fresh `AGENTS.md` may have an unmanaged H1 above it;
-companion entrypoints contain only the managed block unless they already had
-user-authored content.
+The version lives in the markers rather than in the heading. What a reader
+compares is then in the line that delimits the span, and the heading a
+repository sees in its own entrypoint stays put across versions instead of
+renaming itself every time the text changes.
+
+The block is exactly the marker lines and everything between them. Every byte
+outside is user-authored and preserved, including a heading of any depth
+written directly beneath the block. A fresh `AGENTS.md` may have an unmanaged
+H1 above it; companion entrypoints contain only the managed block unless they
+already had user-authored content.
 
 If an entrypoint has no managed block, `init` appends the current block. If it
-has a supported block version, `init` replaces only the managed block and
-preserves all bytes before and after it, including the block position. If it has
-a newer unsupported block version, `init` exits with a schema error and leaves
-the file unchanged.
+has a supported block version, `init` replaces only the block and preserves the
+bytes before and after it, including the block position. If it has a newer
+unsupported block version, `init` exits with a schema error and leaves the file
+unchanged. A begin marker with no end marker is a truncated block: it runs to
+the next H1 or H2 heading, or to end of file, and is replaced wholesale.
 
-The canonical v2 block teaches:
+Blocks v1 and v2 had no markers. They were found by the heading
+`## Keeping Files Small With fissile (v<N>)` and ran to the next H1 or H2
+heading, or end of file. `init` still recognizes that span and replaces it with
+the delimited block, so a repository that adopted an earlier version upgrades in
+place on its next run rather than growing a second block.
 
-- run `fissile check --staged` before claiming work is done;
-- read a grouped block as one instruction: the header names the severity, rule,
-  and limit, and the guidance under it covers every file listed below it
-  (§FS-004-check-audit.1);
-- treat a soft overflow as *should split* — agent-actionable when the agent
-  changed the file, and split along an existing seam rather than at the line
-  count;
-- treat a hard overflow as *must split* — stop-the-line unless a structured
-  exception exists;
-- never damage the design to fit a budget: record accepted warning debt with
-  `fissile exception add --severity soft`, and ask a human for a hard overflow
-  no safe split resolves, since `--severity hard` is human-reviewed
-  (§DF-003-severity-guidance.1);
-- ask `fissile measure <path>` how large a file is and how much room is left,
-  before deciding where new code goes — the counting rule is fissile's, so no
-  other tool reproduces the number (§FS-007-measure);
-- move a recorded ceiling with `fissile exception retune` rather than by hand,
-  and let it choose the value: an agent asked to pick a ceiling picks the
-  smallest one that clears the file, which is the churn quantized bumps exist to
-  end (§FS-008-exception-retune, §DF-006-quantized-ceilings). This holds at both
-  severities — retuning an existing hard entry is bookkeeping on a decision a
-  human already made, which is what separates it from adding one
-  (§DF-003-severity-guidance.1);
-- run `fissile audit --stale-exceptions` before removing or moving large files,
-  and lower a ceiling it reports as loose (§FS-003-exceptions.7).
+The v3 block teaches three things, and deliberately no more
+(§DF-007-instructions-at-the-error-site.1):
+
+- that this repository caps file size, and why — the one fact that has to arrive
+  before the code is written, since a finding cannot reach an agent until the
+  file is already too long;
+- that `fissile check --staged` is run before calling work done, which reaches
+  the repositories where no hook fires (§6);
+- that the gate is not bypassed with `--no-verify`.
+
+Everything the v2 block said about severities, seams, exceptions, ceilings, and
+stale entries is said by the surface that raises each one: the finding and its
+guidance (§FS-004-check-audit.1), the `exception add` refusals
+(§FS-005-exception-add.4), and the `audit` inventory (§FS-004-check-audit.2).
 
 An example rendered block lives at `examples/AGENTS.fissile.md`.
 
-`--dry-run` prints that block to stdout, under the planned writes. A dry run is
-the one way to read the instructions without changing a file, so it is where
-`fissile --help` sends a reader who wants more than the usage paragraph
-(§FS-006-cli.2) — and it answers the question an agent in an adopted repository
-actually has, which is what this tool expects of it, not which files `init`
-would touch. The text is the same constant `init` installs, so the printed and
-the written instructions cannot drift.
+`--dry-run` prints that block to stdout, under the planned writes, which is the
+one way to read it without changing a file. The text is the same constant `init`
+installs, so the printed and the written block cannot drift.
 
 ## 5. Reporting
 
@@ -160,7 +159,7 @@ next:
 1. Review .agents/fissile.toml and tune rule limits.
 2. Commit a change to see the pre-commit hook run fissile check --staged.
 3. Run fissile audit once and add justified exceptions with fissile exception add.
-see AGENTS.md for the full workflow.
+see AGENTS.md for what agents are told; the findings carry the rest.
 ```
 
 The `next:` block is suppressed when every selected file already exists with the
@@ -173,8 +172,9 @@ the reader to a file that is not there. Two clauses follow from that:
   repository (§6), step 2 instead points at the repair — `Run git init &&
   fissile init to install the pre-commit hook, or wire fissile check --staged
   into your commit flow.`
-- The closing `see <path> for the full workflow.` line names an agent
-  entrypoint this run handled (§3), not a fixed filename: automatic mode
+- The closing `see <path> for what agents are told; the findings carry the
+  rest.` line names an agent entrypoint this run handled (§3), not a fixed
+  filename: automatic mode
   updates whichever entrypoints already exist and only falls back to
   `AGENTS.md` when none do, and the per-agent flags select the file directly.
   Naming a handled entrypoint — whether it was written, updated, or already

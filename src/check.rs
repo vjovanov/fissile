@@ -5,6 +5,8 @@
 use std::path::PathBuf;
 
 use crate::cli::{self, CommandError, Format, Loaded};
+use crate::config::Stale;
+use crate::exceptions::Exception;
 use crate::json::Json;
 use crate::report::{self, Outcome};
 use crate::scan;
@@ -50,11 +52,27 @@ pub fn run(options: &CheckOptions) -> Result<Run, CommandError> {
         )?);
     }
 
-    let failed = report::has_hard_failure(&outcomes);
+    // An exact-path entry whose file is gone accepts nothing, and the commit
+    // that removed the file is where that is worth saying (§FS-004-check-audit.1.3).
+    let dangling = match loaded.config.exceptions.stale {
+        Stale::Ignore => Vec::new(),
+        _ => loaded.registries.dangling(&loaded.root),
+    };
+    let failed = report::has_hard_failure(&outcomes)
+        || (!dangling.is_empty() && loaded.config.exceptions.stale == Stale::Error);
+
     let output = match format {
         Format::Text => {
             let color = cli::use_color(loaded.config.output.color, options.no_color, format);
-            render_text(&outcomes, &loaded.config.output.success, color, &errors)
+            let text = Text {
+                outcomes: &outcomes,
+                dangling: &dangling,
+                success: &loaded.config.output.success,
+                color,
+                staged: options.staged,
+                errors: &errors,
+            };
+            render_text(&text)
         }
         Format::Json => render_json(&outcomes),
     };
@@ -73,20 +91,44 @@ fn collect_files(options: &CheckOptions, loaded: &Loaded) -> Result<Vec<String>,
     }
 }
 
-fn render_text(outcomes: &[Outcome], success: &str, color: bool, errors: &[String]) -> String {
-    let blocks = report::finding_blocks(outcomes, color);
+/// What one text render needs: the findings, what the registries no longer
+/// accept, and whether this run is a commit (§FS-004-check-audit.1).
+struct Text<'a> {
+    outcomes: &'a [Outcome],
+    dangling: &'a [&'a Exception],
+    success: &'a str,
+    color: bool,
+    staged: bool,
+    errors: &'a [String],
+}
+
+fn render_text(text: &Text<'_>) -> String {
+    let mut blocks = report::finding_blocks(text.outcomes, text.color);
+    let found = !blocks.is_empty();
+    blocks.extend(report::dangling_blocks(text.dangling, text.color));
+
     if blocks.is_empty() {
         // The marker is withheld when a file could not be measured: `ok` next
         // to an exit-2 diagnostic would be a lie (§FS-004-check-audit.5).
-        if errors.is_empty() {
-            report::success_marker(success, color)
+        return if text.errors.is_empty() {
+            report::success_marker(text.success, text.color)
         } else {
             String::new()
-        }
-    } else {
-        // Blocks are separated by a blank line (§FS-004-check-audit.1).
-        blocks.join("\n\n")
+        };
     }
+
+    // The hint answers where a split can put code, so it follows findings, not
+    // a lone stale entry (§FS-004-check-audit.1.1).
+    if found {
+        blocks.push(report::MEASURE_HINT.to_owned());
+    }
+    // Only `--staged` is a commit (§FS-004-check-audit.1.2).
+    if text.staged && report::has_hard_failure(text.outcomes) {
+        blocks.push(report::COMMIT_GATE.to_owned());
+    }
+
+    // Blocks are separated by a blank line (§FS-004-check-audit.1).
+    blocks.join("\n\n")
 }
 
 fn render_json(outcomes: &[Outcome]) -> String {

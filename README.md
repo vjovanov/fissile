@@ -64,7 +64,7 @@ next:
 1. Review .agents/fissile.toml: the source rule budgets common code extensions; add this repo's languages or tune the limits.
 2. Commit a change to see the pre-commit hook run fissile check --staged.
 3. Run fissile audit once and add justified exceptions with fissile exception add.
-see AGENTS.md for the full workflow.
+see AGENTS.md for what agents are told; the findings carry the rest.
 ```
 
 That is it. The installed hook runs `fissile check --staged` on every commit.
@@ -117,6 +117,8 @@ soft: 2 files over the 350-line budget [rule: source, message: split-source-soft
   fissile exception add <path> --severity soft --rule source --kind <kind>
     src/util.rs: 410 lines
     src/billing.rs: 372 lines
+
+hint: fissile measure <path>... reports size and headroom for the files you split into.
 # exit 1
 ```
 
@@ -166,9 +168,11 @@ top lines:
 The two exception counts are deliberately not one total: three files nobody will
 ever split and thirty-two waiting on work are different facts about a codebase.
 
-Add `--stale-exceptions` to find exceptions whose file is gone — and ceilings
-that have drifted far above the file they still accept, which is the ratchet
-slipping back:
+`check` already names an exact-path entry whose file is not on disk, so the
+commit that moved or deleted the file is where the leftover entry surfaces. Add
+`--stale-exceptions` for the rest of the inventory — globs matching nothing, and
+ceilings that have drifted far above the file they still accept, which is the
+ratchet slipping back:
 
 ```text
 loose ceilings:
@@ -208,6 +212,11 @@ fissile exception add src/orders.rs --severity hard --rule source \
 table, the discount rules, and the invoice writer are all reachable only from
 here. Splitting today just moves private helpers behind a new file."
 ```
+
+A hard exception is the only way past a stop-the-line gate, so it is a person's
+to record: off a terminal the command refuses and names the soft-severity route
+instead, which leaves the finding standing. A script that adds one legitimately
+passes `--force` (§DF-008-hard-severity-needs-a-terminal).
 
 ```toml
 [[exceptions]]

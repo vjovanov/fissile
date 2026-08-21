@@ -31,12 +31,20 @@ pub struct AddOptions {
     pub issue: Option<String>,
     pub max: Option<u64>,
     pub unit: Option<Unit>,
+    /// Whether the caller is a person at a terminal. The severity gate reads it
+    /// (§DF-008-hard-severity-needs-a-terminal.1); the library takes it as a
+    /// fact rather than probing, so a test can state either caller.
+    pub interactive: bool,
+    /// Proceed past the severity gate anyway (§FS-005-exception-add.4).
+    pub force: bool,
     pub dry_run: bool,
 }
 
 #[derive(Clone, Debug)]
 pub struct Run {
     pub output: String,
+    /// Said on stderr without changing the outcome (§FS-005-exception-add.4).
+    pub warnings: Vec<String>,
 }
 
 pub fn run(options: &AddOptions) -> Result<Run, CommandError> {
@@ -49,6 +57,10 @@ pub fn run(options: &AddOptions) -> Result<Run, CommandError> {
     entry::validate_match(options.match_kind, &path)?;
     let until = resolve_until(options)?;
     let rules = entry::resolve_rules(&loaded, &options.rules)?;
+    // After the flags are known well-formed, before anything is read about the
+    // file: contradictory flags are named as such, and the refusal never
+    // reports what the registry holds (§DF-008-hard-severity-needs-a-terminal.1).
+    check_severity_gate(options)?;
     let unit = rules[0].budget.unit;
     let sizing = entry::Sizing {
         path: &path,
@@ -80,9 +92,12 @@ pub fn run(options: &AddOptions) -> Result<Run, CommandError> {
     // Final guard: the combined registry must still validate (§FS-005-exception-add.4).
     entry::validate_combined(&loaded, options.severity, &new_text)?;
 
+    let warnings = restatement_warning(options, &path).into_iter().collect();
+
     if options.dry_run {
         return Ok(Run {
             output: format!("{rendered}\nwould update {}", registry_rel.display()),
+            warnings,
         });
     }
 
@@ -95,8 +110,61 @@ pub fn run(options: &AddOptions) -> Result<Run, CommandError> {
             "appended {path} to {} (accepted up to {max} {unit})",
             registry_rel.display()
         ),
+        warnings,
     })
 }
+
+/// A hard exception is the only way past a stop-the-line gate, so a person
+/// decides it (§DF-008-hard-severity-needs-a-terminal.1). The refusal offers the
+/// route an agent can take on its own, and names the flag a script needs.
+fn check_severity_gate(options: &AddOptions) -> Result<(), CommandError> {
+    if options.severity != Severity::Hard || options.force || options.interactive {
+        return Ok(());
+    }
+    Err(CommandError::Usage(format!(
+        "--severity hard records a human decision, and this is not a terminal. \
+         A hard exception is the only way past a stop-the-line gate, so a person \
+         reviews it. Record the debt at soft severity instead:\n  \
+         fissile exception add {} --severity soft --rule {} --kind deferred --until <what retires it>\n\
+         Pass --force to add it anyway from a script.",
+        options.path,
+        options.rules.first().map_or("<id>", String::as_str),
+    )))
+}
+
+/// A reason that says nothing the finding did not (§FS-005-exception-add.4).
+/// Strip the entry's own facts and count what is left: this catches a reason
+/// that is *entirely* restatement, which is why it warns rather than refuses.
+fn restatement_warning(options: &AddOptions, path: &str) -> Option<String> {
+    let mut remaining = options.reason.to_lowercase();
+    for fact in [path, &options.path] {
+        remaining = remaining.replace(&fact.to_lowercase(), " ");
+    }
+    for rule in &options.rules {
+        remaining = remaining.replace(&rule.to_lowercase(), " ");
+    }
+    for unit in ["bytes", "byte", "lines", "line", "tokens", "token"] {
+        remaining = remaining.replace(unit, " ");
+    }
+    let words = remaining
+        .split(|character: char| !character.is_alphabetic())
+        .filter(|word| !word.is_empty())
+        .count();
+    if words >= RESTATEMENT_WORDS {
+        return None;
+    }
+    Some(
+        "--reason may only restate the finding. A reason names the constraint that makes \
+         splitting illegal (--kind structural), or the boundary that is missing and what \
+         must exist first (--kind deferred). What the file contains is what the finding \
+         already said."
+            .to_owned(),
+    )
+}
+
+/// Words left after the facts are removed, below which a reason reads as a
+/// restatement (§FS-005-exception-add.4).
+const RESTATEMENT_WORDS: usize = 5;
 
 /// Reconcile `--until` with `--kind` (§FS-005-exception-add.1): a structural
 /// entry never expires, a deferred one must name what retires it. Each error
@@ -214,5 +282,69 @@ fn match_str(match_kind: MatchKind) -> &'static str {
     match match_kind {
         MatchKind::Exact => "exact",
         MatchKind::Glob => "glob",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn options(reason: &str) -> AddOptions {
+        AddOptions {
+            root: PathBuf::from("."),
+            config_path: None,
+            path: "src/big.rs".to_owned(),
+            severity: Severity::Soft,
+            rules: vec!["rust-source".to_owned()],
+            kind: Kind::Structural,
+            reason: reason.to_owned(),
+            until: None,
+            match_kind: MatchKind::Exact,
+            title: None,
+            owner: None,
+            issue: None,
+            max: None,
+            unit: None,
+            interactive: false,
+            force: false,
+            dry_run: false,
+        }
+    }
+
+    /// §FS-005-exception-add.4: a reason built from the finding's own facts
+    /// leaves nothing behind once those facts are removed.
+    #[test]
+    fn a_reason_made_of_the_findings_facts_warns() {
+        let options = options("src/big.rs is 612 lines, over the 550-line limit");
+        assert!(restatement_warning(&options, "src/big.rs").is_some());
+    }
+
+    /// A claim a reviewer can disagree with survives the same subtraction.
+    #[test]
+    fn a_reason_that_names_a_constraint_does_not_warn() {
+        let options = options(
+            "The generator owns this whole file and asserts it byte-identical; \
+             a split loses the incident-to-case mapping.",
+        );
+        assert!(restatement_warning(&options, "src/big.rs").is_none());
+    }
+
+    /// The gate reads the caller, not the severity alone: soft is the agent's
+    /// to record (§DF-008-hard-severity-needs-a-terminal.1).
+    #[test]
+    fn the_severity_gate_stops_only_a_scripted_hard_add() {
+        let mut scripted = options("a claim about a missing boundary here");
+        scripted.severity = Severity::Hard;
+        assert!(check_severity_gate(&scripted).is_err());
+
+        assert!(check_severity_gate(&options("a claim")).is_ok());
+
+        let mut forced = scripted.clone();
+        forced.force = true;
+        assert!(check_severity_gate(&forced).is_ok());
+
+        let mut human = scripted.clone();
+        human.interactive = true;
+        assert!(check_severity_gate(&human).is_ok());
     }
 }

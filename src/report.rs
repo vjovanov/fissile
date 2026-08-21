@@ -5,7 +5,7 @@
 use std::error::Error;
 use std::fmt;
 
-use crate::exceptions::{ExceptionError, Kind, Registries, Verdict};
+use crate::exceptions::{Exception, ExceptionError, Kind, Registries, Verdict};
 use crate::json::Json;
 use crate::{Checker, FileMeasurement, FissileError, Overflow, RuleHit, Severity, render_overflow};
 
@@ -194,6 +194,65 @@ pub fn finding_blocks(outcomes: &[Outcome], color: bool) -> Vec<String> {
 
     groups.iter().map(|group| group.render(color)).collect()
 }
+
+/// The one line a run that reported something adds, naming the number no other
+/// tool produces — the headroom of the files a split moves code *into*
+/// (§FS-004-check-audit.1.1, §FS-007-measure).
+pub const MEASURE_HINT: &str =
+    "hint: fissile measure <path>... reports size and headroom for the files you split into.";
+
+/// What `check --staged` says when a hard finding stands: the one context that
+/// is a commit, and the one place `--no-verify` is a live temptation
+/// (§FS-004-check-audit.1.2).
+pub const COMMIT_GATE: &str = "\
+commit blocked by fissile. Split the file, or ask a human for a reviewed hard
+exception. Bypassing with --no-verify leaves the overflow for review or CI.";
+
+/// The block naming exact-path entries whose file is gone (§FS-004-check-audit.1.3).
+/// One block per registry, so a reader opens the file the line names.
+pub fn dangling_blocks(entries: &[&Exception], color: bool) -> Vec<String> {
+    let mut registries: Vec<&str> = Vec::new();
+    for entry in entries {
+        if !registries.contains(&entry.registry.as_str()) {
+            registries.push(&entry.registry);
+        }
+    }
+
+    registries
+        .into_iter()
+        .map(|registry| {
+            let mine: Vec<&&Exception> = entries
+                .iter()
+                .filter(|entry| entry.registry == registry)
+                .collect();
+            let count = if mine.len() == 1 {
+                "1 exception accepts a file".to_owned()
+            } else {
+                format!("{} exceptions accept files", mine.len())
+            };
+            let mut block = paint(
+                color,
+                BOLD_YELLOW,
+                &format!("stale: {count} that is not there [registry: {registry}]"),
+            );
+            for line in wrap(DANGLING_GUIDANCE, GUIDANCE_COLUMNS) {
+                block.push_str("\n  ");
+                block.push_str(&line);
+            }
+            for entry in mine {
+                block.push_str(&format!(
+                    "\n    {} [{}, rule: {}]",
+                    entry.path,
+                    entry.severity,
+                    entry.rules.join(", ")
+                ));
+            }
+            block
+        })
+        .collect()
+}
+
+const DANGLING_GUIDANCE: &str = "The file moved or was deleted, so the entry silences nothing. Remove it, or point it at the path the file moved to.";
 
 /// The findings that share a severity, a rule, and one rendered guidance string.
 struct Group<'a> {
