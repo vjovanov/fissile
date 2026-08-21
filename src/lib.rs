@@ -19,6 +19,7 @@ mod glob;
 pub mod hook;
 pub mod init;
 pub mod json;
+mod managed;
 pub mod measure;
 mod model;
 pub mod report;

@@ -2,6 +2,7 @@
 //! dependency tree (§GOAL-002-tiny-footprint, §DA-003-single-static-binary);
 //! dispatches the commands (§FS-002-init, §FS-004-check-audit, §FS-005-exception-add).
 
+use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::slice::Iter;
@@ -23,7 +24,8 @@ fissile keeps files small so readers — human and agent — spend less to
 understand them, without letting a budget damage the design. Every rule has two
 limits: soft warns, hard fails the commit. Run `fissile check --staged` before
 calling work done, and split what it names along a seam the code already has.
-For the full agent instructions, run `fissile init --dry-run`.
+Its findings carry the rest: what to split, how, and how to record a file that
+cannot be split without making the design worse.
 
 commands:
   init [<path>]        install config, registries, and agent instructions
@@ -40,6 +42,9 @@ const INIT_USAGE: &str = "\
 usage: fissile init [<path>] [--name <name>] [--config <path>] [--exceptions]
                     [--hook] [--no-hook] [--force] [--dry-run] [--agents-md]
                     [--claude] [--gemini] [--copilot] [--cursor] [--windsurf] [--zed]
+
+--dry-run reports the planned writes and prints the managed agent block, which
+is the one way to read what agents are told without writing a file.
 
 examples:
   fissile init --exceptions
@@ -95,7 +100,7 @@ const EXCEPTION_ADD_USAGE: &str = "\
 usage: fissile exception add <path> --severity soft|hard --rule <id>
                  --kind structural|deferred --reason <text> [--until <text>]
                  [--config <path>] [--match exact|glob] [--title <text>]
-                 [--owner <text>] [--issue <text>] [--dry-run]
+                 [--owner <text>] [--issue <text>] [--force] [--dry-run]
                  [--max <N> --unit bytes|lines|tokens]
 
 --kind says what --reason has to establish. Describing the file does not:
@@ -215,7 +220,7 @@ fn run_init(args: &[String]) -> ExitCode {
             eprintln!("{}", report.render());
             // A dry run is the one way to read the instructions without writing
             // a file, so it prints them — on stdout, keeping the planned writes
-            // on stderr separable (§FS-002-init.4, §FS-006-cli.2).
+            // on stderr separable (§FS-002-init.4).
             if dry_run {
                 println!("{}", init::MANAGED_BLOCK.trim_end());
             }
@@ -294,7 +299,15 @@ fn run_check(args: &[String]) -> ExitCode {
     };
 
     match check::run(&options) {
-        Ok(run) => finish_run("check", &run.output, run.failed, &run.errors),
+        Ok(run) => {
+            // Under `--format json` stdout is holding a machine shape, so the
+            // run's account of a registry it can no longer read comes out here
+            // rather than being lost (§FS-004-check-audit.5).
+            for note in &run.notes {
+                eprintln!("{note}");
+            }
+            finish_run("check", &run.output, run.failed, &run.errors)
+        }
         Err(error) => {
             eprintln!("fissile check: {error}");
             ExitCode::from(2)
@@ -432,6 +445,10 @@ fn run_exception_add(args: &[String]) -> ExitCode {
                 builder.dry_run = true;
                 Ok(())
             }
+            "--force" => {
+                builder.force = true;
+                Ok(())
+            }
             "--rule" => value(&mut iter, "--rule").map(|v| builder.rules.push(v)),
             "--severity" => value(&mut iter, "--severity").and_then(|v| builder.set_severity(&v)),
             "--kind" => value(&mut iter, "--kind").and_then(|v| builder.set_kind(&v)),
@@ -454,12 +471,17 @@ fn run_exception_add(args: &[String]) -> ExitCode {
         }
     }
 
-    let options = match builder.build() {
+    // A person adding an exception is at a terminal; an agent, a hook, and CI
+    // are not (§DF-008-hard-severity-needs-a-terminal.1).
+    let options = match builder.build(std::io::stdin().is_terminal()) {
         Ok(options) => options,
         Err(message) => return usage_fail("exception add", &message, EXCEPTION_ADD_USAGE),
     };
     match exception::run(&options) {
         Ok(run) => {
+            for warning in &run.warnings {
+                eprintln!("fissile exception add: warning: {warning}");
+            }
             println!("{}", run.output);
             ExitCode::SUCCESS
         }
@@ -598,6 +620,7 @@ struct AddBuilder {
     max: Option<u64>,
     unit: Option<Unit>,
     config: Option<String>,
+    force: bool,
     dry_run: bool,
 }
 
@@ -634,7 +657,10 @@ impl AddBuilder {
         Ok(())
     }
 
-    fn build(self) -> Result<AddOptions, String> {
+    /// `interactive` is passed in rather than probed: this turns parsed flags
+    /// into options and nothing else, so what it returns does not depend on how
+    /// the process was launched (§DF-008-hard-severity-needs-a-terminal.1).
+    fn build(self, interactive: bool) -> Result<AddOptions, String> {
         Ok(AddOptions {
             root: PathBuf::from("."),
             config_path: self.config.map(PathBuf::from),
@@ -656,6 +682,8 @@ impl AddBuilder {
             issue: self.issue,
             max: self.max,
             unit: self.unit,
+            interactive,
+            force: self.force,
             dry_run: self.dry_run,
         })
     }

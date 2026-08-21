@@ -12,4 +12,6 @@ soft: 2 files over the 2-line budget [rule: rust, message: should-split]
   If no split leaves the design better, record it instead of forcing one:
   fissile exception add <path> --severity soft --rule rust
     src/a.rs: 4 lines
-    src/b.rs: 3 lines"""
+    src/b.rs: 3 lines
+
+hint: fissile measure <path>... reports size and headroom for the files you split into."""

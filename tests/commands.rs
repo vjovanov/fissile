@@ -138,6 +138,8 @@ fn hard_exception_silences_hard_but_keeps_soft() {
         issue: None,
         max: None,
         unit: None,
+        interactive: true,
+        force: false,
         dry_run: false,
     })
     .expect("exception add runs");
@@ -373,6 +375,8 @@ fn exception_add_rejects_overlapping_path_matchers() {
         issue: None,
         max: Some(300),
         unit: Some(Unit::Lines),
+        interactive: true,
+        force: false,
         dry_run: false,
     })
     .expect("glob exception add runs");
@@ -392,6 +396,8 @@ fn exception_add_rejects_overlapping_path_matchers() {
         issue: None,
         max: None,
         unit: None,
+        interactive: true,
+        force: false,
         dry_run: false,
     }) {
         Ok(_) => panic!("overlapping exception should be rejected"),
@@ -426,6 +432,8 @@ fn add_options(root: &Path, kind: Kind, until: Option<&str>) -> AddOptions {
         issue: None,
         max: None,
         unit: None,
+        interactive: true,
+        force: false,
         dry_run: false,
     }
 }

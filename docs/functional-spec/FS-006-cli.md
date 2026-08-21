@@ -27,15 +27,24 @@ lines (§GOAL-003-friendly-output.1) and the bound is enforced by a test.
 The top-level screen carries one short paragraph above the command list saying
 what `fissile` is for and how to work with it: the two tiers, the
 `check --staged` habit, and the rule that a budget is never met by damaging the
-design. It closes by pointing at `fissile init --dry-run` for the full agent
-instructions.
+design. It closes by pointing at `fissile check --staged` itself.
 
 The paragraph is deliberately short, so the pointer carries the rest. A
 repository that installs `fissile` may not carry the managed agent block — the
 block is one `init` target among several, and an agent may be reading an
 entrypoint that never received it — so the usage screen is the one surface
-guaranteed to be present, and it must lead somewhere complete. A test pins its
-load-bearing clauses.
+guaranteed to be present, and it must lead somewhere complete.
+
+What it leads to is a run, not a document. The managed block is three sentences
+(§FS-002-init.4) because the instructions live in the surfaces that raise each
+question (§DF-007-instructions-at-the-error-site.1), so the complete answer is
+the finding: it names the file, the severity, the crossed limit, the remediation
+this repository configured, and the command that records an exception. A test
+pins the screen's load-bearing clauses.
+
+What left the top-level screen is the pointer at `fissile init --dry-run`, the
+one way to read the managed block without writing a file (§FS-002-init.4). It
+moves to `fissile init --help`, where the flag it describes already lives.
 
 ## 3. Version
 

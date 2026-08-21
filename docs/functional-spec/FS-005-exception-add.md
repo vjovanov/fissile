@@ -12,7 +12,7 @@ fissile exception add <path> --severity soft|hard --rule <id>
                       [--until <text>] [--config <path>] [--match exact|glob]
                       [--title <text>] [--owner <text>] [--issue <text>]
                       [--max <N> --unit bytes|lines|tokens]
-                      [--dry-run]
+                      [--force] [--dry-run]
 ```
 
 `--severity` chooses the configured registry: `soft` writes to
@@ -33,9 +33,17 @@ claim a reviewer can disagree with (§FS-003-exceptions.2.1,
   `indefinite`.
 
 Neither is answered by describing the file's contents; that is what the finding
-already said. The command does not judge the prose, but the flags it requires
-make the two questions impossible to conflate, and the error text names the
-distinction at the moment the entry is written.
+already said. The flags the command requires make the two questions impossible
+to conflate, and the error text names the distinction at the moment the entry is
+written.
+
+The command does not judge the prose, with one bounded exception. When a
+`--reason` says nothing beyond the finding's own facts, it warns and still
+writes the entry (§4). It never refuses on prose: the test can only catch a
+reason that is *entirely* restatement, and a command that rejected a terse but
+honest claim would teach callers to pad it.
+
+`--force` is the way past the severity gate in §4. It has no other effect.
 
 `--match` defaults to `exact`. `glob` is allowed only when `<path>` contains a
 glob metacharacter. The command never creates `[scan].exclude` entries; accepted
@@ -118,7 +126,31 @@ modifying files when:
   file must not assert the second;
 - `--max` would make the exception invalid or smaller than the current exact-path
   measurement;
-- the registry contains unrelated schema errors.
+- the registry contains unrelated schema errors;
+- `--severity hard` was passed, standard input is not a terminal, and `--force`
+  was not passed (§DF-008-hard-severity-needs-a-terminal.1). The refusal names
+  the soft-severity route, which is the one an agent can take on its own, and
+  names `--force` for the script that legitimately adds hard entries. `--dry-run`
+  is refused on the same terms: a dry run that printed the entry would answer
+  the question the gate exists to route to a person.
+
+  The route is offered as a command, and it is this call with `--severity soft`:
+  every other flag carried through, including the `--reason` the caller already
+  wrote and the `--kind` they claimed. Both matter. A command missing a required
+  flag ends in a second refusal, which teaches nothing and leaves hand-edited
+  registry TOML as the way forward; and substituting a kind rewrites the
+  caller's claim about the file into a different one — a structural constraint
+  told to name what retires it has nothing to name (§DF-004-exception-kind).
+
+After those checks pass, one condition warns without refusing. A `--reason` is a
+**restatement** when, with the entry's own facts removed — the `<path>`, the
+selected rule ids, the unit name, and every number — fewer than five words are
+left. "src/big.rs is 612 lines, over the 550-line limit" reduces to four and
+warns; a reason that names a constraint or a missing boundary does not come
+close. The warning goes to stderr, the entry is written, and the exit code is
+unchanged: what is wrong with a restatement is that a reviewer learns nothing
+from it (§DF-004-exception-kind), which is a reason to say so, not to block a
+commit on a word count.
 
 `--dry-run` prints the TOML entry that would be appended and the registry path it
 would update. It does not modify the filesystem.

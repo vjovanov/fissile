@@ -327,6 +327,8 @@ impl Registries {
     }
 
     /// Entries whose path/glob matches none of `scanned` (§FS-004-check-audit.2).
+    /// The one staleness answer both commands read: `audit` takes all of them,
+    /// `check` the exact-path ones (§FS-004-check-audit.1.3).
     pub fn stale<'a>(&'a self, scanned: &[String]) -> Vec<&'a Exception> {
         self.all()
             .filter(|entry| !scanned.iter().any(|path| entry.matches_path(path)))

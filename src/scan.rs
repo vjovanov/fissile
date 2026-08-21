@@ -251,6 +251,50 @@ pub fn staged_files(root: &Path, scan: &Scan) -> io::Result<Vec<String>> {
     Ok(out)
 }
 
+/// The paths this commit removes: staged deletions, and the old side of a
+/// staged rename (§FS-004-check-audit.1.3). What proves an entry has outlived
+/// its file — a path merely absent from the tree was removed from nothing.
+pub fn staged_removals(root: &Path) -> io::Result<Vec<String>> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args([
+            "diff",
+            "--cached",
+            "--name-status",
+            "-z",
+            "--diff-filter=DR",
+        ])
+        .output()?;
+    if !output.status.success() {
+        return Err(io::Error::other(git_failure(
+            "git diff --cached",
+            &output.stderr,
+        )));
+    }
+
+    // `-z` writes every field NUL-separated and verbatim. Without it git applies
+    // `core.quotePath`, so a removed `src/café.rs` arrives as `"src/caf\303\251.rs"`
+    // and matches no entry — silence at the one moment this check exists for.
+    let text = String::from_utf8_lossy(&output.stdout);
+    let mut fields = text.split('\0').filter(|field| !field.is_empty());
+    let mut out: Vec<String> = Vec::new();
+    while let Some(status) = fields.next() {
+        // `D` is followed by one path; `R<score>` by the old path then the new
+        // one. The old path is what an entry was pointing at.
+        let Some(path) = fields.next() else { break };
+        if status.starts_with('R') || status.starts_with('C') {
+            fields.next();
+        }
+        if status.starts_with('D') || status.starts_with('R') {
+            out.push(path.to_owned());
+        }
+    }
+    out.sort();
+    out.dedup();
+    Ok(out)
+}
+
 /// `<command> failed` plus git's first stderr line, when there is one.
 fn git_failure(command: &str, stderr: &[u8]) -> String {
     let detail = String::from_utf8_lossy(stderr);

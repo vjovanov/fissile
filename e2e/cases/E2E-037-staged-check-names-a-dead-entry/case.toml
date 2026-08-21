@@ -1,0 +1,14 @@
+args = ["check", "--staged", "--no-color"]
+exit = 1
+git = true
+# The commit removes the file the entry accepts, which is the thing being judged.
+git_removes = ["src/moved.rs"]
+stdout_equals = """
+stale: 1 exception accepts a file that is not there [registry: docs/file-size-agent-exceptions.toml]
+  The file moved or was deleted, so the entry silences nothing. Remove it, or
+  point it at the path the file moved to.
+    src/moved.rs [soft, rule: rust]
+
+commit blocked by fissile. Remove the exception entry above, or point it at the
+path its file moved to. Bypassing with --no-verify leaves a dead entry in the
+registry."""

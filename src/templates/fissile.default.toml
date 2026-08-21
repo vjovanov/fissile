@@ -39,6 +39,9 @@ success = "ok"
 [exceptions]
 soft_registry = "docs/file-size-agent-exceptions.toml"
 hard_registry = "docs/file-size-human-exceptions.toml"
+# What to do about an exception entry that has outlived its file. Both `check`
+# and `audit --stale-exceptions` report under this key, so `error` fails a
+# commit as well as a CI audit.
 stale = "warn" # warn | error | ignore
 
 # A ceiling written by `exception add` or `exception retune` is rounded up to

@@ -3,4 +3,6 @@ exit = 0
 stdout_equals = """
 soft: 1 file over the 2-line budget [rule: rust, message: m]
   Split the file.
-    src/mid.rs: 3 lines"""
+    src/mid.rs: 3 lines
+
+hint: fissile measure <path>... reports size and headroom for the files you split into."""

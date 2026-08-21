@@ -52,3 +52,10 @@ The harness drives the real `fissile` binary, so every documented behavior under
 - §E2E-031-exception-add-measures-once — a refusal reuses the measurement it already took.
 - §E2E-032-bump-defaults-to-the-configured-step — a ceiling is quantized even when nothing configures the step.
 - §E2E-033-measure-staged-shares-check-selection — measure --staged selects what check --staged selects.
+- §E2E-034-hard-exception-needs-a-human — a hard exception is refused off a terminal.
+- §E2E-035-check-reports-a-stale-exception — check names an entry whose file is gone.
+- §E2E-036-staged-check-names-the-gate — a blocked commit says so, and says not to bypass it.
+- §E2E-037-staged-check-names-a-dead-entry — a commit blocked by a dead entry names the registry, not a split.
+- §E2E-038-an-unbuilt-file-is-not-a-dead-entry — a path merely absent from the working tree blocks nothing.
+- §E2E-039-the-offered-soft-route-runs — the command the hard-severity refusal prints succeeds verbatim.
+- §E2E-040-json-check-explains-its-exit-code — a JSON run that fails says why, on stderr.

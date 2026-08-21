@@ -86,6 +86,9 @@ pub struct Exceptions {
     pub soft_registry: String,
     #[serde(default = "default_hard_registry")]
     pub hard_registry: String,
+    /// What an entry that has outlived its file costs. Read by both enforcement
+    /// surfaces, so `error` fails a commit as well as an audit
+    /// (§FS-001-config.5, §FS-004-check-audit.1.3).
     #[serde(default)]
     pub stale: Stale,
     #[serde(default)]
@@ -135,6 +138,20 @@ pub enum Stale {
     Warn,
     Error,
     Ignore,
+}
+
+impl Stale {
+    /// Whether an entry that has outlived its file is mentioned at all.
+    pub fn reports(self) -> bool {
+        self != Stale::Ignore
+    }
+
+    /// Whether mentioning it also fails the run (§FS-004-check-audit.1.3).
+    /// Both enforcement surfaces read the setting through these two, so a
+    /// commit and an audit cannot come to different conclusions about it.
+    pub fn fails(self) -> bool {
+        self == Stale::Error
+    }
 }
 
 /// `[tokens]` — opt-in token counting (§FS-001-config.7).

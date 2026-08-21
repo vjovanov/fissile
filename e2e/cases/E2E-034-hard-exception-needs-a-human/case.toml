@@ -1,0 +1,16 @@
+args = [
+  "exception", "add", "src/big.rs",
+  "--severity", "hard",
+  "--rule", "rust",
+  "--kind", "structural",
+  "--reason", "the generator owns this file and asserts it byte-identical",
+]
+exit = 2
+# The harness pipes stdin, which is what an agent, a hook, and CI all look like.
+# The offered line is asserted whole: §E2E-039-the-offered-soft-route-runs runs
+# exactly these bytes, so a refusal that stopped being runnable fails there.
+stderr_contains = [
+  "--severity hard records a human decision, and this is not a terminal",
+  "fissile exception add src/big.rs --severity soft --rule rust --kind structural --reason 'the generator owns this file and asserts it byte-identical'",
+  "Pass --force to add it anyway from a script.",
+]

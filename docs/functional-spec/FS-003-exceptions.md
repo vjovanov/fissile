@@ -189,9 +189,17 @@ docs/file-size-human-exceptions.toml: src/orders.rs has an empty reason
 The registry file is part of the identifier: the same path may appear in both
 registries, making two different claims at two different severities.
 
-The validator does not require the target file to exist during `check --staged`
-because a staged deletion may make the path temporarily absent. Whole-repo
-`audit --stale-exceptions` performs the stale-path inventory.
+The validator never requires the target file to exist: an entry is well-formed
+whether or not the path it names is on disk today, so a file a build has not
+written yet, or one a dirty working tree is missing, is not a schema error.
+
+Which entries have outlived their file is a separate question, asked by both
+enforcement surfaces against the file set each one has. `check` answers it for
+exact paths its own run proves are gone (§FS-004-check-audit.1.3); whole-repo
+`audit --stale-exceptions` answers it for every entry, globs included, against
+the scan inventory (§FS-004-check-audit.2). Both report under `[exceptions].stale`
+— `warn`, `error`, or `ignore` — so one setting governs the whole subject, and
+under `error` it fails whichever run raised it.
 
 ## 5. Output
 

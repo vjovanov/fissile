@@ -2,10 +2,12 @@ args = ["init", "--dry-run"]
 exit = 0
 git = true
 stdout_contains = [
-  "## Keeping Files Small With fissile (v2)",
-  "Run `fissile check --staged` before claiming work is done.",
-  "A **soft** overflow means *should split*",
-  "A **hard** overflow means *must split*",
-  "`--severity hard` is theirs to add, not yours.",
+  "<!-- BEGIN FISSILE MANAGED BLOCK -->",
+  "## Keeping Files Small With fissile (v3)",
+  "Run `fissile check --staged` before",
+  "claiming work is done; its findings say what to split and how",
+  "pre-commit hook is installed it runs that same check",
+  "never get past it with",
+  "<!-- END FISSILE MANAGED BLOCK -->",
 ]
 stderr_contains = ["would-write", "AGENTS.md"]

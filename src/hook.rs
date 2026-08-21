@@ -7,6 +7,7 @@ use std::io;
 use std::path::Path;
 
 use crate::init::{Action, InitError, Outcome};
+use crate::managed::Block;
 
 const BEGIN_PREFIX: &str = "# >>> fissile managed block (v";
 const END_PREFIX: &str = "# <<< fissile managed block (v";
@@ -59,75 +60,18 @@ pub fn install(root: &Path, dry_run: bool) -> Result<Outcome, InitError> {
 }
 
 /// Append, replace, or leave the managed block in an existing hook file
-/// (§FS-002-init.6), mirroring the agent-block rules of §FS-002-init.4.
+/// (§FS-002-init.6), by the same splice the agent block uses (§FS-002-init.4).
 fn apply_block(existing: &str, path: &Path) -> Result<(String, Action), InitError> {
-    let lines: Vec<&str> = existing.lines().collect();
-
-    let Some(begin) = lines.iter().position(|line| is_begin(line)) else {
-        // No managed block: append it after the user-authored content.
-        let mut result = existing.trim_end().to_owned();
-        if !result.is_empty() {
-            result.push_str("\n\n");
-        }
-        result.push_str(BLOCK);
-        result.push('\n');
-        return Ok((result, Action::Appended));
-    };
-
-    let version = block_version(lines[begin]).unwrap_or(SUPPORTED_VERSION);
-    if version > SUPPORTED_VERSION {
-        return Err(InitError::UnsupportedBlock {
-            path: path.to_path_buf(),
-            version,
-        });
+    Block {
+        begin_prefix: BEGIN_PREFIX,
+        end_prefix: END_PREFIX,
+        version: SUPPORTED_VERSION,
+        body: BLOCK,
+        // A shell file has no heading to state a version on, so the marker
+        // carries it — the shape `conda init` writes (§FS-002-init.6).
+        version_heading: None,
     }
-
-    // The block ends one past the matching end marker, or at EOF when the end
-    // marker is missing (a truncated block is replaced wholesale).
-    let after_index = lines[begin + 1..]
-        .iter()
-        .position(|line| is_end(line))
-        .map(|offset| begin + 1 + offset + 1)
-        .unwrap_or(lines.len());
-
-    let before = lines[..begin].join("\n");
-    let after = lines[after_index..].join("\n");
-
-    let mut result = String::new();
-    if !before.is_empty() {
-        result.push_str(&before);
-        result.push('\n');
-    }
-    result.push_str(BLOCK);
-    result.push('\n');
-    if !after.is_empty() {
-        result.push_str(&after);
-        result.push('\n');
-    }
-
-    let action = if result == existing {
-        Action::Exists
-    } else {
-        Action::Updated
-    };
-    Ok((result, action))
-}
-
-fn is_begin(line: &str) -> bool {
-    line.trim_start().starts_with(BEGIN_PREFIX)
-}
-
-fn is_end(line: &str) -> bool {
-    line.trim_start().starts_with(END_PREFIX)
-}
-
-fn block_version(line: &str) -> Option<u32> {
-    let rest = line.trim_start().strip_prefix(BEGIN_PREFIX)?;
-    let digits: String = rest
-        .chars()
-        .take_while(|character| character.is_ascii_digit())
-        .collect();
-    digits.parse().ok()
+    .apply(existing, path)
 }
 
 #[cfg(unix)]
@@ -175,13 +119,29 @@ mod tests {
         assert_eq!(action, Action::Exists);
     }
 
+    /// A begin marker whose end marker someone deleted. The heading rule would
+    /// stop at the next `# ` comment and orphan the rest of the old body below
+    /// the new block, in every later run; this one runs to EOF (§FS-002-init.6).
+    #[test]
+    fn replaces_a_truncated_block_wholesale() {
+        let existing = "#!/bin/sh\n# >>> fissile managed block (v1) >>>\n# Managed by `fissile init`; re-run init to update.\nfissile check --staged || exit 1\n";
+        let (result, action) =
+            apply_block(existing, Path::new("pre-commit")).expect("replace succeeds");
+        assert_eq!(action, Action::Updated);
+        assert_eq!(result, format!("{SHEBANG}\n{BLOCK}\n"));
+        assert_eq!(result.matches("fissile check --staged").count(), 1);
+    }
+
     #[test]
     fn rejects_newer_block_version() {
         let existing = "#!/bin/sh\n# >>> fissile managed block (v2) >>>\nfuture\n# <<< fissile managed block (v2) <<<\n";
         let error = apply_block(existing, Path::new("pre-commit")).expect_err("v2 unsupported");
         assert!(matches!(
             error,
-            InitError::UnsupportedBlock { version: 2, .. }
+            InitError::UnsupportedBlock {
+                version: Some(2),
+                ..
+            }
         ));
     }
 }
