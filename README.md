@@ -1,5 +1,8 @@
 # fissile
 
+[![crates.io](https://img.shields.io/crates/v/fissile.svg)](https://crates.io/crates/fissile)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **A pre-commit guard that keeps source files small enough to stay cheap for
 agents to read — without ever rewriting your code.**
 

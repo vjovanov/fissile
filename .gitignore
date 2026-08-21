@@ -1,1 +1,5 @@
 /target/
+
+# Claude Code local state. `fissile init` regenerates .claude/CLAUDE.md
+# whenever this directory exists, duplicating the root CLAUDE.md.
+/.claude/
