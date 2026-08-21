@@ -1,0 +1,13 @@
+fissile_exceptions_version = 2
+
+# A comment the rewrite must preserve.
+[[exceptions]]
+path = "src/big.rs"
+match = "exact"
+rules = ["rust"]
+kind = "deferred"
+max_accepted = { value = 8, unit = "lines" }
+until = "the case-builder module lands"
+reason = """
+Missing boundary: the module this belongs in does not exist yet.
+"""

@@ -166,8 +166,33 @@ top lines:
 The two exception counts are deliberately not one total: three files nobody will
 ever split and thirty-two waiting on work are different facts about a codebase.
 
-Add `--stale-exceptions` to find exceptions whose file is gone, or
-`--rule-coverage` to find rules and messages that match nothing.
+Add `--stale-exceptions` to find exceptions whose file is gone — and ceilings
+that have drifted far above the file they still accept, which is the ratchet
+slipping back:
+
+```text
+loose ceilings:
+  docs/file-size-agent-exceptions.toml: src/orders.rs accepts 700 lines, now 421 — retune to 500
+```
+
+Add `--rule-coverage` to find rules and messages that match nothing.
+
+## How big is this file?
+
+`check` reports a measurement only when a file is over budget, and the count is
+fissile's own — comments count, blank lines do not — so `wc -l` cannot answer
+"is there room for this here?". `measure` answers it for any file, passing or
+not, and never fails a build:
+
+```text
+$ fissile measure src/orders.rs src/util.rs
+src/orders.rs 620 lines [source] soft 350 hard 550 hard-accepted 700 — 80 to hard-accepted
+src/util.rs 410 lines [source] soft 350 hard 550 — 140 to hard
+```
+
+The clause after the dash is the distance to whichever threshold binds first —
+a limit, or the ceiling an exception records. That is the number you need
+*before* deciding whether the new test goes in this file or a new one.
 
 ## Justified exceptions
 
@@ -197,8 +222,12 @@ Splitting today just moves private helpers behind a new file.
 """
 ```
 
-The hard block is now silenced — but only up to `max_accepted`. Grow the file
-past it and the finding returns. The soft warning still nudges the agent, because
+The hard block is now silenced — but only up to `max_accepted`, which is the
+measurement rounded up to the configured `[exceptions.bump]` step (100 lines by
+default). A ceiling reads as a decision — *this file may run to 700 lines* —
+rather than as whatever the file happened to measure the day someone wrote the
+entry, and an ordinary edit no longer trips it. Grow the file past it and the
+finding returns. The soft warning still nudges the agent, because
 this entry is `deferred`: there is a split to keep asking for.
 
 `--kind` is the field that keeps the registry honest, because a reason answers
@@ -214,6 +243,21 @@ Without the split, both collapse into "this file is large because …", which
 describes the file and claims nothing a reviewer can disagree with. `audit`
 counts the two separately, so *accepted permanently* and *carrying debt* never
 show up as one number.
+
+### Moving a ceiling
+
+When the file outgrows its ceiling, the reason usually still holds and only the
+number is wrong. `exception retune` moves it — in either direction, at either
+severity, leaving the reason, kind, and `until` untouched:
+
+```text
+$ fissile exception retune src/orders.rs --severity hard --rule source
+docs/file-size-human-exceptions.toml: src/orders.rs 700 -> 800 lines
+```
+
+It picks the number the same way `add` does, so a ceiling never becomes a fossil
+of one commit, and the diff is the single line that changed. Lowering works the
+same way and is how you retire a loose ceiling `audit` reports.
 
 The kind also decides what a hard entry silences. A `structural` one silences the
 soft warning for the overflow it accepts as well: splitting is illegal, so the
@@ -255,10 +299,14 @@ with a worked sample at [`examples/fissile.toml`](examples/fissile.toml).
   the git hook (§FS-002-init).
 - **`check`** — the commit-time gate over staged files or explicit paths
   (§FS-004-check-audit).
+- **`measure`** — what fissile counts for a file, and the headroom left
+  (§FS-007-measure).
 - **`audit`** — the whole-repo inventory and migration surface
   (§FS-004-check-audit).
 - **`exception add`** — append a justified oversized-file exception
   (§FS-005-exception-add).
+- **`exception retune`** — move the ceiling an entry already records
+  (§FS-008-exception-retune).
 
 This repo is grounded with [`grund`](https://github.com/vjovanov/grund): the
 `§ID` markers above point at the specs and goals that justify each behavior.

@@ -74,20 +74,11 @@ pub fn run(options: &CheckOptions) -> Result<Run, CommandError> {
 }
 
 fn collect_files(options: &CheckOptions, loaded: &Loaded) -> Result<Vec<String>, CommandError> {
-    if options.staged {
-        return Ok(scan::staged_files(&loaded.root, &loaded.config.scan)?);
+    match cli::selected_files(loaded, options.staged, &options.paths)? {
+        Some(files) => Ok(files),
+        // Neither `--staged` nor explicit paths: the configured scan scope.
+        None => Ok(scan::walk_scope(&loaded.root, &loaded.config.scan)?),
     }
-    if !options.paths.is_empty() {
-        // Caller-passed paths bypass scope/exclusion filtering, but still use
-        // the repo-relative spelling consumed by rules and exceptions.
-        return options
-            .paths
-            .iter()
-            .map(|path| scan::normalize_repo_path(&loaded.root, path))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(CommandError::Io);
-    }
-    Ok(scan::walk_scope(&loaded.root, &loaded.config.scan)?)
 }
 
 fn render_text(outcomes: &[Outcome], success: &str, color: bool, errors: &[String]) -> String {

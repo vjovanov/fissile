@@ -88,6 +88,33 @@ pub fn load(root: &Path, config_path: Option<&Path>) -> Result<Loaded, CommandEr
     })
 }
 
+/// The file set a caller named: git-staged, or explicit paths normalized to the
+/// repo-relative spelling (§FS-004-check-audit.1). `None` means neither — `check`
+/// falls back to the scan scope, `measure` to a usage error (§FS-007-measure.1).
+pub fn selected_files(
+    loaded: &Loaded,
+    staged: bool,
+    paths: &[String],
+) -> Result<Option<Vec<String>>, CommandError> {
+    if staged {
+        return Ok(Some(crate::scan::staged_files(
+            &loaded.root,
+            &loaded.config.scan,
+        )?));
+    }
+    if paths.is_empty() {
+        return Ok(None);
+    }
+    // Caller-passed paths bypass scope/exclusion filtering, but still use the
+    // repo-relative spelling consumed by rules and exceptions.
+    paths
+        .iter()
+        .map(|path| crate::scan::normalize_repo_path(&loaded.root, path))
+        .collect::<Result<Vec<_>, _>>()
+        .map(Some)
+        .map_err(CommandError::Io)
+}
+
 /// Tag a registry read failure with the file it came from (§FS-004-check-audit.5).
 fn named(path: &Path, error: io::Error) -> io::Error {
     io::Error::new(error.kind(), format!("{}: {error}", path.display()))

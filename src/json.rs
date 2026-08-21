@@ -7,6 +7,9 @@
 pub enum Json {
     Null,
     UInt(u64),
+    /// A signed value, for a quantity that reads in both directions — headroom
+    /// left versus distance past a threshold (§FS-007-measure.2).
+    Int(i64),
     Str(String),
     Array(Vec<Json>),
     Object(Vec<(&'static str, Json)>),
@@ -28,6 +31,7 @@ impl Json {
         match self {
             Json::Null => out.push_str("null"),
             Json::UInt(value) => out.push_str(&value.to_string()),
+            Json::Int(value) => out.push_str(&value.to_string()),
             Json::Str(value) => write_string(value, out),
             Json::Array(items) => {
                 out.push('[');

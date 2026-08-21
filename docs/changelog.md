@@ -30,6 +30,57 @@ with a migration note.
 
 ## Unreleased
 
+### Added
+
+- §FS-007-measure: new `fissile measure <paths>... | --staged` reports what
+  fissile counts for a file — the value, the rule, the limits, any accepted
+  ceiling, and the signed distance to whichever binds first. It answers for
+  files that are passing, which `check` never did, and always exits `0`. The
+  JSON shape is published as `schema/measure.schema.json`.
+- §FS-008-exception-retune: new `fissile exception retune` moves the ceiling an
+  entry already records, up or down and at either severity, leaving `reason`,
+  `kind`, and `until` untouched. It rewrites one `max_accepted` line in place,
+  so the diff is the single decision that changed.
+- §FS-001-config.5: new `[exceptions.bump]` table — `lines = 100`,
+  `bytes = 4096`, `tokens = 1000` — quantizing every ceiling `fissile` writes
+  (§DF-006-quantized-ceilings). Set a unit to `1` for the previous
+  exact-measurement behavior.
+- §FS-003-exceptions.7: `audit --stale-exceptions` also reports **loose**
+  ceilings — an exact-path entry standing more than one bump step above the file
+  it accepts — with the value `exception retune` would write in its place.
+
+### Changed
+
+- §FS-002-init.4: the managed agent block is now **v2**, teaching `measure`,
+  `retune`, and the loose-ceiling sweep. **Migration: re-run `fissile init` to
+  upgrade.** `init` replaces a v1 block in place and preserves the bytes around
+  it; a repository that does not re-run it keeps its v1 text and only misses the
+  new guidance.
+- §FS-001-config.1: `[exceptions.bump]` is additive within
+  `fissile_config_version = 1`, so a config that declares it is **rejected by
+  fissile 0.5.0 and earlier** with `unknown field \`bump\``, which names no
+  version floor. A repository adopting the key must raise its pinned `fissile`
+  version — including in any pre-commit hook or CI install step — at the same
+  commit.
+- §FS-005-exception-add.2: `max_accepted` is now the measurement quantized up to
+  the bump step rather than the measurement itself. Existing registries are
+  unaffected — quantization governs what the commands write, never what a
+  registry may hold (§FS-003-exceptions.4).
+- §FS-005-exception-add.4: the refusal when an entry already exists reports the
+  recorded ceiling beside the file's current measurement and names
+  `fissile exception retune`. It previously read "already accepts <path>", which
+  was false at the very moment `check` was reporting that file.
+- §FS-006-cli.1: five commands rather than four, and `exception add` and
+  `exception retune` each carry their own one-screen usage under a shared
+  `exception` dispatch screen.
+
+### Fixed
+
+- §FS-004-check-audit.2: `audit --top` ranked files by raw physical lines while
+  findings reported the rule's counted value, so one tool reported two numbers
+  for one file. `--top` now reports what the effective rule counts, and ranks a
+  file in a unit only when a rule measures it there.
+
 ## 2. [0.5.0] — 2026-08-12
 
 ### Changed

@@ -7,7 +7,7 @@ use std::fmt;
 
 use crate::exceptions::{ExceptionError, Kind, Registries, Verdict};
 use crate::json::Json;
-use crate::{Checker, FileMeasurement, FissileError, Overflow, Severity, render_overflow};
+use crate::{Checker, FileMeasurement, FissileError, Overflow, RuleHit, Severity, render_overflow};
 
 /// What evaluating one `(file, rule, severity)` produced.
 #[derive(Clone, Debug)]
@@ -71,10 +71,21 @@ pub fn evaluate_file(
     registries: &Registries,
     file: &FileMeasurement,
 ) -> Result<Vec<Outcome>, EvalError> {
+    evaluate_hits(registries, file, &checker.evaluate(file)?)
+}
+
+/// The same evaluation from rule hits a caller already has: `audit` reads them
+/// for its inventory sections too, and evaluating one file twice is waste the
+/// whole-repo walk cannot afford (§GOAL-001-fast-feedback).
+pub fn evaluate_hits(
+    registries: &Registries,
+    file: &FileMeasurement,
+    hits: &[RuleHit<'_>],
+) -> Result<Vec<Outcome>, EvalError> {
     let path = file.path.to_string_lossy().replace('\\', "/");
     let mut outcomes = Vec::new();
 
-    for hit in checker.evaluate(file)? {
+    for hit in hits {
         let rule = hit.rule;
         let unit = rule.budget.unit;
         let actual = hit.actual;
@@ -136,12 +147,13 @@ pub fn has_hard_failure(outcomes: &[Outcome]) -> bool {
 /// byte-identical in a narrow terminal and in CI (§GOAL-006-graded-limits.2).
 const GUIDANCE_COLUMNS: usize = 78;
 
-const BOLD_RED: &str = "\x1b[1;31m";
-const BOLD_YELLOW: &str = "\x1b[1;33m";
+/// Severity tints reused by other text surfaces (§FS-007-measure.2).
+pub const BOLD_RED: &str = "\x1b[1;31m";
+pub const BOLD_YELLOW: &str = "\x1b[1;33m";
 const GREEN: &str = "\x1b[32m";
 const RESET: &str = "\x1b[0m";
 
-fn paint(color: bool, code: &str, text: &str) -> String {
+pub fn paint(color: bool, code: &str, text: &str) -> String {
     if color {
         format!("{code}{text}{RESET}")
     } else {

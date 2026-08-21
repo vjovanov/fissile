@@ -1,15 +1,14 @@
-//! `fissile exception add` (§FS-005-exception-add): append a structured exception
-//! entry — measure the file or take `--max`, pick the soft or hard registry,
-//! validate against §FS-003-exceptions, then write (appending at the end).
+//! `fissile exception add` (§FS-005-exception-add): append a structured entry —
+//! measure the file or take `--max`, quantize the ceiling, pick the soft or hard
+//! registry, validate against §FS-003-exceptions, then append it.
 
 use std::fs;
 use std::path::PathBuf;
 
 use crate::cli::{self, CommandError, Loaded};
-use crate::exceptions::{
-    Exception, INDEFINITE, Kind, MatchKind, Registries, RegistrySource, is_indefinite,
-};
-use crate::{Glob, Rule, Severity, Unit, scan};
+use crate::entry::{self, Address};
+use crate::exceptions::{INDEFINITE, Kind, MatchKind, is_indefinite};
+use crate::{Rule, Severity, Unit, scan};
 
 /// Inputs to `exception add`.
 #[derive(Clone, Debug)]
@@ -47,31 +46,37 @@ pub fn run(options: &AddOptions) -> Result<Run, CommandError> {
         MatchKind::Glob => options.path.replace('\\', "/"),
     };
 
-    validate_match(&options.match_kind, &path)?;
+    entry::validate_match(options.match_kind, &path)?;
     let until = resolve_until(options)?;
-    let rules = resolve_rules(&loaded, &options.rules)?;
+    let rules = entry::resolve_rules(&loaded, &options.rules)?;
     let unit = rules[0].budget.unit;
-    let max = resolve_max(options, &loaded, &path, unit, rules[0])?;
-    check_min_limit(&rules, options.severity, max)?;
-    check_conflict(&loaded, options, &path, unit)?;
-
-    let entry = render_entry(options, &path, &until, unit, max);
-    let registry_rel = match options.severity {
-        Severity::Soft => loaded.soft_registry.clone(),
-        Severity::Hard => loaded.hard_registry.clone(),
+    let sizing = entry::Sizing {
+        path: &path,
+        match_kind: options.match_kind,
+        max: options.max,
+        unit: options.unit,
     };
+    let base = entry::resolve_base(sizing, &loaded, unit, rules[0])?;
+    entry::check_min_limit(&rules, options.severity, base)?;
+    check_conflict(&loaded, options, &path, unit, rules[0])?;
+    // The caller states a requirement; the step chooses the number written
+    // (§FS-005-exception-add.2, §DF-006-quantized-ceilings.1).
+    let max = entry::quantize(base, loaded.config.exceptions.bump.step(unit));
+
+    let rendered = render_entry(options, &path, &until, unit, max);
+    let registry_rel = entry::registry_path(&loaded, options.severity);
     let registry_path = loaded.root.join(&registry_rel);
 
     let existing = cli::read_optional(&registry_path)?;
-    let base = existing.unwrap_or_else(|| "fissile_exceptions_version = 2\n".to_owned());
-    let new_text = format!("{}\n{}\n", base.trim_end(), entry);
+    let base_text = existing.unwrap_or_else(|| "fissile_exceptions_version = 2\n".to_owned());
+    let new_text = format!("{}\n{}\n", base_text.trim_end(), rendered);
 
     // Final guard: the combined registry must still validate (§FS-005-exception-add.4).
-    validate_combined(&loaded, options.severity, &new_text)?;
+    entry::validate_combined(&loaded, options.severity, &new_text)?;
 
     if options.dry_run {
         return Ok(Run {
-            output: format!("{entry}\nwould update {}", registry_rel.display()),
+            output: format!("{rendered}\nwould update {}", registry_rel.display()),
         });
     }
 
@@ -80,21 +85,11 @@ pub fn run(options: &AddOptions) -> Result<Run, CommandError> {
     }
     fs::write(&registry_path, &new_text)?;
     Ok(Run {
-        output: format!("appended {} to {}", path, registry_rel.display()),
+        output: format!(
+            "appended {path} to {} (accepted up to {max} {unit})",
+            registry_rel.display()
+        ),
     })
-}
-
-fn validate_match(match_kind: &MatchKind, path: &str) -> Result<(), CommandError> {
-    let has_meta = path.contains(['*', '?', '[']);
-    match match_kind {
-        MatchKind::Glob if !has_meta => Err(CommandError::Usage(
-            "--match glob requires a glob metacharacter in <path>".to_owned(),
-        )),
-        MatchKind::Exact if has_meta => Err(CommandError::Usage(
-            "<path> contains a glob metacharacter; pass --match glob".to_owned(),
-        )),
-        _ => Ok(()),
-    }
 }
 
 /// Reconcile `--until` with `--kind` (§FS-005-exception-add.1): a structural
@@ -122,176 +117,46 @@ fn resolve_until(options: &AddOptions) -> Result<String, CommandError> {
     }
 }
 
-fn resolve_rules<'a>(
-    loaded: &'a Loaded,
-    rule_ids: &[String],
-) -> Result<Vec<&'a Rule>, CommandError> {
-    if rule_ids.is_empty() {
-        return Err(CommandError::Usage(
-            "at least one --rule is required".to_owned(),
-        ));
-    }
-    let mut rules = Vec::new();
-    for id in rule_ids {
-        let rule = loaded
-            .checker
-            .rules()
-            .iter()
-            .find(|rule| &rule.id == id)
-            .ok_or_else(|| CommandError::Usage(format!("unknown rule id {id}")))?;
-        rules.push(rule);
-    }
-    let unit = rules[0].budget.unit;
-    if rules.iter().any(|rule| rule.budget.unit != unit) {
-        return Err(CommandError::Usage(
-            "all selected rules must share one unit".to_owned(),
-        ));
-    }
-    Ok(rules)
-}
-
-fn resolve_max(
-    options: &AddOptions,
-    loaded: &Loaded,
-    path: &str,
-    unit: Unit,
-    rule: &Rule,
-) -> Result<u64, CommandError> {
-    match options.max {
-        Some(max) => {
-            let declared = options
-                .unit
-                .ok_or_else(|| CommandError::Usage("--max requires --unit".to_owned()))?;
-            if declared != unit {
-                return Err(CommandError::Usage(
-                    "--unit must match the selected rule unit".to_owned(),
-                ));
-            }
-            // For an exact path, the accepted ceiling cannot be below the current
-            // measurement (§FS-005-exception-add.2).
-            if options.match_kind == MatchKind::Exact {
-                let measured = measure_value(loaded, path, unit, rule)?;
-                if max < measured {
-                    return Err(CommandError::Usage(format!(
-                        "--max {max} is below the current measurement {measured} {unit}"
-                    )));
-                }
-            }
-            Ok(max)
-        }
-        None => match options.match_kind {
-            MatchKind::Exact => measure_value(loaded, path, unit, rule),
-            MatchKind::Glob => Err(CommandError::Usage(
-                "--match glob requires --max and --unit".to_owned(),
-            )),
-        },
-    }
-}
-
-fn measure_value(
-    loaded: &Loaded,
-    path: &str,
-    unit: Unit,
-    rule: &Rule,
-) -> Result<u64, CommandError> {
-    let measurement = scan::measure_file(&loaded.root, path, &loaded.config.tokens)?;
-    match unit {
-        Unit::Bytes => Ok(measurement.bytes),
-        Unit::Lines => Ok(measurement
-            .lines
-            .map(|stats| stats.counted(rule.count_blank_lines, rule.count_comment_lines))
-            .unwrap_or(0)),
-        Unit::Tokens => measurement.tokens.ok_or_else(|| {
-            CommandError::Usage(format!("no token measurement available for {path}"))
-        }),
-    }
-}
-
-fn check_min_limit(rules: &[&Rule], severity: Severity, max: u64) -> Result<(), CommandError> {
-    for rule in rules {
-        let limit = match severity {
-            Severity::Soft => rule.budget.soft,
-            Severity::Hard => rule.budget.hard,
-        };
-        let Some(limit) = limit else {
-            return Err(CommandError::Usage(format!(
-                "rule {} has no {severity} limit to accept",
-                rule.id
-            )));
-        };
-        if max < limit {
-            return Err(CommandError::Usage(format!(
-                "--max {max} is below rule {} {severity} limit {limit}",
-                rule.id
-            )));
-        }
-    }
-    Ok(())
-}
-
-/// Reject another same-severity entry already accepting the same `(path, rule,
-/// unit)` condition (§FS-005-exception-add.4).
+/// Reject a second entry answering an address the registry already answers
+/// (§FS-005-exception-add.4). "An entry exists" is not "the file is accepted", so
+/// the refusal carries the ceiling, the measurement, and the command that moves it.
 fn check_conflict(
     loaded: &Loaded,
     options: &AddOptions,
     path: &str,
     unit: Unit,
+    rule: &Rule,
 ) -> Result<(), CommandError> {
-    let registry = match options.severity {
-        Severity::Soft => &loaded.registries.soft,
-        Severity::Hard => &loaded.registries.hard,
+    let address = Address {
+        severity: options.severity,
+        path,
+        match_kind: options.match_kind,
+        rules: &options.rules,
+        unit,
     };
-    for entry in registry {
-        let shared_rule = options.rules.iter().any(|rule| entry.applies_to_rule(rule));
-        if entry.max_unit == unit
-            && shared_rule
-            && path_matchers_overlap(entry, options.match_kind, path)
-        {
-            // Named by where it lives, so the reader can go edit that entry
-            // instead of adding a second one (§DF-005-exception-identity).
-            return Err(CommandError::Usage(format!(
-                "{}: {} already accepts {path} for this unit and rule",
-                entry.registry, entry.path
-            )));
-        }
-    }
-    Ok(())
-}
-
-fn path_matchers_overlap(entry: &Exception, match_kind: MatchKind, path: &str) -> bool {
-    match (entry.match_kind, match_kind) {
-        (MatchKind::Exact, MatchKind::Exact) => entry.path == path,
-        (MatchKind::Glob, MatchKind::Exact) => entry.matches_path(path),
-        (MatchKind::Exact, MatchKind::Glob) => Glob::new(path).matches(&entry.path),
-        (MatchKind::Glob, MatchKind::Glob) => Glob::new(&entry.path).intersects(&Glob::new(path)),
-    }
-}
-
-fn validate_combined(
-    loaded: &Loaded,
-    severity: Severity,
-    new_target_text: &str,
-) -> Result<(), CommandError> {
-    let (soft, hard) = match severity {
-        Severity::Soft => (
-            Some(new_target_text.to_owned()),
-            cli::read_optional(&loaded.root.join(&loaded.hard_registry))?,
-        ),
-        Severity::Hard => (
-            cli::read_optional(&loaded.root.join(&loaded.soft_registry))?,
-            Some(new_target_text.to_owned()),
-        ),
+    let Some((_, existing)) = entry::locate(&loaded.registries, &address)? else {
+        return Ok(());
     };
-    // The configured paths, the same labels `cli::load` uses, so a diagnostic
-    // from this dry run reads identically to one from `check`.
-    let registries = Registries::load(
-        soft.as_deref()
-            .map(|text| RegistrySource::new(&loaded.config.exceptions.soft_registry, text)),
-        hard.as_deref()
-            .map(|text| RegistrySource::new(&loaded.config.exceptions.hard_registry, text)),
-    )?;
-    registries.validate_against(loaded.checker.rules())?;
-    Ok(())
+    // Named by where it lives, so the reader can go edit that entry instead of
+    // adding a second one (§DF-005-exception-identity).
+    let measured = match options.match_kind {
+        MatchKind::Exact => entry::measure_value(loaded, path, unit, rule)
+            .map(|value| format!("; the file is {value}"))
+            .unwrap_or_default(),
+        MatchKind::Glob => String::new(),
+    };
+    // An entry reached through a glob is not the path the caller named, so the
+    // message keeps both: the address to edit, and what it covers.
+    let covering = if existing.path == path {
+        String::new()
+    } else {
+        format!(" covering {path}")
+    };
+    Err(CommandError::Usage(format!(
+        "{}: {} already has an entry{covering} for this rule and unit \
+         (accepts up to {} {unit}{measured}) — move the ceiling with `fissile exception retune`",
+        existing.registry, existing.path, existing.max_value
+    )))
 }
 
 fn render_entry(options: &AddOptions, path: &str, until: &str, unit: Unit, max: u64) -> String {
@@ -299,25 +164,28 @@ fn render_entry(options: &AddOptions, path: &str, until: &str, unit: Unit, max: 
     // it accepts (§FS-005-exception-add.3, §DF-005-exception-identity).
     let mut lines = vec!["[[exceptions]]".to_owned()];
     if let Some(title) = &options.title {
-        lines.push(format!("title = {}", quote(title)));
+        lines.push(format!("title = {}", entry::quote(title)));
     }
-    lines.push(format!("path = {}", quote(path)));
-    lines.push(format!("match = {}", quote(match_str(&options.match_kind))));
+    lines.push(format!("path = {}", entry::quote(path)));
+    lines.push(format!(
+        "match = {}",
+        entry::quote(match_str(options.match_kind))
+    ));
     lines.push(format!("rules = [{}]", rule_list(&options.rules)));
     // `kind` and `until` are always written, even when `until` took the
     // structural default, so the entry never depends on a reader knowing the
     // command's defaults (§FS-005-exception-add.3).
-    lines.push(format!("kind = {}", quote(&options.kind.to_string())));
     lines.push(format!(
-        "max_accepted = {{ value = {max}, unit = {} }}",
-        quote(&unit.to_string())
+        "kind = {}",
+        entry::quote(&options.kind.to_string())
     ));
-    lines.push(format!("until = {}", quote(until)));
+    lines.push(entry::max_accepted_line(max, unit));
+    lines.push(format!("until = {}", entry::quote(until)));
     if let Some(owner) = &options.owner {
-        lines.push(format!("owner = {}", quote(owner)));
+        lines.push(format!("owner = {}", entry::quote(owner)));
     }
     if let Some(issue) = &options.issue {
-        lines.push(format!("issue = {}", quote(issue)));
+        lines.push(format!("issue = {}", entry::quote(issue)));
     }
     lines.push(format!(
         "reason = \"\"\"\n{}\n\"\"\"",
@@ -329,41 +197,14 @@ fn render_entry(options: &AddOptions, path: &str, until: &str, unit: Unit, max: 
 fn rule_list(rules: &[String]) -> String {
     rules
         .iter()
-        .map(|rule| quote(rule))
+        .map(|rule| entry::quote(rule))
         .collect::<Vec<_>>()
         .join(", ")
 }
 
-fn match_str(match_kind: &MatchKind) -> &'static str {
+fn match_str(match_kind: MatchKind) -> &'static str {
     match match_kind {
         MatchKind::Exact => "exact",
         MatchKind::Glob => "glob",
-    }
-}
-
-/// Quote a TOML basic string, escaping the characters that would break it.
-fn quote(value: &str) -> String {
-    let mut escaped = String::with_capacity(value.len() + 2);
-    escaped.push('"');
-    for ch in value.chars() {
-        match ch {
-            '"' => escaped.push_str("\\\""),
-            '\\' => escaped.push_str("\\\\"),
-            '\n' => escaped.push_str("\\n"),
-            '\t' => escaped.push_str("\\t"),
-            c => escaped.push(c),
-        }
-    }
-    escaped.push('"');
-    escaped
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn quote_escapes_specials() {
-        assert_eq!(quote("a\"b"), "\"a\\\"b\"");
     }
 }

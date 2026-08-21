@@ -1,0 +1,6 @@
+args = ["measure", "src/big.rs", "--no-color"]
+# Zero even though the file is over the hard limit: measuring is inspection, not
+# a gate (§FS-007-measure.1).
+exit = 0
+stdout_equals = """
+src/big.rs 9 lines [rust] soft 2 hard 8 — 1 over hard"""

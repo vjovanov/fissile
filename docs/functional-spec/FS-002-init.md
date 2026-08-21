@@ -87,7 +87,7 @@ workspace signal.
 The managed block heading is:
 
 ```markdown
-## Keeping Files Small With fissile (v1)
+## Keeping Files Small With fissile (v2)
 ```
 
 That H2 line is the begin marker. The managed block runs until the next H1 or H2
@@ -101,7 +101,7 @@ preserves all bytes before and after it, including the block position. If it has
 a newer unsupported block version, `init` exits with a schema error and leaves
 the file unchanged.
 
-The canonical v1 block teaches:
+The canonical v2 block teaches:
 
 - run `fissile check --staged` before claiming work is done;
 - read a grouped block as one instruction: the header names the severity, rule,
@@ -116,7 +116,18 @@ The canonical v1 block teaches:
   `fissile exception add --severity soft`, and ask a human for a hard overflow
   no safe split resolves, since `--severity hard` is human-reviewed
   (§DF-003-severity-guidance.1);
-- run `fissile audit --stale-exceptions` before removing or moving large files.
+- ask `fissile measure <path>` how large a file is and how much room is left,
+  before deciding where new code goes — the counting rule is fissile's, so no
+  other tool reproduces the number (§FS-007-measure);
+- move a recorded ceiling with `fissile exception retune` rather than by hand,
+  and let it choose the value: an agent asked to pick a ceiling picks the
+  smallest one that clears the file, which is the churn quantized bumps exist to
+  end (§FS-008-exception-retune, §DF-006-quantized-ceilings). This holds at both
+  severities — retuning an existing hard entry is bookkeeping on a decision a
+  human already made, which is what separates it from adding one
+  (§DF-003-severity-guidance.1);
+- run `fissile audit --stale-exceptions` before removing or moving large files,
+  and lower a ceiling it reports as loose (§FS-003-exceptions.7).
 
 An example rendered block lives at `examples/AGENTS.fissile.md`.
 

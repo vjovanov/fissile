@@ -89,11 +89,28 @@ state. It is for adoption and maintenance, not just pass/fail.
   repository with no exceptions pays nothing for it. JSON always carries the
   object, because a consumer should not have to distinguish "no exceptions" from
   "this build does not report them".
-- `--top <N>` reports the largest measured files per unit, after exclusions,
-  even when they are under limit.
+- `--top <N>` reports the largest measured files per unit, after exclusions, even
+  when they are under limit. A file appears in a unit's ranking only when a rule
+  measures it in that unit, and the value is the one that rule counts — its line
+  policy decides what a line is (§FS-001-config.3.1) — so a `--top` number and a
+  finding never disagree about one file.
 - `--stale-exceptions` reports every exception entry whose path or glob matches
   no scanned file, each named by its registry and its `path` (§FS-003-exceptions.4)
-  — the list spans both registries, and the same path can be stale in each.
+  — the list spans both registries, and the same path can be stale in each. It
+  reports **loose** entries in the same pass: an exact-path entry whose ceiling
+  stands more than one bump step above the file it accepts
+  (§FS-003-exceptions.7), with the ceiling `fissile exception retune` would write
+  in its place. Stale means the entry accepts a file that is gone; loose means it
+  accepts far more of a file that is still there.
+
+  ```text
+  loose ceilings:
+    docs/file-size-agent-exceptions.toml: src/domain/order.rs accepts 650 lines, now 421 — retune to 500
+  ```
+
+  An entry whose file no longer crosses the limit at all silences nothing, so
+  the line says that instead of naming a lower ceiling: removing the entry, not
+  retuning it, is the remedy.
 - `--rule-coverage` reports which rules matched zero files, which files matched
   only built-in catch-all rules, and which rule/message pairs are unused.
 

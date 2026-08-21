@@ -1,48 +1,35 @@
-## Keeping Files Small With fissile (v1)
+## Keeping Files Small With fissile (v2)
 
-This project uses `fissile`: every commit should keep changed files under their
-configured budgets. Run `fissile check --staged` before claiming work is done,
-or rely on the pre-commit hook when it is installed.
+This repository uses [`fissile`](https://github.com/vjovanov/fissile) to keep
+files small so agents spend fewer tokens reading them, while respecting the
+architecture. It is a simple guard, not a style police.
 
-### When fissile Reports A File
-
-Findings are grouped. A block has three parts:
-
-- a header naming the severity, the crossed limit, the rule, and the message ID;
-- one project-owned guidance passage, printed once, that applies to the whole
-  block;
-- the files it applies to, largest first.
-
-If you changed a reported file in this turn, follow the configured guidance and
-try to bring it back under the limit. If you did not change it, leave it alone
-unless the task is about that file.
-
-A **soft** overflow means *should split*: do it along a seam the code already
-has, not at the line count, and never by breaking apart things that belong
-together. A **hard** overflow means *must split*: it blocks the commit.
-
-### Exceptions
-
-Never damage the design to fit a budget — that is what the registries are for.
-
-Soft-limit exceptions are agent-facing warning debt. If a file is intentionally
-above the soft limit and no split leaves the code better, run
-`fissile exception add <path> --severity soft --rule <id> --kind <kind> --reason <text> [--until <text>]`.
-
-Hard-limit overflows are not bypassed with flags or source comments. If you
-cannot see a split that keeps the architecture intact, ask a human: a
-human-reviewed
-`fissile exception add <path> --severity hard --rule <id> --kind <kind> --reason <text> [--until <text>]`
-is the only other way past the gate.
-
-`--kind` decides what `--reason` has to establish, and a description of the
-file's contents answers neither question:
-
-- `structural` — an architectural constraint makes the split illegal. Name the
-  constraint and what would break. The entry never expires.
-- `deferred` — no such constraint; a boundary is missing. Name it and what has
-  to exist before the split is possible, and give `--until` the condition that
-  retires the entry.
-
-Use `fissile audit --stale-exceptions` before removing or moving large files so
-dead exceptions do not stay in the registries.
+- Run `fissile check --staged` before claiming work is done.
+- Findings are grouped: the block header names the severity, rule, and limit,
+  and the guidance under it is this repository's configured remediation for
+  every file listed below it.
+- A **soft** overflow means *should split*: if you changed the file, split it
+  the way the guidance says — along a seam that already exists, never at the
+  line count, never breaking apart code that belongs together.
+- A **hard** overflow means *must split*: stop the line. Do not commit unless a
+  structured exception already accepts the file.
+- Never damage the design to fit a budget. If no split leaves the code better,
+  record a soft overflow with `fissile exception add --severity soft`; for a
+  hard overflow, ask a human — `--severity hard` is theirs to add, not yours.
+- An exception's `--reason` is a claim, not a description of the file. Say
+  either what makes splitting illegal (`--kind structural`, never expires) or
+  which boundary is missing and what has to exist first (`--kind deferred`,
+  with `--until` naming what retires it). Restating the finding is not a reason.
+- Ask `fissile measure <path>` how large a file is and how much room is left
+  before deciding where new code goes. The count is fissile's own — comments
+  count, blank lines do not — so `wc -l` does not answer the question.
+- When a file already carries an exception and has outgrown its ceiling, the
+  reason usually still holds and only the number is wrong. Move it with
+  `fissile exception retune <path> --severity <severity> --rule <rule>` and let
+  the command pick the value: do not hand-pick a ceiling, do not pass `--max`
+  to shave the bump, and never hand-edit a registry. This holds at both
+  severities — retuning an existing hard entry is bookkeeping on a decision a
+  human already made, unlike adding one.
+- Run `fissile audit --stale-exceptions` before removing or moving large files.
+  It also reports ceilings that have drifted far above the file they accept;
+  lower those with the same `retune`.

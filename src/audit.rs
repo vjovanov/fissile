@@ -6,10 +6,11 @@ use std::path::PathBuf;
 
 use crate::cli::{self, CommandError, Format, Loaded};
 use crate::config::Stale;
-use crate::exceptions::{EntrySite, Exception, KindCounts};
+use crate::entry;
+use crate::exceptions::{EntrySite, Exception, KindCounts, MatchKind};
 use crate::json::Json;
-use crate::report::{self, Outcome};
-use crate::{FileMeasurement, Selector, Unit, scan};
+use crate::report::{self, EvalError, Outcome};
+use crate::{FileMeasurement, RuleHit, Selector, Severity, Unit, scan};
 
 /// Inputs to an `audit` run.
 #[derive(Clone, Debug, Default)]
@@ -43,8 +44,29 @@ type TopFiles = Vec<(Unit, Vec<(u64, String)>)>;
 struct Inventory {
     top: Option<TopFiles>,
     stale: Option<Vec<EntrySite>>,
+    /// Ceilings standing more than one bump step above the file they accept
+    /// (§FS-003-exceptions.7). Requested by the same flag as `stale`: both answer
+    /// "which entries no longer say something true?".
+    loose: Option<Vec<Loose>>,
     coverage: Option<Coverage>,
     kinds: KindCounts,
+}
+
+/// One entry accepting far more of a file that is still there. Stale is the
+/// other half: an entry accepting a file that is gone (§FS-003-exceptions.7).
+struct Loose {
+    site: EntrySite,
+    severity: Severity,
+    unit: Unit,
+    accepted: u64,
+    actual: u64,
+    limit: u64,
+    /// The ceiling `exception retune` would write, never below the limit the
+    /// entry exists to accept.
+    retune_to: u64,
+    /// The file no longer crosses that limit at all, so the entry silences
+    /// nothing and lowering it is not the remedy — removing it is.
+    silences_nothing: bool,
 }
 
 pub fn run(options: &AuditOptions) -> Result<Run, CommandError> {
@@ -64,12 +86,24 @@ pub fn run(options: &AuditOptions) -> Result<Run, CommandError> {
         }
     }
 
-    let mut outcomes = Vec::new();
+    // The hits are read three times — findings, `--top`, loose ceilings — so the
+    // walk evaluates each file once and the sections share the result.
+    let mut hits = Vec::with_capacity(measurements.len());
     for measurement in &measurements {
-        outcomes.extend(report::evaluate_file(
-            &loaded.checker,
+        hits.push(
+            loaded
+                .checker
+                .evaluate(measurement)
+                .map_err(EvalError::from)?,
+        );
+    }
+
+    let mut outcomes = Vec::new();
+    for (measurement, hits) in measurements.iter().zip(&hits) {
+        outcomes.extend(report::evaluate_hits(
             &loaded.registries,
             measurement,
+            hits,
         )?);
     }
 
@@ -93,8 +127,14 @@ pub fn run(options: &AuditOptions) -> Result<Run, CommandError> {
     let stale = stale.filter(|_| loaded.config.exceptions.stale != Stale::Ignore);
 
     let inventory = Inventory {
-        top: options.top.map(|n| top_files(&measurements, n)),
+        top: options.top.map(|n| top_files(&measurements, &hits, n)),
         stale,
+        // Unfiltered by `[exceptions].stale`, which governs stale entries only: a
+        // loose ceiling accepts everything it accepted yesterday and breaks
+        // nothing today (§FS-003-exceptions.7).
+        loose: options
+            .stale_exceptions
+            .then(|| loose_entries(&loaded, &measurements, &hits)),
         coverage: options
             .rule_coverage
             .then(|| coverage(&loaded, &measurements)),
@@ -117,24 +157,20 @@ pub fn run(options: &AuditOptions) -> Result<Run, CommandError> {
     })
 }
 
-fn unit_value(measurement: &FileMeasurement, unit: Unit) -> Option<u64> {
-    match unit {
-        Unit::Bytes => Some(measurement.bytes),
-        Unit::Lines => measurement.lines.map(|stats| stats.total),
-        Unit::Tokens => measurement.tokens,
-    }
-}
-
-/// The largest `n` measured files per unit (§FS-004-check-audit.2).
-fn top_files(measurements: &[FileMeasurement], n: usize) -> TopFiles {
+/// The largest `n` measured files per unit (§FS-004-check-audit.2). A file ranks
+/// in a unit only when a rule measures it there, at the value that rule counts —
+/// so a `--top` number and a finding never disagree about one file.
+fn top_files(measurements: &[FileMeasurement], hits: &[Vec<RuleHit<'_>>], n: usize) -> TopFiles {
     UNITS
         .iter()
         .filter_map(|&unit| {
             let mut ranked: Vec<(u64, String)> = measurements
                 .iter()
-                .filter_map(|measurement| {
-                    unit_value(measurement, unit)
-                        .map(|value| (value, measurement.path.to_string_lossy().replace('\\', "/")))
+                .zip(hits)
+                .filter_map(|(measurement, hits)| {
+                    hits.iter()
+                        .find(|hit| hit.rule.budget.unit == unit)
+                        .map(|hit| (hit.actual, repo_path(measurement)))
                 })
                 .collect();
             ranked.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
@@ -142,6 +178,62 @@ fn top_files(measurements: &[FileMeasurement], n: usize) -> TopFiles {
             (!ranked.is_empty()).then_some((unit, ranked))
         })
         .collect()
+}
+
+fn repo_path(measurement: &FileMeasurement) -> String {
+    measurement.path.to_string_lossy().replace('\\', "/")
+}
+
+/// Entries whose ceiling has drifted more than one bump step above their file
+/// (§FS-003-exceptions.7). Exact paths only: a glob's ceiling is a policy for a
+/// class of files, so lowering it to today's largest member breaks the next one.
+fn loose_entries(
+    loaded: &Loaded,
+    measurements: &[FileMeasurement],
+    hits: &[Vec<RuleHit<'_>>],
+) -> Vec<Loose> {
+    let mut loose = Vec::new();
+    for exception in loaded.registries.all() {
+        if exception.match_kind != MatchKind::Exact {
+            continue;
+        }
+        let Some(hits) = measurements
+            .iter()
+            .zip(hits)
+            .find(|(measurement, _)| repo_path(measurement) == exception.path)
+            .map(|(_, hits)| hits)
+        else {
+            continue;
+        };
+        // The measurement to compare is the one this entry can silence: the
+        // effective rule for its unit, among the rules it lists.
+        let Some(hit) = hits.iter().find(|hit| {
+            hit.rule.budget.unit == exception.max_unit && exception.applies_to_rule(&hit.rule.id)
+        }) else {
+            continue;
+        };
+
+        let step = loaded.config.exceptions.bump.step(exception.max_unit);
+        if exception.max_value.saturating_sub(hit.actual) <= step {
+            continue;
+        }
+        let limit = match exception.severity {
+            Severity::Soft => hit.rule.budget.soft,
+            Severity::Hard => hit.rule.budget.hard,
+        }
+        .unwrap_or(0);
+        loose.push(Loose {
+            site: exception.site(),
+            severity: exception.severity,
+            unit: exception.max_unit,
+            accepted: exception.max_value,
+            actual: hit.actual,
+            limit,
+            retune_to: entry::quantize(hit.actual, step).max(limit),
+            silences_nothing: hit.actual < limit,
+        });
+    }
+    loose
 }
 
 struct Coverage {
@@ -275,11 +367,41 @@ fn render_text(
         sections.push(lines.join("\n"));
     }
 
+    if let Some(loose) = &inventory.loose {
+        let mut lines = vec!["loose ceilings:".to_owned()];
+        if loose.is_empty() {
+            lines.push("  none".to_owned());
+        }
+        for item in loose {
+            lines.push(format!("  {}", render_loose_text(item)));
+        }
+        sections.push(lines.join("\n"));
+    }
+
     if let Some(coverage) = &inventory.coverage {
         sections.push(render_coverage_text(coverage));
     }
 
     sections.join("\n\n")
+}
+
+fn render_loose_text(item: &Loose) -> String {
+    let Loose {
+        site,
+        unit,
+        accepted,
+        actual,
+        ..
+    } = item;
+    let advice = if item.silences_nothing {
+        format!(
+            "silences nothing now; the {} limit is {}",
+            item.severity, item.limit
+        )
+    } else {
+        format!("retune to {}", item.retune_to)
+    };
+    format!("{site} accepts {accepted} {unit}, now {actual} — {advice}")
 }
 
 fn render_coverage_text(coverage: &Coverage) -> String {
@@ -367,6 +489,27 @@ fn render_json(outcomes: &[Outcome], inventory: &Inventory) -> String {
             })
             .collect();
         fields.push(("stale", Json::Array(entries)));
+    }
+
+    if let Some(loose) = &inventory.loose {
+        let entries = loose
+            .iter()
+            .map(|item| {
+                Json::Object(vec![
+                    ("registry", Json::str(item.site.registry.clone())),
+                    ("path", Json::str(item.site.path.clone())),
+                    ("unit", Json::str(item.unit.to_string())),
+                    ("accepted", Json::UInt(item.accepted)),
+                    ("actual", Json::UInt(item.actual)),
+                    ("retune_to", Json::UInt(item.retune_to)),
+                    (
+                        "silences_nothing",
+                        Json::UInt(u64::from(item.silences_nothing)),
+                    ),
+                ])
+            })
+            .collect();
+        fields.push(("loose", Json::Array(entries)));
     }
 
     if let Some(coverage) = &inventory.coverage {

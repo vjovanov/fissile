@@ -1,0 +1,6 @@
+args = ["audit", "--stale-exceptions", "--no-color"]
+exit = 0
+stdout_contains = [
+  "loose ceilings:",
+  "docs/file-size-human-exceptions.toml: src/big.rs accepts 20 lines, now 9 — retune to 12",
+]

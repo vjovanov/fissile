@@ -38,6 +38,11 @@ soft_registry = "docs/file-size-agent-exceptions.toml"
 hard_registry = "docs/file-size-human-exceptions.toml"
 stale = "warn"
 
+[exceptions.bump]
+lines = 100
+bytes = 4096
+tokens = 1000
+
 [tokens]
 enabled = false
 command = ["token-counter", "--count", "{path}"]

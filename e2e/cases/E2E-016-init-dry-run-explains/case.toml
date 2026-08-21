@@ -2,7 +2,7 @@ args = ["init", "--dry-run"]
 exit = 0
 git = true
 stdout_contains = [
-  "## Keeping Files Small With fissile (v1)",
+  "## Keeping Files Small With fissile (v2)",
   "Run `fissile check --staged` before claiming work is done.",
   "A **soft** overflow means *should split*",
   "A **hard** overflow means *must split*",

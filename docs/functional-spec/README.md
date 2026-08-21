@@ -12,5 +12,7 @@ By convention every spec under this directory is linked from this README so the 
 | [§FS-004-check-audit](FS-004-check-audit.md#fs-004-check-audit-fissile-check-and-audit-enforce-file-budgets) | fissile check and audit enforce file budgets |
 | [§FS-005-exception-add](FS-005-exception-add.md#fs-005-exception-add-fissile-exception-add-writes-structured-exception-entries) | fissile exception add writes structured exception entries |
 | [§FS-006-cli](FS-006-cli.md#fs-006-cli-the-top-level-command-line-is-small-self-describing-and-versioned) | the top-level command line is small, self-describing, and versioned |
+| [§FS-007-measure](FS-007-measure.md#fs-007-measure-fissile-measure-reports-what-fissile-counts) | fissile measure reports what fissile counts |
+| [§FS-008-exception-retune](FS-008-exception-retune.md#fs-008-exception-retune-fissile-exception-retune-moves-a-recorded-ceiling) | fissile exception retune moves a recorded ceiling |
 
 This index is navigational — citations should target the spec ID directly, never this file.

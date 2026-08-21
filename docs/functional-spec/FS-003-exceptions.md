@@ -216,3 +216,30 @@ undifferentiated total.
 adding entries. It measures exact-path files, chooses the configured soft or hard
 registry, writes `max_accepted`, and validates the result before modifying the
 registry.
+
+## 7. Loose Ceilings
+
+A ceiling above the file it accepts is slack, and some slack is deliberate:
+ceilings are quantized, so a fresh entry normally accepts a little more than the
+file measures today (§DF-006-quantized-ceilings). Slack wider than one
+`[exceptions.bump]` step is not deliberate. It is the ratchet slipping —
+re-granting budget that a split already paid back, to whoever edits the file
+next.
+
+An entry is **loose** when all of the following hold:
+
+- `match = "exact"`. A glob's ceiling is a policy for a class of files, not a
+  measurement of one, so lowering it to today's largest member would be a
+  recommendation to break the next file that class acquires.
+- Its path matches a scanned file that measures a value in the entry's unit under
+  a rule the entry lists.
+- `max_accepted.value` minus that measurement is greater than the unit's bump
+  step.
+
+`audit --stale-exceptions` reports loose entries alongside stale ones
+(§FS-004-check-audit.2), each named by its registry and `path` and carrying the
+ceiling `fissile exception retune` would write (§FS-008-exception-retune).
+
+A loose entry is a report, never a failure. `[exceptions].stale` governs stale
+entries only: a stale entry accepts a file that is no longer there, while a loose
+one accepts everything it accepted yesterday and breaks nothing today.

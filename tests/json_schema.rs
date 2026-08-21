@@ -7,11 +7,13 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use fissile::Severity;
+use fissile::Unit;
 use fissile::audit::{self, AuditOptions};
 use fissile::check::{self, CheckOptions};
 use fissile::cli::Format;
 use fissile::exception::{self, AddOptions};
 use fissile::exceptions::{Kind, MatchKind};
+use fissile::measure::{self, MeasureOptions};
 
 /// Required keys on every finding record (§FS-004-check-audit.1).
 const REQUIRED: &[&str] = &[
@@ -191,6 +193,104 @@ fn audit_silenced_records_carry_documented_exception_fields() {
         );
     }
     assert_schema_known(&keys);
+}
+
+/// §FS-007-measure.2: every measure field is declared, and the signed headroom
+/// says which side of the threshold the file is on without a second field.
+#[test]
+fn measure_records_match_the_published_schema() {
+    let root = temp_repo();
+    let run = measure::run(&MeasureOptions {
+        root,
+        config_path: None,
+        staged: false,
+        format: Some(Format::Json),
+        no_color: false,
+        paths: vec!["src/big.rs".to_owned()],
+    })
+    .expect("measure runs");
+
+    let records = array_objects(&run.output);
+    assert_eq!(records.len(), 1, "one line-rule record for the fixture");
+    let keys = object_keys(&records[0]);
+    let expected: Vec<String> = [
+        "actual",
+        "hard",
+        "headroom",
+        "headroom_to",
+        "path",
+        "rule_id",
+        "soft",
+        "unit",
+    ]
+    .iter()
+    .map(|key| (*key).to_owned())
+    .collect();
+    assert_eq!(sorted(&keys), sorted(&expected));
+
+    // 250 lines against a 200-line hard limit: negative headroom past the
+    // highest threshold, no second field to disambiguate.
+    assert!(run.output.contains("\"headroom\":-50"), "{}", run.output);
+    assert!(run.output.contains("\"headroom_to\":\"hard\""));
+
+    let schema = fs::read_to_string(schema_dir().join("measure.schema.json")).unwrap();
+    for key in &keys {
+        assert!(
+            schema.contains(&format!("\"{key}\"")),
+            "schema/measure.schema.json is missing `{key}`"
+        );
+    }
+}
+
+/// §FS-003-exceptions.7: a ceiling more than one bump step above its file is
+/// reported with the value `exception retune` would write in its place.
+#[test]
+fn audit_reports_a_loose_ceiling_with_the_value_to_retune_to() {
+    let root = temp_repo();
+    exception::run(&AddOptions {
+        root: root.clone(),
+        config_path: None,
+        path: "src/big.rs".to_owned(),
+        severity: Severity::Hard,
+        rules: vec!["rust".to_owned()],
+        kind: Kind::Deferred,
+        reason: "no module owns the staged-blob reader yet".to_owned(),
+        until: Some("the reader module lands".to_owned()),
+        match_kind: MatchKind::Exact,
+        title: None,
+        owner: None,
+        issue: None,
+        max: Some(500),
+        unit: Some(Unit::Lines),
+        dry_run: false,
+    })
+    .expect("exception add runs");
+
+    let run = audit::run(&AuditOptions {
+        root,
+        config_path: None,
+        format: Some(Format::Json),
+        no_color: false,
+        top: None,
+        stale_exceptions: true,
+        rule_coverage: false,
+    })
+    .expect("audit runs");
+
+    let loose = extract_array(&run.output, "loose");
+    let records = array_objects(&loose);
+    assert_eq!(records.len(), 1, "the 500-line ceiling on a 250-line file");
+    let keys = object_keys(&records[0]);
+    let schema = fs::read_to_string(schema_dir().join("audit.schema.json")).unwrap();
+    for key in &keys {
+        assert!(
+            schema.contains(&format!("\"{key}\"")),
+            "schema/audit.schema.json is missing `{key}`"
+        );
+    }
+    // Still over the hard limit, so the remedy is a lower ceiling, not removal.
+    assert!(loose.contains("\"retune_to\":300"), "{loose}");
+    assert!(loose.contains("\"silences_nothing\":0"), "{loose}");
 }
 
 /// Every emitted key must be a property the schema declares.
