@@ -55,10 +55,9 @@ impl Block<'_> {
                 .unwrap_or_else(|| self.truncated_span_end(lines, begin));
             match self.version_in(&lines[begin..end]) {
                 Some(version) => self.check_version(version, path)?,
-                // Our markers around a heading this build cannot read: a later
-                // generation renamed or dropped it, so this block is not ours to
-                // overwrite. There is no version to fall back to — the markers
-                // deliberately carry none (§FS-002-init.4).
+                // Our markers around a heading this build cannot read: a newer
+                // generation renamed it, and the markers carry no version to
+                // fall back on, so this is not ours to overwrite (§FS-002-init.4).
                 None => {
                     return Err(InitError::UnsupportedBlock {
                         path: path.to_path_buf(),

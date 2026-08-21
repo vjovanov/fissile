@@ -137,12 +137,9 @@ fn stale_entries<'a>(
     if !options.paths.is_empty() {
         return Ok(Vec::new());
     }
-    // The configured scan scope is the whole inventory — the same one
-    // `audit --stale-exceptions` compares against (§FS-004-check-audit.2) — but
-    // a path the scope excludes or git ignores is missing from that inventory
-    // while sitting exactly where the entry says. Blocking a build over one
-    // would be a false statement, so the working tree has the last word
-    // (§FS-004-check-audit.1.3).
+    // The whole inventory, the one §FS-004-check-audit.2 compares against — but a
+    // path the scope excludes or git ignores is missing from it while sitting
+    // exactly where the entry says, and calling that dead would be false.
     Ok(loaded
         .registries
         .stale(files)
