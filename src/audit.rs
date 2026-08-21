@@ -2,6 +2,7 @@
 //! migration surface. Beyond current overflows it can report the largest files
 //! per unit, stale exceptions, and rule coverage gaps.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use crate::cli::{self, CommandError, Format, Loaded};
@@ -126,15 +127,26 @@ pub fn run(options: &AuditOptions) -> Result<Run, CommandError> {
     // `ignore` suppresses the report entirely (§FS-003-exceptions.4).
     let stale = stale.filter(|_| loaded.config.exceptions.stale != Stale::Ignore);
 
+    // Path and hits paired once, for the two sections that read them by file.
+    let files: Vec<Measured<'_>> = measurements
+        .iter()
+        .zip(&hits)
+        .map(|(measurement, hits)| Measured {
+            path: repo_path(measurement),
+            measurement,
+            hits,
+        })
+        .collect();
+
     let inventory = Inventory {
-        top: options.top.map(|n| top_files(&measurements, &hits, n)),
+        top: options.top.map(|n| top_files(&files, n)),
         stale,
         // Unfiltered by `[exceptions].stale`, which governs stale entries only: a
         // loose ceiling accepts everything it accepted yesterday and breaks
         // nothing today (§FS-003-exceptions.7).
         loose: options
             .stale_exceptions
-            .then(|| loose_entries(&loaded, &measurements, &hits)),
+            .then(|| loose_entries(&loaded, &files)),
         coverage: options
             .rule_coverage
             .then(|| coverage(&loaded, &measurements)),
@@ -157,27 +169,50 @@ pub fn run(options: &AuditOptions) -> Result<Run, CommandError> {
     })
 }
 
-/// The largest `n` measured files per unit (§FS-004-check-audit.2). A file ranks
-/// in a unit only when a rule measures it there, at the value that rule counts —
-/// so a `--top` number and a finding never disagree about one file.
-fn top_files(measurements: &[FileMeasurement], hits: &[Vec<RuleHit<'_>>], n: usize) -> TopFiles {
+/// The largest `n` measured files per unit (§FS-004-check-audit.2). A rule's own
+/// value where one measures the file, so `--top` and a finding never disagree;
+/// the default policy elsewhere, so an unruled file still ranks.
+fn top_files(files: &[Measured<'_>], n: usize) -> TopFiles {
     UNITS
         .iter()
         .filter_map(|&unit| {
-            let mut ranked: Vec<(u64, String)> = measurements
+            let mut ranked: Vec<(u64, String)> = files
                 .iter()
-                .zip(hits)
-                .filter_map(|(measurement, hits)| {
-                    hits.iter()
-                        .find(|hit| hit.rule.budget.unit == unit)
-                        .map(|hit| (hit.actual, repo_path(measurement)))
-                })
+                .filter_map(|file| Some((file.value(unit)?, file.path.clone())))
                 .collect();
             ranked.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
             ranked.truncate(n);
             (!ranked.is_empty()).then_some((unit, ranked))
         })
         .collect()
+}
+
+/// One scanned file with its repo-relative path and its rule hits, paired once
+/// so the sections that read them do not each re-derive the path or re-scan the
+/// list (§GOAL-001-fast-feedback).
+struct Measured<'a> {
+    path: String,
+    measurement: &'a FileMeasurement,
+    hits: &'a [RuleHit<'a>],
+}
+
+impl Measured<'_> {
+    /// What this file counts in `unit`: the effective rule's value where one
+    /// measures it there, and fissile's default arithmetic otherwise
+    /// (§FS-001-config.3.1).
+    fn value(&self, unit: Unit) -> Option<u64> {
+        if let Some(hit) = self.hits.iter().find(|hit| hit.rule.budget.unit == unit) {
+            return Some(hit.actual);
+        }
+        match unit {
+            Unit::Bytes => Some(self.measurement.bytes),
+            Unit::Lines => self
+                .measurement
+                .lines
+                .map(|stats| stats.counted(false, true)),
+            Unit::Tokens => self.measurement.tokens,
+        }
+    }
 }
 
 fn repo_path(measurement: &FileMeasurement) -> String {
@@ -187,27 +222,24 @@ fn repo_path(measurement: &FileMeasurement) -> String {
 /// Entries whose ceiling has drifted more than one bump step above their file
 /// (§FS-003-exceptions.7). Exact paths only: a glob's ceiling is a policy for a
 /// class of files, so lowering it to today's largest member breaks the next one.
-fn loose_entries(
-    loaded: &Loaded,
-    measurements: &[FileMeasurement],
-    hits: &[Vec<RuleHit<'_>>],
-) -> Vec<Loose> {
+fn loose_entries(loaded: &Loaded, files: &[Measured<'_>]) -> Vec<Loose> {
+    // Indexed once: a linear scan per entry is a full pass over the repository
+    // for every exception, which is the shape §GOAL-001-fast-feedback rules out.
+    let by_path: HashMap<&str, &Measured<'_>> = files
+        .iter()
+        .map(|file| (file.path.as_str(), file))
+        .collect();
     let mut loose = Vec::new();
     for exception in loaded.registries.all() {
         if exception.match_kind != MatchKind::Exact {
             continue;
         }
-        let Some(hits) = measurements
-            .iter()
-            .zip(hits)
-            .find(|(measurement, _)| repo_path(measurement) == exception.path)
-            .map(|(_, hits)| hits)
-        else {
+        let Some(file) = by_path.get(exception.path.as_str()) else {
             continue;
         };
         // The measurement to compare is the one this entry can silence: the
         // effective rule for its unit, among the rules it lists.
-        let Some(hit) = hits.iter().find(|hit| {
+        let Some(hit) = file.hits.iter().find(|hit| {
             hit.rule.budget.unit == exception.max_unit && exception.applies_to_rule(&hit.rule.id)
         }) else {
             continue;
@@ -495,12 +527,17 @@ fn render_json(outcomes: &[Outcome], inventory: &Inventory) -> String {
         let entries = loose
             .iter()
             .map(|item| {
+                // `severity` and `limit` travel with the record: the text line
+                // states both, and a consumer must not have to re-derive them by
+                // matching the registry filename against the config.
                 Json::Object(vec![
                     ("registry", Json::str(item.site.registry.clone())),
                     ("path", Json::str(item.site.path.clone())),
+                    ("severity", Json::str(item.severity.to_string())),
                     ("unit", Json::str(item.unit.to_string())),
                     ("accepted", Json::UInt(item.accepted)),
                     ("actual", Json::UInt(item.actual)),
+                    ("limit", Json::UInt(item.limit)),
                     ("retune_to", Json::UInt(item.retune_to)),
                     (
                         "silences_nothing",

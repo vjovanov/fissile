@@ -115,9 +115,11 @@
         "required": [
           "registry",
           "path",
+          "severity",
           "unit",
           "accepted",
           "actual",
+          "limit",
           "retune_to",
           "silences_nothing"
         ],
@@ -127,6 +129,14 @@
           },
           "path": {
             "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "soft",
+              "hard"
+            ],
+            "description": "Which registry holds the entry, and therefore which of the rule's two limits it accepts."
           },
           "unit": {
             "type": "string",
@@ -145,6 +155,11 @@
             "type": "integer",
             "minimum": 0,
             "description": "What the file measures now."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The rule limit at that severity — what the entry exists to accept, and the floor `retune_to` never drops below."
           },
           "retune_to": {
             "type": "integer",

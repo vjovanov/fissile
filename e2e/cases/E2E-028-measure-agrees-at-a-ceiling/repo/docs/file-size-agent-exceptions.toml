@@ -1,0 +1,13 @@
+fissile_exceptions_version = 2
+
+[[exceptions]]
+path = "src/big.rs"
+match = "exact"
+rules = ["rust"]
+kind = "structural"
+max_accepted = { value = 9, unit = "lines" }
+until = "indefinite"
+reason = """
+Structural: the file is one generated table and splitting it would break the
+generator contract.
+"""

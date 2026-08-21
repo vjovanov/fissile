@@ -1,0 +1,7 @@
+args = ["measure", "src/big.rs", "--no-color"]
+exit = 0
+# Exactly at the ceiling: accepted, so the clause is room — not a warning that
+# would contradict the `ok` §E2E-005-exception-silences-hard shows for the same
+# arithmetic.
+stdout_equals = """
+src/big.rs 9 lines [rust] soft 2 hard 20 soft-accepted 9 — 0 to soft-accepted"""

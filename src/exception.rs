@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use crate::cli::{self, CommandError, Loaded};
 use crate::entry::{self, Address};
 use crate::exceptions::{INDEFINITE, Kind, MatchKind, is_indefinite};
-use crate::{Rule, Severity, Unit, scan};
+use crate::{Severity, Unit, scan};
 
 /// Inputs to `exception add`.
 #[derive(Clone, Debug)]
@@ -57,11 +57,17 @@ pub fn run(options: &AddOptions) -> Result<Run, CommandError> {
         unit: options.unit,
     };
     let base = entry::resolve_base(sizing, &loaded, unit, rules[0])?;
-    entry::check_min_limit(&rules, options.severity, base)?;
-    check_conflict(&loaded, options, &path, unit, rules[0])?;
+    entry::check_min_limit(
+        &rules,
+        options.severity,
+        unit,
+        &base,
+        "no exception is needed here",
+    )?;
+    check_conflict(&loaded, options, &path, unit, base.measured)?;
     // The caller states a requirement; the step chooses the number written
     // (§FS-005-exception-add.2, §DF-006-quantized-ceilings.1).
-    let max = entry::quantize(base, loaded.config.exceptions.bump.step(unit));
+    let max = entry::quantize(base.value, loaded.config.exceptions.bump.step(unit));
 
     let rendered = render_entry(options, &path, &until, unit, max);
     let registry_rel = entry::registry_path(&loaded, options.severity);
@@ -125,7 +131,7 @@ fn check_conflict(
     options: &AddOptions,
     path: &str,
     unit: Unit,
-    rule: &Rule,
+    measured: Option<u64>,
 ) -> Result<(), CommandError> {
     let address = Address {
         severity: options.severity,
@@ -134,17 +140,19 @@ fn check_conflict(
         rules: &options.rules,
         unit,
     };
-    let Some((_, existing)) = entry::locate(&loaded.registries, &address)? else {
+    // Any overlapping entry is the conflict, so the first is enough to name; two
+    // exact entries a glob spans are a legal registry, not a second fault
+    // (§FS-003-exceptions.4).
+    let Some((_, existing)) = entry::matching(&loaded.registries, &address)
+        .into_iter()
+        .next()
+    else {
         return Ok(());
     };
-    // Named by where it lives, so the reader can go edit that entry instead of
-    // adding a second one (§DF-005-exception-identity).
-    let measured = match options.match_kind {
-        MatchKind::Exact => entry::measure_value(loaded, path, unit, rule)
-            .map(|value| format!("; the file is {value}"))
-            .unwrap_or_default(),
-        MatchKind::Glob => String::new(),
-    };
+    // Named by where it lives, so the reader edits that entry instead of adding
+    // a second one (§DF-005-exception-identity). The measurement is the one
+    // `resolve_base` took: a refusal is not worth a second run of the counter.
+    let measured = measured.map_or_else(String::new, |value| format!("; the file is {value}"));
     // An entry reached through a glob is not the path the caller named, so the
     // message keeps both: the address to edit, and what it covers.
     let covering = if existing.path == path {

@@ -229,8 +229,9 @@ fn measure_records_match_the_published_schema() {
     assert_eq!(sorted(&keys), sorted(&expected));
 
     // 250 lines against a 200-line hard limit: negative headroom past the
-    // highest threshold, no second field to disambiguate.
-    assert!(run.output.contains("\"headroom\":-50"), "{}", run.output);
+    // highest threshold, no second field to disambiguate. -51, not -50: the
+    // limit fires at 200, so 199 is the last line that clears it.
+    assert!(run.output.contains("\"headroom\":-51"), "{}", run.output);
     assert!(run.output.contains("\"headroom_to\":\"hard\""));
 
     let schema = fs::read_to_string(schema_dir().join("measure.schema.json")).unwrap();
@@ -291,6 +292,10 @@ fn audit_reports_a_loose_ceiling_with_the_value_to_retune_to() {
     // Still over the hard limit, so the remedy is a lower ceiling, not removal.
     assert!(loose.contains("\"retune_to\":300"), "{loose}");
     assert!(loose.contains("\"silences_nothing\":0"), "{loose}");
+    // Both halves of the text line's advice are readable from the record: which
+    // registry's limit was missed, and what that limit is.
+    assert!(loose.contains("\"severity\":\"hard\""), "{loose}");
+    assert!(loose.contains("\"limit\":200"), "{loose}");
 }
 
 /// Every emitted key must be a property the schema declares.

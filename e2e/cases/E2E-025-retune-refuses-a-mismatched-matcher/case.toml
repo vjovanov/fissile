@@ -1,0 +1,20 @@
+args = [
+  "exception", "retune", "src/*.rs",
+  "--match", "glob",
+  "--severity", "hard",
+  "--rule", "rust",
+  "--max", "3",
+  "--unit", "lines",
+]
+exit = 2
+stderr_contains = [
+  "no glob entry accepts src/*.rs; it spans the exact entry src/big.rs",
+  "--match exact src/big.rs",
+]
+
+# Refused means nothing written: the 20-line ceiling stands, and no ceiling
+# below the 9-line file it accepts was recorded.
+[[files]]
+path = "docs/file-size-human-exceptions.toml"
+contains = ["max_accepted = { value = 20, unit = \"lines\" }"]
+excludes = ["value = 4,"]

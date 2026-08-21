@@ -1,0 +1,18 @@
+args = [
+  "exception", "add", "src/**",
+  "--match", "glob",
+  "--severity", "soft",
+  "--rule", "rust",
+  "--kind", "structural",
+  "--reason", "Structural: the generator owns this whole directory.",
+  "--max", "40",
+  "--unit", "lines",
+  "--dry-run",
+]
+exit = 2
+# The conflict, named by the entry to edit — not an accusation against a registry
+# `check` reads without complaint (§E2E-001-check-clean has the same shape).
+stderr_contains = [
+  "src/big.rs already has an entry covering src/** for this rule and unit",
+  "move the ceiling with `fissile exception retune`",
+]

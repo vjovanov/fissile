@@ -27,6 +27,17 @@ entry that covers any of the named rules at the selected unit. When no entry
 answers to that address the command fails without writing, and the error names
 `fissile exception add` as the command that creates one.
 
+The matcher is part of the address, so an address that merely *overlaps* an
+entry is refused in both directions, each for its own reason. An exact path
+covered by a glob entry cannot be retuned as itself: one member's measurement
+must not set a ceiling for the class, so the error names the glob to address
+instead. A glob spanning an exact entry cannot be retuned either: writing a
+class-wide number into one file's entry leaves every other file the glob names
+at its old ceiling and reports the change under a path no entry carries. An
+address matching two entries is refused as ambiguous and names both — two exact
+entries under one glob is a registry §FS-003-exceptions.4 accepts, so the fault
+is the address, not the file.
+
 With `--max` omitted, the new ceiling derives from the file's current
 measurement. With `--max`, it derives from that value. Either way the written
 number is quantized to `[exceptions.bump]` (§FS-005-exception-add.2,
@@ -49,12 +60,26 @@ The new ceiling is never below the current measurement. Writing one would leave
 the entry accepting less than the file it exists to accept, standing a finding
 against an exception someone wrote on purpose.
 
+Lowering stops at the rule's limit, and a file that has fallen under that limit
+cannot be followed any further: an entry accepting less than the limit silences
+nothing. That is the same state `audit --stale-exceptions` reports as "silences
+nothing now" (§FS-003-exceptions.7), so the refusal names the same remedy —
+remove the entry — and it reports the measurement it read, never a `--max` the
+caller did not pass.
+
 ## 3. Result
 
 The command rewrites one `max_accepted` value in place. Every other byte of the
-registry — comments, entry order, and the other fields of the entry itself — is
-preserved, so the diff is a single line and a reviewer reads precisely the
-decision that changed.
+registry — comments, entry order, the other fields of the entry itself, and the
+line endings the file is stored with — is preserved, so the diff is a single line
+and a reviewer reads precisely the decision that changed.
+
+Which line that is comes from reading the registry as TOML, not from matching
+text. A `reason` is prose, and prose quoting `[[exceptions]]` or a
+`max_accepted =` line — in either multi-line string form, or after a `#` — names
+no entry and shifts no index. When the addressed entry does not spell its
+ceiling as one inline table, the command refuses and says so rather than
+guessing at a rewrite.
 
 ```text
 docs/file-size-agent-exceptions.toml: src/domain/order.rs 486 -> 500 lines

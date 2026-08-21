@@ -1,0 +1,23 @@
+fissile_exceptions_version = 2
+
+[[exceptions]]
+path = "src/big.rs"
+match = "exact"
+rules = ["rust"]
+kind = "structural"
+max_accepted = { value = 20, unit = "lines" }
+until = "indefinite"
+reason = """
+Structural: one generated table, and the generator contract forbids splitting it.
+"""
+
+[[exceptions]]
+path = "src/wide.rs"
+match = "exact"
+rules = ["rust"]
+kind = "structural"
+max_accepted = { value = 20, unit = "lines" }
+until = "indefinite"
+reason = """
+Structural: one generated table, and the generator contract forbids splitting it.
+"""

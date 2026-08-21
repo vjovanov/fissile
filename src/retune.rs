@@ -57,18 +57,37 @@ pub fn run(options: &RetuneOptions) -> Result<Run, CommandError> {
             registry_rel.display()
         )));
     };
-    // A glob's ceiling covers every file in its class, so deriving it from one
-    // member's measurement could lower it under the others. The caller has to
-    // address the glob and state the number (§FS-003-exceptions.7).
-    if existing.match_kind == MatchKind::Glob && options.match_kind == MatchKind::Exact {
-        return Err(CommandError::Usage(format!(
-            "{}: {path} is covered by the glob entry {}; retune it as \
-             `--match glob \"{}\" --max <N> --unit {unit}`, since one file's size \
-             cannot set a ceiling for the class",
-            registry_rel.display(),
-            existing.path,
-            existing.path
-        )));
+    // An address is a matcher, not just a path (§DF-005-exception-identity), so a
+    // matcher that only *overlaps* the entry is the wrong address and each
+    // direction is wrong for its own reason.
+    match (existing.match_kind, options.match_kind) {
+        // A glob's ceiling covers every file in its class, so deriving it from
+        // one member's measurement could lower it under the others. The caller
+        // has to address the glob and state the number (§FS-003-exceptions.7).
+        (MatchKind::Glob, MatchKind::Exact) => {
+            return Err(CommandError::Usage(format!(
+                "{}: {path} is covered by the glob entry {}; retune it as \
+                 `--match glob \"{}\" --max <N> --unit {unit}`, since one file's size \
+                 cannot set a ceiling for the class",
+                registry_rel.display(),
+                existing.path,
+                existing.path
+            )));
+        }
+        // The reverse writes a class-wide number into a single file's entry: the
+        // other files the glob names keep their old ceilings, and the result is
+        // reported under a path no entry in the registry carries.
+        (MatchKind::Exact, MatchKind::Glob) => {
+            return Err(CommandError::Usage(format!(
+                "{}: no glob entry accepts {path}; it spans the exact entry {}, which is \
+                 retuned as `--match exact {}` — or `fissile exception add` creates the \
+                 class-wide entry",
+                registry_rel.display(),
+                existing.path,
+                existing.path
+            )));
+        }
+        _ => {}
     }
     let recorded = existing.max_value;
 
@@ -79,8 +98,16 @@ pub fn run(options: &RetuneOptions) -> Result<Run, CommandError> {
         unit: options.unit,
     };
     let base = entry::resolve_base(sizing, &loaded, unit, rules[0])?;
-    entry::check_min_limit(&rules, options.severity, base)?;
-    let ceiling = entry::quantize(base, loaded.config.exceptions.bump.step(unit));
+    // `audit --stale-exceptions` calls this state "silences nothing" and names
+    // removal as the remedy, so the refusal names the same (§FS-003-exceptions.7).
+    entry::check_min_limit(
+        &rules,
+        options.severity,
+        unit,
+        &base,
+        "remove the entry rather than retuning it",
+    )?;
+    let ceiling = entry::quantize(base.value, loaded.config.exceptions.bump.step(unit));
 
     // A caller about to leave two registries disagreeing should learn it here
     // rather than from a later run (§FS-008-exception-retune.3).
@@ -173,11 +200,13 @@ fn rewrite_ceiling(
     let mut lines: Vec<String> = text.split('\n').map(str::to_owned).collect();
     let mut block: Option<usize> = None;
     let mut target = None;
-    let mut in_multiline = false;
+    let mut open = None;
 
     for (number, line) in lines.iter().enumerate() {
-        let fences = line.matches("\"\"\"").count();
-        if !in_multiline {
+        // Only a line that begins outside a string holds TOML structure. Inside
+        // one, `[[exceptions]]` and `max_accepted` are prose someone wrote in a
+        // `reason`, and counting them would shift every index after it.
+        if open.is_none() {
             let trimmed = line.trim();
             if trimmed.starts_with("[[exceptions]]") {
                 block = Some(block.map_or(0, |current| current + 1));
@@ -185,11 +214,7 @@ fn rewrite_ceiling(
                 target = Some(number);
             }
         }
-        // A `reason = """` opens the string and a lone `"""` closes it; a
-        // single-line triple-quoted value has two fences and toggles nothing.
-        if fences % 2 == 1 {
-            in_multiline = !in_multiline;
-        }
+        open = scan_line(line, open);
     }
 
     // Reached only by a registry that spells the ceiling as a sub-table rather
@@ -207,7 +232,15 @@ fn rewrite_ceiling(
         .chars()
         .take_while(|character| character.is_whitespace())
         .collect();
-    lines[number] = format!("{indent}{}", entry::max_accepted_line(value, unit));
+    // A CRLF registry keeps its CRLF: the `\r` belongs to this line's bytes, and
+    // dropping it would turn a one-line diff into whole-file churn on a checkout
+    // that stores the file that way.
+    let eol = if lines[number].ends_with('\r') {
+        "\r"
+    } else {
+        ""
+    };
+    lines[number] = format!("{indent}{}{eol}", entry::max_accepted_line(value, unit));
     Ok(lines.join("\n"))
 }
 
@@ -215,6 +248,82 @@ fn is_max_accepted(trimmed: &str) -> bool {
     trimmed
         .strip_prefix("max_accepted")
         .is_some_and(|rest| rest.trim_start().starts_with('='))
+}
+
+/// Which multi-line string delimiter is currently open, if any. TOML closes a
+/// `"""` string only with `"""` and a `'''` string only with `'''`, so the two
+/// cannot be tracked as one toggle.
+#[derive(Clone, Copy)]
+enum Fence {
+    Basic,
+    Literal,
+}
+
+impl Fence {
+    fn delimiter(self) -> &'static str {
+        match self {
+            Fence::Basic => "\"\"\"",
+            Fence::Literal => "'''",
+        }
+    }
+}
+
+/// Walk one line of TOML and report which multi-line string is open at its end.
+/// Enough of a lexer to keep structure and prose apart: comments and single-line
+/// strings are skipped so a `#` note or a `path = "a\"\"\"b"` value cannot open a
+/// fence, and only a real delimiter changes the state.
+fn scan_line(line: &str, mut open: Option<Fence>) -> Option<Fence> {
+    let mut at = 0;
+    while at < line.len() {
+        if let Some(fence) = open {
+            match line[at..].find(fence.delimiter()) {
+                Some(offset) => {
+                    at += offset + fence.delimiter().len();
+                    open = None;
+                }
+                None => return Some(fence),
+            }
+            continue;
+        }
+        let rest = &line[at..];
+        if rest.starts_with('#') {
+            return None;
+        }
+        if rest.starts_with("\"\"\"") || rest.starts_with("'''") {
+            let fence = if rest.starts_with('"') {
+                Fence::Basic
+            } else {
+                Fence::Literal
+            };
+            open = Some(fence);
+            at += fence.delimiter().len();
+            continue;
+        }
+        if let Some(quote) = rest.chars().next().filter(|c| *c == '"' || *c == '\'') {
+            at += quote.len_utf8() + single_line_string(&rest[quote.len_utf8()..], quote);
+            continue;
+        }
+        at += rest.chars().next().map_or(1, char::len_utf8);
+    }
+    open
+}
+
+/// The byte length consumed by a single-line string body and its closing quote.
+/// An unterminated one runs to end of line, which is what a malformed registry
+/// gets; the write is refused later by revalidation, never by a bad guess here.
+fn single_line_string(rest: &str, quote: char) -> usize {
+    let escapes = quote == '"';
+    let mut chars = rest.char_indices();
+    while let Some((offset, character)) = chars.next() {
+        if escapes && character == '\\' {
+            chars.next();
+            continue;
+        }
+        if character == quote {
+            return offset + character.len_utf8();
+        }
+    }
+    rest.len()
 }
 
 #[cfg(test)]
@@ -265,6 +374,77 @@ mod tests {
         .unwrap();
         assert!(out.contains("not this one: max_accepted = { value = 1, unit = \"lines\" }"));
         assert!(out.contains("max_accepted = { value = 700, unit = \"lines\" }"));
+    }
+
+    /// A `'''` literal string closes on `'''` alone. Tracked as one toggle with
+    /// `"""`, the reason below never closes, every block after it is miscounted,
+    /// and the rewrite lands on prose while reporting success.
+    #[test]
+    fn a_literal_reason_body_is_not_scanned() {
+        let registry = "[[exceptions]]\n\
+            path = \"a.rs\"\n\
+            max_accepted = { value = 400, unit = \"lines\" }\n\
+            reason = '''\n\
+            [[exceptions]]\n\
+            max_accepted = { value = 1, unit = \"lines\" }\n\
+            '''\n\
+            \n\
+            [[exceptions]]\n\
+            path = \"b.rs\"\n\
+            max_accepted = { value = 500, unit = \"lines\" }\n";
+        let out = rewrite_ceiling(
+            registry,
+            1,
+            600,
+            Unit::Lines,
+            std::path::Path::new("r"),
+            "b.rs",
+        )
+        .unwrap();
+        assert!(out.contains("max_accepted = { value = 1, unit = \"lines\" }"));
+        assert!(out.contains("max_accepted = { value = 600, unit = \"lines\" }"));
+        assert!(!out.contains("value = 500"));
+    }
+
+    /// Fence-shaped text outside a string opens nothing: a `#` comment is not
+    /// TOML, and a quoted `"""` inside a single-line string is a value.
+    #[test]
+    fn a_comment_or_quoted_fence_opens_no_string() {
+        let registry = "# a comment quoting \"\"\" and '''\n\
+            [[exceptions]]\n\
+            title = \"a \\\"\\\"\\\" b\"\n\
+            max_accepted = { value = 400, unit = \"lines\" }\n";
+        let out = rewrite_ceiling(
+            registry,
+            0,
+            500,
+            Unit::Lines,
+            std::path::Path::new("r"),
+            "a.rs",
+        )
+        .unwrap();
+        assert!(out.contains("max_accepted = { value = 500, unit = \"lines\" }"));
+    }
+
+    /// The rewritten line keeps the bytes that end it, so a CRLF registry does
+    /// not come back with one lone-LF line (§FS-008-exception-retune.3).
+    #[test]
+    fn a_crlf_registry_keeps_its_line_endings() {
+        let registry = REGISTRY.replace('\n', "\r\n");
+        let out = rewrite_ceiling(
+            &registry,
+            1,
+            600,
+            Unit::Lines,
+            std::path::Path::new("r"),
+            "b.rs",
+        )
+        .unwrap();
+        assert!(out.contains("max_accepted = { value = 600, unit = \"lines\" }\r\n"));
+        assert!(
+            out.split("\r\n").all(|line| !line.contains('\n')),
+            "every line ends CRLF: {out:?}"
+        );
     }
 
     #[test]

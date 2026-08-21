@@ -37,8 +37,8 @@ reports both, because both can bite.
 
 ```text
 src/domain/order.rs 612 lines [rust-source] soft 350 hard 550 hard-accepted 650 — 38 to hard-accepted
-src/domain/tax.rs 289 lines [rust-source] soft 350 hard 550 — 61 to soft
-src/domain/vat.rs 980 lines [rust-source] soft 350 hard 550 — 430 over hard
+src/domain/tax.rs 289 lines [rust-source] soft 350 hard 550 — 60 to soft
+src/domain/vat.rs 980 lines [rust-source] soft 350 hard 550 — 431 over hard
 ```
 
 The fields are the path, the measured value and its unit, the rule that selected
@@ -47,13 +47,22 @@ accepting this file for this rule — labelled by the registry holding it, becau
 the soft and hard registries make two different claims about one path
 (§DF-005-exception-identity).
 
-The clause after the dash is the headroom: the distance to the lowest threshold
-above the current value, named. The thresholds are the rule's limits and any
-accepted ceiling. When the value stands above all of them, the clause reports how
-far over the highest one it is. That number is what the caller came for — how
-much can I add before something changes — and it is the one number that cannot be
-read off the registry, since it depends on a measurement the registry does not
-carry.
+The clause after the dash is the headroom: the room left before the lowest
+threshold the value still clears, named. The thresholds are the rule's limits and
+any accepted ceiling. When the value clears none of them, the clause reports how
+far it has to come back to clear the highest one. That number is what the caller
+came for — how much can I add before something changes — and it is the one number
+that cannot be read off the registry, since it depends on a measurement the
+registry does not carry.
+
+It is room the caller can spend, so the arithmetic follows how each threshold
+binds rather than treating them alike. A rule limit fires *at* the limit
+(§GOAL-006-graded-limits), so a 349-line file under a 350-line soft limit has
+`1 to soft` and a 350-line one is already reported; an accepted ceiling silences
+*at* the ceiling (§FS-003-exceptions.3), so a file exactly at its
+`hard-accepted` has `0 to hard-accepted` and `check` still calls it `ok`. A
+headroom of `n` means `n` more units of the same kind leave every verdict where
+it stands, and `0` means the next one does not.
 
 A file matching no rule gets one line saying so, because "no budget applies here"
 is an answer and silence is not:

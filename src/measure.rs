@@ -8,7 +8,7 @@ use crate::cli::{self, CommandError, Format, Loaded};
 use crate::exceptions::Verdict;
 use crate::json::Json;
 use crate::report;
-use crate::{FileMeasurement, Severity, Unit, scan};
+use crate::{FileMeasurement, Severity, Unit};
 
 /// Inputs to a `measure` run.
 #[derive(Clone, Debug)]
@@ -46,12 +46,22 @@ struct Measured {
     hard_accepted: Option<u64>,
 }
 
-/// The distance to the nearest threshold above the value, or past the highest
-/// one below it (§FS-007-measure.2).
-struct Headroom {
-    distance: u64,
+/// One threshold, with the largest measurement that still clears it: a limit
+/// fires *at* the limit (§GOAL-006-graded-limits) and a ceiling silences *at*
+/// the ceiling (§FS-003-exceptions.3), so the two cannot share one comparison.
+struct Threshold {
     label: &'static str,
-    over: bool,
+    value: u64,
+    /// Signed: a limit of `0`, which nothing clears, is `-1` and not `0`.
+    clears_up_to: i64,
+}
+
+/// The room left before the threshold that binds first, negative once the value
+/// has passed it (§FS-007-measure.2). One signed quantity, so `0 to hard` means
+/// the next unit fails rather than promising room `check` will not honor.
+struct Headroom {
+    room: i64,
+    label: &'static str,
 }
 
 pub fn run(options: &MeasureOptions) -> Result<Run, CommandError> {
@@ -69,20 +79,12 @@ pub fn run(options: &MeasureOptions) -> Result<Run, CommandError> {
         .format
         .unwrap_or_else(|| loaded.config.output.format.into());
 
-    let mut rows = Vec::new();
-    let mut errors = Vec::new();
-    for rel in files {
-        let measurement = if options.staged {
-            scan::measure_staged_file(&loaded.root, &rel, &loaded.config.tokens)
-        } else {
-            scan::measure_file(&loaded.root, &rel, &loaded.config.tokens)
-        };
-        // A path that cannot be measured is skipped, not fatal, exactly as in
-        // `check` (§FS-004-check-audit.5).
-        match measurement {
-            Ok(measurement) => rows.extend(rows_for(&loaded, &measurement)?),
-            Err(error) => errors.push(scan::measure_error_line(&rel, &error)),
-        }
+    // The same walk `check` makes, including how it treats a path it cannot
+    // measure (§FS-004-check-audit.5).
+    let (measurements, errors) = cli::measure_each(&loaded, options.staged, &files);
+    let mut rows = Vec::with_capacity(measurements.len());
+    for measurement in &measurements {
+        rows.extend(rows_for(&loaded, measurement)?);
     }
 
     let output = match format {
@@ -166,38 +168,45 @@ fn accepted(
     )
 }
 
-fn thresholds(row: &Measured) -> Vec<(&'static str, u64)> {
+/// Every threshold that applies to this row, in the order they are printed.
+fn thresholds(row: &Measured) -> Vec<Threshold> {
+    // A limit is exclusive and a ceiling inclusive, so each pair carries its own
+    // "largest value that still clears it" rather than one shared rule.
     [
-        ("soft", row.soft),
-        ("hard", row.hard),
-        ("soft-accepted", row.soft_accepted),
-        ("hard-accepted", row.hard_accepted),
+        ("soft", row.soft, 1),
+        ("hard", row.hard, 1),
+        ("soft-accepted", row.soft_accepted, 0),
+        ("hard-accepted", row.hard_accepted, 0),
     ]
     .into_iter()
-    .filter_map(|(label, value)| value.map(|value| (label, value)))
+    .filter_map(|(label, value, exclusive)| {
+        value.map(|value| Threshold {
+            label,
+            value,
+            clears_up_to: i64::try_from(value).unwrap_or(i64::MAX) - exclusive,
+        })
+    })
     .collect()
 }
 
-fn headroom(row: &Measured) -> Option<Headroom> {
-    let thresholds = thresholds(row);
-    if let Some(&(label, value)) = thresholds
+fn headroom(thresholds: &[Threshold], actual: u64) -> Option<Headroom> {
+    let actual = i64::try_from(actual).unwrap_or(i64::MAX);
+    if let Some(threshold) = thresholds
         .iter()
-        .filter(|(_, value)| *value > row.actual)
-        .min_by_key(|(_, value)| *value)
+        .filter(|threshold| threshold.clears_up_to >= actual)
+        .min_by_key(|threshold| threshold.clears_up_to)
     {
         return Some(Headroom {
-            distance: value - row.actual,
-            label,
-            over: false,
+            room: threshold.clears_up_to - actual,
+            label: threshold.label,
         });
     }
-    // Above everything: report the distance past the highest threshold, which is
+    // Past everything: the distance back under the highest threshold, which is
     // the one a reader has to answer for.
-    let &(label, value) = thresholds.iter().max_by_key(|(_, value)| *value)?;
+    let threshold = thresholds.iter().max_by_key(|threshold| threshold.value)?;
     Some(Headroom {
-        distance: row.actual - value,
-        label,
-        over: true,
+        room: threshold.clears_up_to - actual,
+        label: threshold.label,
     })
 }
 
@@ -207,30 +216,24 @@ fn render_row(row: &Row, color: bool) -> String {
         Row::Measured(row) => row,
     };
     let mut line = format!("{} {} {} [{}]", row.path, row.actual, row.unit, row.rule_id);
-    for (label, value) in thresholds(row) {
-        line.push_str(&format!(" {label} {value}"));
+    let thresholds = thresholds(row);
+    for threshold in &thresholds {
+        line.push_str(&format!(" {} {}", threshold.label, threshold.value));
     }
-    if let Some(headroom) = headroom(row) {
-        let Headroom {
-            distance,
-            label,
-            over,
-        } = headroom;
-        let clause = if over {
-            format!("{distance} over {label}")
+    if let Some(Headroom { room, label }) = headroom(&thresholds, row.actual) {
+        // Only a value that has actually passed a threshold is tinted; standing
+        // exactly at the last value a ceiling accepts is room, not overflow, and
+        // `check` calls it `ok` (§FS-003-exceptions.3).
+        let clause = if room < 0 {
+            let over = format!("{} over {label}", room.unsigned_abs());
+            let tint = if label.starts_with("hard") {
+                report::BOLD_RED
+            } else {
+                report::BOLD_YELLOW
+            };
+            report::paint(color, tint, &over)
         } else {
-            format!("{distance} to {label}")
-        };
-        let tint = if !over {
-            None
-        } else if label.starts_with("hard") {
-            Some(report::BOLD_RED)
-        } else {
-            Some(report::BOLD_YELLOW)
-        };
-        let clause = match tint {
-            Some(code) => report::paint(color, code, &clause),
-            None => clause,
+            format!("{room} to {label}")
         };
         line.push_str(&format!(" — {clause}"));
     }
@@ -264,14 +267,10 @@ fn row_json(row: &Row) -> Json {
             fields.push((key, Json::UInt(value)));
         }
     }
-    if let Some(headroom) = headroom(row) {
+    if let Some(headroom) = headroom(&thresholds(row), row.actual) {
         // Signed: positive is room left below the threshold, negative is the
         // distance past it, so one field carries both directions.
-        let signed = i64::try_from(headroom.distance).unwrap_or(i64::MAX);
-        fields.push((
-            "headroom",
-            Json::Int(if headroom.over { -signed } else { signed }),
-        ));
+        fields.push(("headroom", Json::Int(headroom.room)));
         fields.push(("headroom_to", Json::str(headroom.label)));
     }
     Json::Object(fields)

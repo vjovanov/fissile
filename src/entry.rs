@@ -28,35 +28,47 @@ pub fn quantize(value: u64, step: u64) -> u64 {
     value.div_ceil(step).saturating_mul(step)
 }
 
-/// The entry answering to `address`, with its index within its own registry.
-/// That index is the entry's block order in the file, which is the handle an
-/// in-place rewrite needs (§FS-008-exception-retune.3).
-pub fn locate<'a>(
+/// Every entry in the addressed registry whose matcher, rules, and unit overlap
+/// `address`, each with its index — the block order an in-place rewrite needs
+/// (§FS-008-exception-retune.3).
+pub fn matching<'a>(
     registries: &'a Registries,
     address: &Address<'_>,
-) -> Result<Option<(usize, &'a Exception)>, CommandError> {
+) -> Vec<(usize, &'a Exception)> {
     let registry = match address.severity {
         Severity::Soft => &registries.soft,
         Severity::Hard => &registries.hard,
     };
-    let mut found: Option<(usize, &Exception)> = None;
-    for (index, entry) in registry.iter().enumerate() {
-        if entry.max_unit != address.unit
-            || !address.rules.iter().any(|rule| entry.applies_to_rule(rule))
-            || !path_matchers_overlap(entry, address.match_kind, address.path)
-        {
-            continue;
-        }
-        if let Some((_, first)) = found {
-            return Err(CommandError::Usage(format!(
-                "{}: {} and {} both accept {} for this unit and rule; \
-                 the registry has to name one entry per condition",
-                entry.registry, first.path, entry.path, address.path
-            )));
-        }
-        found = Some((index, entry));
+    registry
+        .iter()
+        .enumerate()
+        .filter(|(_, entry)| {
+            entry.max_unit == address.unit
+                && address.rules.iter().any(|rule| entry.applies_to_rule(rule))
+                && path_matchers_overlap(entry, address.match_kind, address.path)
+        })
+        .collect()
+}
+
+/// The one entry `address` names (§FS-008-exception-retune.4). Matching two is
+/// an ambiguous address, not a broken registry — two exact entries under one
+/// glob is a registry §FS-003-exceptions.4 accepts — so the refusal names both.
+pub fn locate<'a>(
+    registries: &'a Registries,
+    address: &Address<'_>,
+) -> Result<Option<(usize, &'a Exception)>, CommandError> {
+    let mut found = matching(registries, address).into_iter();
+    let Some((index, entry)) = found.next() else {
+        return Ok(None);
+    };
+    if let Some((_, second)) = found.next() {
+        return Err(CommandError::Usage(format!(
+            "{}: {} spans more than one entry ({} and {}); address one at a time — \
+             each entry is named by its own path matcher",
+            entry.registry, address.path, entry.path, second.path
+        )));
     }
-    Ok(found)
+    Ok(Some((index, entry)))
 }
 
 /// Whether an existing entry's matcher and a proposed one can cover one path.
@@ -145,14 +157,34 @@ pub struct Sizing<'a> {
     pub unit: Option<Unit>,
 }
 
+/// The value a ceiling has to clear, before quantization, and where it came
+/// from. `measured` is the file's own size whenever the address named one file,
+/// carried out so a diagnostic can quote it without measuring twice.
+#[derive(Clone, Copy, Debug)]
+pub struct Base<'a> {
+    pub value: u64,
+    pub measured: Option<u64>,
+    pub source: BaseSource<'a>,
+}
+
+/// Where a ceiling's value came from, so a refusal names the input the caller
+/// actually gave (§GOAL-003-friendly-output).
+#[derive(Clone, Copy, Debug)]
+pub enum BaseSource<'a> {
+    /// `--max <N>`, straight from the command line.
+    Max,
+    /// The file's own measurement, taken because `--max` was omitted.
+    Measured(&'a str),
+}
+
 /// The value a ceiling has to clear, before quantization: `--max` when given,
 /// otherwise the file's current measurement (§FS-005-exception-add.2).
-pub fn resolve_base(
-    sizing: Sizing<'_>,
+pub fn resolve_base<'a>(
+    sizing: Sizing<'a>,
     loaded: &Loaded,
     unit: Unit,
     rule: &Rule,
-) -> Result<u64, CommandError> {
+) -> Result<Base<'a>, CommandError> {
     match sizing.max {
         Some(max) => {
             let declared = sizing
@@ -163,20 +195,36 @@ pub fn resolve_base(
                     "--unit must match the selected rule unit".to_owned(),
                 ));
             }
-            // For an exact path, the accepted ceiling cannot be below the current
-            // measurement (§FS-005-exception-add.2, §FS-008-exception-retune.2).
-            if sizing.match_kind == MatchKind::Exact {
-                let measured = measure_value(loaded, sizing.path, unit, rule)?;
-                if max < measured {
-                    return Err(CommandError::Usage(format!(
-                        "--max {max} is below the current measurement {measured} {unit}"
-                    )));
-                }
+            // A glob names no file to measure; an exact path does, and its
+            // ceiling may not fall below it (§FS-008-exception-retune.2).
+            if sizing.match_kind != MatchKind::Exact {
+                return Ok(Base {
+                    value: max,
+                    measured: None,
+                    source: BaseSource::Max,
+                });
             }
-            Ok(max)
+            let measured = measure_value(loaded, sizing.path, unit, rule)?;
+            if max < measured {
+                return Err(CommandError::Usage(format!(
+                    "--max {max} is below the current measurement {measured} {unit}"
+                )));
+            }
+            Ok(Base {
+                value: max,
+                measured: Some(measured),
+                source: BaseSource::Max,
+            })
         }
         None => match sizing.match_kind {
-            MatchKind::Exact => measure_value(loaded, sizing.path, unit, rule),
+            MatchKind::Exact => {
+                let measured = measure_value(loaded, sizing.path, unit, rule)?;
+                Ok(Base {
+                    value: measured,
+                    measured: Some(measured),
+                    source: BaseSource::Measured(sizing.path),
+                })
+            }
             MatchKind::Glob => Err(CommandError::Usage(
                 "--match glob requires --max and --unit".to_owned(),
             )),
@@ -185,8 +233,16 @@ pub fn resolve_base(
 }
 
 /// A ceiling below the limit it is meant to accept would silence nothing
-/// (§FS-005-exception-add.2).
-pub fn check_min_limit(rules: &[&Rule], severity: Severity, max: u64) -> Result<(), CommandError> {
+/// (§FS-005-exception-add.2). The refusal blames the base's own source — never a
+/// flag the caller did not pass — and offers `remedy`, since no `--max` is one.
+pub fn check_min_limit(
+    rules: &[&Rule],
+    severity: Severity,
+    unit: Unit,
+    base: &Base<'_>,
+    remedy: &str,
+) -> Result<(), CommandError> {
+    let max = base.value;
     for rule in rules {
         let limit = match severity {
             Severity::Soft => rule.budget.soft,
@@ -199,10 +255,17 @@ pub fn check_min_limit(rules: &[&Rule], severity: Severity, max: u64) -> Result<
             )));
         };
         if max < limit {
-            return Err(CommandError::Usage(format!(
-                "--max {max} is below rule {} {severity} limit {limit}",
-                rule.id
-            )));
+            return Err(CommandError::Usage(match base.source {
+                BaseSource::Max => format!(
+                    "--max {max} is below rule {} {severity} limit {limit}",
+                    rule.id
+                ),
+                BaseSource::Measured(path) => format!(
+                    "{path} measures {max} {unit}, under rule {} {severity} limit {limit}; \
+                     an entry accepting it would silence nothing — {remedy}",
+                    rule.id
+                ),
+            }));
         }
     }
     Ok(())

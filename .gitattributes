@@ -1,0 +1,5 @@
+# e2e fixtures are byte-exact inputs. The harness copies `repo/` verbatim and a
+# scenario may assert the bytes a command left behind — including the line
+# endings it preserved (§FS-008-exception-retune.3) — so git must not normalize
+# them on the way in or out.
+e2e/cases/**/repo/** -text

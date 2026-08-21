@@ -34,20 +34,31 @@ with a migration note.
 
 - §FS-007-measure: new `fissile measure <paths>... | --staged` reports what
   fissile counts for a file — the value, the rule, the limits, any accepted
-  ceiling, and the signed distance to whichever binds first. It answers for
-  files that are passing, which `check` never did, and always exits `0`. The
-  JSON shape is published as `schema/measure.schema.json`.
+  ceiling, and the signed room left before whichever binds first. The room is
+  spendable: a limit fires *at* the limit and a ceiling silences *at* the
+  ceiling, so `0 to hard` means the next line fails while `0 to hard-accepted`
+  is a file `check` calls `ok`. It answers for files that are passing, which
+  `check` never did, and always exits `0`. The JSON shape is published as
+  `schema/measure.schema.json`.
 - §FS-008-exception-retune: new `fissile exception retune` moves the ceiling an
   entry already records, up or down and at either severity, leaving `reason`,
-  `kind`, and `until` untouched. It rewrites one `max_accepted` line in place,
-  so the diff is the single decision that changed.
+  `kind`, and `until` untouched. It rewrites one `max_accepted` line in place —
+  reading the registry as TOML, so prose in a `reason` names no entry, and
+  keeping the line endings the file is stored with — so the diff is the single
+  decision that changed. The entry is addressed by its matcher, not by a path
+  the matcher happens to cover: an address that only overlaps an entry, or
+  spans two, is refused with the address to use instead. Lowering stops at the
+  rule limit, where the remedy is to remove the entry rather than retune it.
 - §FS-001-config.5: new `[exceptions.bump]` table — `lines = 100`,
   `bytes = 4096`, `tokens = 1000` — quantizing every ceiling `fissile` writes
   (§DF-006-quantized-ceilings). Set a unit to `1` for the previous
   exact-measurement behavior.
 - §FS-003-exceptions.7: `audit --stale-exceptions` also reports **loose**
   ceilings — an exact-path entry standing more than one bump step above the file
-  it accepts — with the value `exception retune` would write in its place.
+  it accepts — with the value `exception retune` would write in its place. The
+  JSON record carries `severity` and `limit` alongside them, so a consumer can
+  reproduce the text line without matching a registry filename against the
+  config.
 
 ### Changed
 
@@ -78,8 +89,9 @@ with a migration note.
 
 - §FS-004-check-audit.2: `audit --top` ranked files by raw physical lines while
   findings reported the rule's counted value, so one tool reported two numbers
-  for one file. `--top` now reports what the effective rule counts, and ranks a
-  file in a unit only when a rule measures it there.
+  for one file. `--top` now reports what the effective rule counts where a rule
+  measures the file, and the default line policy everywhere else — so the
+  largest file in a repository still ranks when no rule reaches it yet.
 
 ## 2. [0.5.0] — 2026-08-12
 
