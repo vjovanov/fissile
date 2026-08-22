@@ -6,4 +6,4 @@ args = [
 exit = 0
 # 9 lines against a 4-line step: the caller names no number, the step picks 12.
 stdout_equals = """
-docs/file-size-human-exceptions.toml: src/big.rs 8 -> 12 lines"""
+docs/file-size-human-exceptions.toml: src/big.rs 8 -> 12 lines (measured 9 lines; quantized to 4-line step)"""

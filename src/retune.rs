@@ -107,7 +107,9 @@ pub fn run(options: &RetuneOptions) -> Result<Run, CommandError> {
         &base,
         "remove the entry rather than retuning it",
     )?;
-    let ceiling = entry::quantize(base.value, loaded.config.exceptions.bump.step(unit));
+    let step = loaded.config.exceptions.bump.step(unit);
+    let ceiling = entry::quantize(base.value, step);
+    let quantization = quantization_detail(base, ceiling, step, unit);
 
     // A caller about to leave two registries disagreeing should learn it here
     // rather than from a later run (§FS-008-exception-retune.3).
@@ -118,8 +120,8 @@ pub fn run(options: &RetuneOptions) -> Result<Run, CommandError> {
         return Ok(Run {
             output: with_note(
                 format!(
-                    "{}: {path} already accepts {recorded} {unit}",
-                    registry_rel.display()
+                    "{}: {path} already accepts {recorded} {unit}{quantization}",
+                    registry_rel.display(),
                 ),
                 note,
             ),
@@ -133,8 +135,8 @@ pub fn run(options: &RetuneOptions) -> Result<Run, CommandError> {
     entry::validate_combined(&loaded, options.severity, &new_text)?;
 
     let change = format!(
-        "{}: {path} {recorded} -> {ceiling} {unit}",
-        registry_rel.display()
+        "{}: {path} {recorded} -> {ceiling} {unit}{quantization}",
+        registry_rel.display(),
     );
     if options.dry_run {
         return Ok(Run {
@@ -149,6 +151,23 @@ pub fn run(options: &RetuneOptions) -> Result<Run, CommandError> {
     Ok(Run {
         output: with_note(change, note),
     })
+}
+
+/// Explain the otherwise invisible arithmetic between the value supplied or
+/// measured and the ceiling written to the registry (§FS-008-exception-retune.3).
+fn quantization_detail(base: entry::Base<'_>, ceiling: u64, step: u64, unit: Unit) -> String {
+    if ceiling == base.value {
+        return String::new();
+    }
+    let source = match base.source {
+        entry::BaseSource::Measured(_) => "measured",
+        entry::BaseSource::Max => "requested",
+    };
+    format!(
+        " ({source} {} {unit}; quantized to {step}-{} step)",
+        base.value,
+        unit.singular()
+    )
 }
 
 fn with_note(head: String, note: Option<String>) -> String {
@@ -459,5 +478,52 @@ mod tests {
             "a.rs",
         );
         assert!(error.is_err());
+    }
+
+    /// §FS-008-exception-retune.3: output exposes the measurement and configured
+    /// step behind a quantized ceiling instead of making it resemble a budget.
+    #[test]
+    fn quantization_detail_names_a_measurement_and_step() {
+        let detail = quantization_detail(
+            entry::Base {
+                value: 436,
+                measured: Some(436),
+                source: entry::BaseSource::Measured("src/model.rs"),
+            },
+            500,
+            100,
+            Unit::Lines,
+        );
+        assert_eq!(detail, " (measured 436 lines; quantized to 100-line step)");
+    }
+
+    #[test]
+    fn quantization_detail_distinguishes_an_explicit_max() {
+        let detail = quantization_detail(
+            entry::Base {
+                value: 436,
+                measured: Some(430),
+                source: entry::BaseSource::Max,
+            },
+            500,
+            100,
+            Unit::Lines,
+        );
+        assert_eq!(detail, " (requested 436 lines; quantized to 100-line step)");
+    }
+
+    #[test]
+    fn exact_values_need_no_quantization_detail() {
+        let detail = quantization_detail(
+            entry::Base {
+                value: 500,
+                measured: Some(500),
+                source: entry::BaseSource::Measured("src/model.rs"),
+            },
+            500,
+            100,
+            Unit::Lines,
+        );
+        assert!(detail.is_empty());
     }
 }

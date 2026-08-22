@@ -82,8 +82,14 @@ ceiling as one inline table, the command refuses and says so rather than
 guessing at a rewrite.
 
 ```text
-docs/file-size-agent-exceptions.toml: src/domain/order.rs 486 -> 500 lines
+docs/file-size-agent-exceptions.toml: src/order.rs 486 -> 500 lines (measured 488 lines; quantized to 100-line step)
 ```
+
+When quantization raises the value the caller supplied or the command measured,
+the result names that base value and the configured step. The ceiling therefore
+cannot look like it came from a coincidentally equal rule limit. A measured
+exact-path value is labeled `measured`; an explicit `--max` is labeled
+`requested`.
 
 When the quantized ceiling equals the recorded one, nothing is written and the
 command says so and exits `0`. An idempotent retune is the normal outcome of an
