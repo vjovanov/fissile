@@ -60,8 +60,8 @@ pub fn run(options: &AddOptions) -> Result<Run, CommandError> {
     // After the flags are known well-formed, before anything is read about the
     // file: contradictory flags are named as such, and the refusal never
     // reports what the registry holds (§DF-008-hard-severity-needs-a-terminal.1).
-    check_severity_gate(options)?;
     let unit = rules[0].budget.unit;
+    check_severity_gate(options, &rules, unit)?;
     let sizing = entry::Sizing {
         path: &path,
         match_kind: options.match_kind,
@@ -145,7 +145,11 @@ pub fn run(options: &AddOptions) -> Result<Run, CommandError> {
 /// A hard exception is the only way past a stop-the-line gate, so a person
 /// decides it (§DF-008-hard-severity-needs-a-terminal.1). The refusal offers the
 /// route an agent can take on its own, and names the flag a script needs.
-fn check_severity_gate(options: &AddOptions) -> Result<(), CommandError> {
+fn check_severity_gate(
+    options: &AddOptions,
+    rules: &[&crate::Rule],
+    unit: Unit,
+) -> Result<(), CommandError> {
     if options.severity != Severity::Hard || options.force || options.interactive {
         return Ok(());
     }
@@ -154,15 +158,35 @@ fn check_severity_gate(options: &AddOptions) -> Result<(), CommandError> {
          A hard exception is the only way past a stop-the-line gate, so a person \
          reviews it. Record the debt at soft severity instead:\n  {}\n\
          Pass --force to add it anyway from a script.",
-        soft_route(options),
+        soft_route(options, gate_route_max(options, rules, unit)),
     )))
 }
 
 /// The offered command: this call with `--severity soft`, every other flag
 /// carried through — it has to run as printed, and the `--kind` is the caller's
 /// claim, not the gate's to substitute (§FS-005-exception-add.4).
-fn soft_route(options: &AddOptions) -> String {
-    route(options, Severity::Soft, RouteMax::AsGiven)
+fn soft_route(options: &AddOptions, max: RouteMax) -> String {
+    route(options, Severity::Soft, max)
+}
+
+/// How the gate's soft route spells `--max`. A ceiling at or above a hard limit
+/// is refused for a soft entry (§DF-010-stated-ceilings-are-exact.2), and that
+/// refusal offers the hard `add` this gate just turned down — so repeating the
+/// number would close a circle between two refusals. The gate reads no registry
+/// to decide it (§DF-008-hard-severity-needs-a-terminal.1), so it asks only
+/// whether some rule's hard limit is at or under the caller's number.
+fn gate_route_max(options: &AddOptions, rules: &[&crate::Rule], unit: Unit) -> RouteMax {
+    let over_hard = options.max.is_some_and(|max| {
+        rules
+            .iter()
+            .filter_map(|rule| rule.budget.hard)
+            .any(|hard| max >= hard)
+    });
+    if over_hard {
+        RouteMax::Placeholder(unit)
+    } else {
+        RouteMax::AsGiven
+    }
 }
 
 /// How a route spells `--max`: the caller's own, or a placeholder for the
@@ -454,17 +478,17 @@ mod tests {
     fn the_severity_gate_stops_only_a_scripted_hard_add() {
         let mut scripted = options("a claim about a missing boundary here");
         scripted.severity = Severity::Hard;
-        assert!(check_severity_gate(&scripted).is_err());
+        assert!(check_severity_gate(&scripted, &[], Unit::Lines).is_err());
 
-        assert!(check_severity_gate(&options("a claim")).is_ok());
+        assert!(check_severity_gate(&options("a claim"), &[], Unit::Lines).is_ok());
 
         let mut forced = scripted.clone();
         forced.force = true;
-        assert!(check_severity_gate(&forced).is_ok());
+        assert!(check_severity_gate(&forced, &[], Unit::Lines).is_ok());
 
         let mut human = scripted.clone();
         human.interactive = true;
-        assert!(check_severity_gate(&human).is_ok());
+        assert!(check_severity_gate(&human, &[], Unit::Lines).is_ok());
     }
 
     /// The refusal's offered command must run as printed, and must not restate
@@ -474,7 +498,7 @@ mod tests {
         let mut scripted = options("the generator owns this file byte-identically");
         scripted.severity = Severity::Hard;
 
-        let structural = soft_route(&scripted);
+        let structural = soft_route(&scripted, RouteMax::AsGiven);
         assert_eq!(
             structural,
             "fissile exception add src/big.rs --severity soft --rule rust-source \
@@ -485,7 +509,7 @@ mod tests {
         deferred.kind = Kind::Deferred;
         deferred.until = Some("the parser moves to its own module".to_owned());
         assert!(
-            soft_route(&deferred)
+            soft_route(&deferred, RouteMax::AsGiven)
                 .contains("--kind deferred --until 'the parser moves to its own module'")
         );
 
@@ -493,7 +517,7 @@ mod tests {
         // It is quoted, or `<what` is a redirection and the line will not parse.
         let mut open = deferred.clone();
         open.until = None;
-        assert!(soft_route(&open).contains("--kind deferred --until '<what retires it>'"));
+        assert!(soft_route(&open, RouteMax::AsGiven).contains("--kind deferred --until '<what retires it>'"));
     }
 
     /// Every flag that changes what the rerun loads or writes is carried, or the
@@ -508,7 +532,7 @@ mod tests {
         scripted.owner = Some("payments".to_owned());
         scripted.issue = Some("#12".to_owned());
 
-        let command = soft_route(&scripted);
+        let command = soft_route(&scripted, RouteMax::AsGiven);
         assert!(command.contains(" --config build/fissile.toml"));
         assert!(command.contains(" --title 'generated orders'"));
         assert!(command.contains(" --owner payments"));
@@ -523,14 +547,14 @@ mod tests {
         glob.severity = Severity::Hard;
         glob.path = "src/*.rs".to_owned();
         glob.match_kind = MatchKind::Glob;
-        assert!(soft_route(&glob).starts_with("fissile exception add 'src/*.rs' --severity soft"));
+        assert!(soft_route(&glob, RouteMax::AsGiven).starts_with("fissile exception add 'src/*.rs' --severity soft"));
 
         let mut spaced = glob.clone();
         spaced.path = "src/odd dir/big.rs".to_owned();
         spaced.match_kind = MatchKind::Exact;
-        assert!(soft_route(&spaced).contains("add 'src/odd dir/big.rs' "));
+        assert!(soft_route(&spaced, RouteMax::AsGiven).contains("add 'src/odd dir/big.rs' "));
 
         // A plain path is not worth quoting, and E2E-034 asserts it bare.
-        assert!(soft_route(&glob).contains(" --rule rust-source "));
+        assert!(soft_route(&glob, RouteMax::AsGiven).contains(" --rule rust-source "));
     }
 }
