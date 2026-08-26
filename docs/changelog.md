@@ -45,20 +45,31 @@ with a migration note.
 ### Added
 
 - §FS-005-exception-add.4, §FS-008-exception-retune.4: a `--severity soft`
-  ceiling at or above the rule's hard limit, for a file still under that limit,
-  is refused — whether the step landed there or `--max` did — unless the hard
-  registry holds an entry at the same address. A file already past the limit
-  keeps its soft route: that entry is the record of debt
-  §DF-008-hard-severity-needs-a-terminal offers a script in place of the hard
-  entry it may not write. The hard finding fires at that limit and suppresses the soft one, so
-  such an entry never fires; under a 350/500-line rule with the default step the
-  measured form wrote exactly that for every file over 400 lines. The refusal
-  prints the form that succeeds — this call with `--max <N> --unit <unit>` and
-  the valid range, or the hard-severity `exception add`
-  (§DF-010-stated-ceilings-are-exact.2).
+  ceiling at or above the rule's hard limit is refused — whether the step landed
+  there or `--max` did — unless the hard registry holds a *deferred* entry at the
+  same address. Only a deferred twin keeps the soft finding alive above the limit
+  (§FS-003-exceptions.3); a structural one ends evaluation there, which leaves
+  the soft ceiling as dead as one with no twin at all. A glob is held to the same
+  rule: it measures nothing, so no class of files can claim the exemption a
+  single file already past the limit has. That file does keep its soft route:
+  that entry is the record of debt §DF-008-hard-severity-needs-a-terminal offers
+  a script in place of the hard entry it may not write. The hard finding fires at
+  that limit and suppresses the soft one, so such an entry never fires; under a
+  350/500-line rule with the default step the measured form wrote exactly that
+  for every file over 400 lines. The refusal prints the form that succeeds —
+  this call with `--max <N> --unit <unit>` and the valid range, or the
+  hard-severity `exception add` carrying that same ceiling
+  (§DF-010-stated-ceilings-are-exact.2). The range clears every rule the entry
+  lists, and the severity gate never answers a refused ceiling by repeating it,
+  so no two refusals send a caller in a circle
+  (§DF-007-instructions-at-the-error-site).
 - §FS-004-check-audit.2: a loose soft entry whose step lands on the hard limit
-  is reported with the stated form to retune it, and its JSON `retune_to` is
-  `null`, rather than a value the command would refuse.
+  is reported with the stated form to retune it, rather than a value the command
+  would refuse. Its JSON `retune_to` is `null` and the new `stated_range`
+  (`{"min": N, "max_excluded": M}`) carries the range the text line prints;
+  exactly one of the two is ever set.
+  **Migration:** a consumer of `audit --format json` that reads `retune_to` as
+  always-an-integer should read `stated_range` when it is `null`.
 
 ## 2. [0.7.1] — 2026-08-24
 

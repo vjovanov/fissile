@@ -119,13 +119,16 @@ config, both registries as they stand, and the combined document before the
 write. It fails additionally when the address matches no entry, when it matches
 more than one, when `--max` is below the current measurement or below the
 selected rule's limit for the chosen severity, and when a `--severity soft`
-ceiling for a file still under the rule's hard limit would be at or above that
-limit, with no hard entry at the same address
-(§DF-010-stated-ceilings-are-exact.2). That last refusal is the
-instruction (§DF-007-instructions-at-the-error-site): whether the step produced
-the number or `--max` did, it prints this call with `--max <N> --unit <unit>`
-and the range `N` may take, and for a stated value also the hard-severity
-`exception add`.
+soft ceiling would be at or above the rule's hard limit, with no **deferred**
+hard entry at the same address (§DF-010-stated-ceilings-are-exact.2) — a
+structural twin ends evaluation above the limit (§FS-003-exceptions.3) and so
+exempts nothing, and a file already past the limit is left alone. That last
+refusal is the instruction (§DF-007-instructions-at-the-error-site): whether the
+step produced the number or `--max` did, it prints this call with `--max <N>
+--unit <unit>` and the range `N` may take, and for a stated value also the
+hard-severity `exception add` — carrying the ceiling and both `--kind`
+spellings, so the offered command runs as printed rather than being refused for
+accepting a file that needs no exception.
 
 `--dry-run` prints the ceiling change and the registry it would update, and
 modifies nothing.

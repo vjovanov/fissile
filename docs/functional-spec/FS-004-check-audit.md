@@ -220,8 +220,12 @@ state. It is for adoption and maintenance, not just pass/fail.
   in its place. Stale means the entry accepts a file that is gone; loose means it
   accepts far more of a file that is still there. Where the step would land a
   soft ceiling on the hard limit, `retune` refuses the measured form
-  (§DF-010-stated-ceilings-are-exact.2), so the line names the stated one and
-  the JSON record's `retune_to` is `null`.
+  (§DF-010-stated-ceilings-are-exact.2), so the line names the stated one: the
+  JSON record's `retune_to` is `null` and its `stated_range`
+  (`{"min": N, "max_excluded": M}`) carries the range that line prints. Exactly
+  one of the two is set on every record. The twin that exempts a ceiling here is
+  resolved the same way `retune` resolves it, so `audit` never names a remedy
+  the command would decline.
 
   ```text
   loose ceilings:
