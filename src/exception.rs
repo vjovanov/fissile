@@ -86,7 +86,13 @@ pub fn run(options: &AddOptions) -> Result<Run, CommandError> {
     let binding = entry::binding_hard_limit(
         &rules,
         options.severity,
-        has_hard_twin(&loaded, options, &path, unit),
+        entry::has_deferred_hard_twin(
+            &loaded.registries,
+            &path,
+            options.match_kind,
+            &options.rules,
+            unit,
+        ),
     );
     entry::check_hard_limit(
         binding,
@@ -150,20 +156,6 @@ fn check_severity_gate(options: &AddOptions) -> Result<(), CommandError> {
          Pass --force to add it anyway from a script.",
         soft_route(options),
     )))
-}
-
-/// Whether the hard registry holds this address. Above the hard limit a
-/// deferred hard entry keeps the soft finding alive, which is what makes a soft
-/// ceiling there legitimate (§DF-010-stated-ceilings-are-exact.2).
-fn has_hard_twin(loaded: &Loaded, options: &AddOptions, path: &str, unit: Unit) -> bool {
-    let address = Address {
-        severity: Severity::Hard,
-        path,
-        match_kind: options.match_kind,
-        rules: &options.rules,
-        unit,
-    };
-    !entry::matching(&loaded.registries, &address).is_empty()
 }
 
 /// The offered command: this call with `--severity soft`, every other flag

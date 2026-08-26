@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 
 use crate::cli::{self, CommandError, Loaded};
-use crate::exceptions::{Exception, MatchKind, Registries, RegistrySource};
+use crate::exceptions::{Exception, Kind, MatchKind, Registries, RegistrySource};
 use crate::{Glob, Rule, Severity, Unit, scan};
 
 /// What identifies one entry, across both commands that write entries.
@@ -60,20 +60,46 @@ fn past_hard(base: &Base<'_>, hard: u64) -> bool {
 }
 
 /// The hard limit a soft ceiling has to stay under — the lowest among the rules
-/// — or `None` when nothing binds: a hard entry, or a hard-registry twin that
-/// keeps the soft finding alive above it (§DF-010-stated-ceilings-are-exact.2).
+/// — or `None` when nothing binds: a hard entry, or a deferred hard-registry
+/// twin that keeps the soft finding alive above it
+/// (§DF-010-stated-ceilings-are-exact.2).
 pub fn binding_hard_limit<'a>(
     rules: &[&'a Rule],
     severity: Severity,
-    has_hard_twin: bool,
+    has_deferred_hard_twin: bool,
 ) -> Option<(u64, &'a Rule)> {
-    if severity != Severity::Soft || has_hard_twin {
+    if severity != Severity::Soft || has_deferred_hard_twin {
         return None;
     }
     rules
         .iter()
         .filter_map(|rule| rule.budget.hard.map(|hard| (hard, *rule)))
         .min_by_key(|(hard, _)| *hard)
+}
+
+/// Whether the hard registry holds a *deferred* entry for this address. Above
+/// the hard limit a deferred hard entry keeps the soft finding alive, which is
+/// what makes a soft ceiling there legitimate
+/// (§DF-010-stated-ceilings-are-exact.2). A structural one ends evaluation
+/// instead (§FS-003-exceptions.3), leaving that soft ceiling as dead as one with
+/// no twin at all — so the exemption reads the kind, not just the address.
+pub fn has_deferred_hard_twin(
+    registries: &Registries,
+    path: &str,
+    match_kind: MatchKind,
+    rules: &[String],
+    unit: Unit,
+) -> bool {
+    let address = Address {
+        severity: Severity::Hard,
+        path,
+        match_kind,
+        rules,
+        unit,
+    };
+    matching(registries, &address)
+        .iter()
+        .any(|(_, entry)| entry.kind == Kind::Deferred)
 }
 
 /// The commands a refusal offers in place of the one that failed: the caller's
