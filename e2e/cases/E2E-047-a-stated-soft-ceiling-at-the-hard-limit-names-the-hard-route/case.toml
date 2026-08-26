@@ -1,0 +1,19 @@
+args = [
+  "exception", "retune", "src/big.rs",
+  "--severity", "soft",
+  "--rule", "rust",
+  "--max", "8",
+  "--unit", "lines",
+]
+exit = 2
+stderr_contains = [
+  "--max 8 is at or above rule rust hard limit 8; a soft ceiling there silences nothing.",
+  "fissile exception retune src/big.rs --severity soft --rule rust --max <N> --unit lines",
+  "with 5 <= N < 8, or accept the file in the hard registry:",
+  "fissile exception add src/big.rs --severity hard --rule rust --kind <kind> --reason",
+]
+
+[[files]]
+path = "docs/file-size-agent-exceptions.toml"
+contains = ["max_accepted = { value = 4, unit = \"lines\" }"]
+excludes = ["value = 8"]

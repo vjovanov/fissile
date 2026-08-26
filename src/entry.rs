@@ -18,14 +18,108 @@ pub struct Address<'a> {
     pub unit: Unit,
 }
 
-/// The written ceiling: the smallest multiple of `step` at or above the value,
-/// so a registry records a round number, not one commit's measurement
-/// (§FS-005-exception-add.2, §DF-006-quantized-ceilings.1). `0`/`1` disable it.
+/// The smallest multiple of `step` at or above `value`; `0`/`1` disable it.
 pub fn quantize(value: u64, step: u64) -> u64 {
     if step <= 1 {
         return value;
     }
     value.div_ceil(step).saturating_mul(step)
+}
+
+/// The written ceiling: a measurement is quantized to `step`, so a registry
+/// records a round number rather than one commit's reading; a `--max` is
+/// written as stated (§DF-010-stated-ceilings-are-exact.1).
+pub fn ceiling(base: &Base<'_>, step: u64) -> u64 {
+    match base.source {
+        BaseSource::Measured(_) => quantize(base.value, step),
+        BaseSource::Max => base.value,
+    }
+}
+
+/// The step's next multiple above a stated ceiling, for a result to name and
+/// never apply (§FS-008-exception-retune.3). `None` on the step itself, or when
+/// that multiple is one [`check_hard_limit`] would refuse.
+pub fn suggested_step(base: &Base<'_>, step: u64, hard_limit: Option<u64>) -> Option<u64> {
+    if !matches!(base.source, BaseSource::Max) {
+        return None;
+    }
+    let next = quantize(base.value, step);
+    if next == base.value || hard_limit.is_some_and(|hard| next >= hard) {
+        return None;
+    }
+    Some(next)
+}
+
+/// The hard limit a soft ceiling has to stay under — the lowest among the rules
+/// — or `None` when nothing binds: a hard entry, or a hard-registry twin that
+/// keeps the soft finding alive above it (§DF-010-stated-ceilings-are-exact.2).
+pub fn binding_hard_limit<'a>(
+    rules: &[&'a Rule],
+    severity: Severity,
+    has_hard_twin: bool,
+) -> Option<(u64, &'a Rule)> {
+    if severity != Severity::Soft || has_hard_twin {
+        return None;
+    }
+    rules
+        .iter()
+        .filter_map(|rule| rule.budget.hard.map(|hard| (hard, *rule)))
+        .min_by_key(|(hard, _)| *hard)
+}
+
+/// The commands a refusal offers in place of the one that failed: the caller's
+/// own call with `--max <N> --unit <unit>`, and the hard-severity `add`
+/// (§DF-007-instructions-at-the-error-site).
+pub struct Routes {
+    pub stated: String,
+    pub hard: String,
+}
+
+/// A soft ceiling at or above the hard limit never fires for a file still under
+/// it — the hard finding takes over there (§FS-003-exceptions.3) — so it is
+/// refused, and the refusal names the form that succeeds (§DF-010-stated-ceilings-are-exact.2).
+pub fn check_hard_limit(
+    binding: Option<(u64, &Rule)>,
+    path: &str,
+    unit: Unit,
+    base: &Base<'_>,
+    ceiling: u64,
+    step: u64,
+    routes: &Routes,
+) -> Result<(), CommandError> {
+    let Some((hard, rule)) = binding else {
+        return Ok(());
+    };
+    // A file already past the limit is a hard finding, and its soft entry is the
+    // record of debt §DF-008-hard-severity-needs-a-terminal.1 offers in place of
+    // the hard entry an agent may not write. A glob measures nothing.
+    let Some(measured) = base.measured.filter(|measured| *measured < hard) else {
+        return Ok(());
+    };
+    if ceiling < hard {
+        return Ok(());
+    }
+    // The least a ceiling may be and still silence something.
+    let floor = measured.max(rule.budget.soft.unwrap_or(0));
+    let range = format!("with {floor} <= N < {hard}");
+    Err(CommandError::Usage(match base.source {
+        BaseSource::Measured(_) => format!(
+            "{path} measures {} {unit}; without --max the ceiling is the measurement \
+             rounded up to the {step}-{} step, and that lands on {ceiling} — rule {}'s \
+             hard limit is {hard}, where a soft ceiling never fires. State the ceiling \
+             instead:\n  {}\n{range}.",
+            base.value,
+            unit.singular(),
+            rule.id,
+            routes.stated
+        ),
+        BaseSource::Max => format!(
+            "--max {} is at or above rule {} hard limit {hard}; a soft ceiling there \
+             silences nothing. Stay under it:\n  {}\n{range}, or accept the file in the \
+             hard registry:\n  {}",
+            base.value, rule.id, routes.stated, routes.hard
+        ),
+    }))
 }
 
 /// Every entry in the addressed registry whose matcher, rules, and unit overlap
@@ -354,5 +448,41 @@ mod tests {
     fn a_step_of_one_writes_the_measurement() {
         assert_eq!(quantize(488, 1), 488);
         assert_eq!(quantize(488, 0), 488);
+    }
+
+    fn measured(value: u64) -> Base<'static> {
+        Base {
+            value,
+            measured: Some(value),
+            source: BaseSource::Measured("src/model.rs"),
+        }
+    }
+
+    fn stated(value: u64) -> Base<'static> {
+        Base {
+            value,
+            measured: Some(472),
+            source: BaseSource::Max,
+        }
+    }
+
+    /// §DF-010-stated-ceilings-are-exact.1: the step rounds a measurement and
+    /// leaves a stated value alone.
+    #[test]
+    fn a_measurement_is_quantized_and_a_stated_value_is_not() {
+        assert_eq!(ceiling(&measured(472), 100), 500);
+        assert_eq!(ceiling(&stated(480), 100), 480);
+        assert_eq!(ceiling(&stated(501), 100), 501);
+    }
+
+    /// §FS-008-exception-retune.3: the suggestion is the step's next multiple,
+    /// and only when it is one the command would write.
+    #[test]
+    fn the_suggested_step_is_the_next_writable_multiple() {
+        assert_eq!(suggested_step(&stated(480), 100, None), Some(500));
+        assert_eq!(suggested_step(&stated(480), 100, Some(500)), None);
+        assert_eq!(suggested_step(&stated(480), 100, Some(600)), Some(500));
+        assert_eq!(suggested_step(&stated(500), 100, None), None);
+        assert_eq!(suggested_step(&measured(472), 100, None), None);
     }
 }

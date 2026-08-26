@@ -1,0 +1,18 @@
+args = [
+  "exception", "retune", "src/big.rs",
+  "--severity", "hard",
+  "--rule", "rust",
+  "--max", "10",
+  "--unit", "lines",
+]
+exit = 0
+# 9-line file, 4-line step: the measured form would write 12, and a step of 4
+# could only ever bring the loose 20 down to 12. The stated 10 is written as 10,
+# and the step's next multiple is named, not applied.
+stdout_equals = """
+docs/file-size-human-exceptions.toml: src/big.rs 20 -> 10 lines (next 4-line step: 12)"""
+
+[[files]]
+path = "docs/file-size-human-exceptions.toml"
+contains = ["max_accepted = { value = 10, unit = \"lines\" }"]
+excludes = ["value = 12", "value = 20"]

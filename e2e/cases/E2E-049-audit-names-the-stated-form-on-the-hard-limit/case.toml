@@ -1,0 +1,9 @@
+args = ["audit", "--stale-exceptions", "--no-color"]
+exit = 0
+# The entry accepts 20 lines of a 5-line file: loose. The 4-line step would
+# retune it to 8, the hard limit, which `retune` refuses for a soft entry — so
+# the report names the form it accepts instead.
+stdout_contains = [
+  "loose ceilings:",
+  "docs/file-size-agent-exceptions.toml: src/big.rs accepts 20 lines, now 5 — retune with --max <N> --unit lines, 5 <= N < 8",
+]

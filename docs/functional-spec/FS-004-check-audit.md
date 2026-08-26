@@ -218,11 +218,15 @@ state. It is for adoption and maintenance, not just pass/fail.
   stands more than one bump step above the file it accepts
   (§FS-003-exceptions.7), with the ceiling `fissile exception retune` would write
   in its place. Stale means the entry accepts a file that is gone; loose means it
-  accepts far more of a file that is still there.
+  accepts far more of a file that is still there. Where the step would land a
+  soft ceiling on the hard limit, `retune` refuses the measured form
+  (§DF-010-stated-ceilings-are-exact.2), so the line names the stated one and
+  the JSON record's `retune_to` is `null`.
 
   ```text
   loose ceilings:
     docs/file-size-agent-exceptions.toml: src/domain/order.rs accepts 650 lines, now 421 — retune to 500
+    docs/file-size-agent-exceptions.toml: src/domain/model.rs accepts 700 lines, now 472 — retune with --max <N> --unit lines, 472 <= N < 500
   ```
 
   An entry whose file no longer crosses the limit at all silences nothing, so

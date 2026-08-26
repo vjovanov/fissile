@@ -38,11 +38,12 @@ address matching two entries is refused as ambiguous and names both — two exac
 entries under one glob is a registry §FS-003-exceptions.4 accepts, so the fault
 is the address, not the file.
 
-With `--max` omitted, the new ceiling derives from the file's current
-measurement. With `--max`, it derives from that value. Either way the written
-number is quantized to `[exceptions.bump]` (§FS-005-exception-add.2,
-§DF-006-quantized-ceilings): the caller states a requirement, the step chooses the
-number.
+With `--max` omitted, the new ceiling is the file's current measurement
+quantized to `[exceptions.bump]` (§FS-005-exception-add.2,
+§DF-006-quantized-ceilings): the caller states no number, so the step chooses
+one. With `--max`, the ceiling is the value stated
+(§DF-010-stated-ceilings-are-exact.1), and the result names the step's next
+multiple as the round number the caller could have chosen instead.
 
 For `--match glob` there is no single file to measure, so `--max` and `--unit`
 are required, as they are for a glob `add`.
@@ -59,6 +60,11 @@ the registry diff, exactly as before (§GOAL-007-justified-exceptions).
 The new ceiling is never below the current measurement. Writing one would leave
 the entry accepting less than the file it exists to accept, standing a finding
 against an exception someone wrote on purpose.
+
+A stated ceiling moves by exactly the amount stated, so `--max` is also how a
+ceiling comes down by less than one step: the measured form can only land on a
+multiple of the step, and a file that shrank from 500 to 472 lines is still
+accepted at 500 by it.
 
 Lowering stops at the rule's limit, and a file that has fallen under that limit
 cannot be followed any further: an entry accepting less than the limit silences
@@ -85,11 +91,16 @@ guessing at a rewrite.
 docs/file-size-agent-exceptions.toml: src/order.rs 486 -> 500 lines (measured 488 lines; quantized to 100-line step)
 ```
 
-When quantization raises the value the caller supplied or the command measured,
-the result names that base value and the configured step. The ceiling therefore
-cannot look like it came from a coincidentally equal rule limit. A measured
-exact-path value is labeled `measured`; an explicit `--max` is labeled
-`requested`.
+When the step raises a measurement, the result names the measurement and the
+configured step, so the ceiling cannot look like it came from a coincidentally
+equal rule limit. A stated `--max` is written as it is; when it is not a multiple
+of the step, the result names the next multiple — the round number the measured
+form would have chosen — as a suggestion, omitted when that number is one the
+command would refuse (§4):
+
+```text
+docs/file-size-human-exceptions.toml: src/order.rs 500 -> 501 lines (next 100-line step: 600)
+```
 
 When the quantized ceiling equals the recorded one, nothing is written and the
 command says so and exits `0`. An idempotent retune is the normal outcome of an
@@ -106,8 +117,15 @@ later run.
 `retune` validates what `add` validates (§FS-005-exception-add.4): the effective
 config, both registries as they stand, and the combined document before the
 write. It fails additionally when the address matches no entry, when it matches
-more than one, and when `--max` is below the current measurement or below the
-selected rule's limit for the chosen severity.
+more than one, when `--max` is below the current measurement or below the
+selected rule's limit for the chosen severity, and when a `--severity soft`
+ceiling for a file still under the rule's hard limit would be at or above that
+limit, with no hard entry at the same address
+(§DF-010-stated-ceilings-are-exact.2). That last refusal is the
+instruction (§DF-007-instructions-at-the-error-site): whether the step produced
+the number or `--max` did, it prints this call with `--max <N> --unit <unit>`
+and the range `N` may take, and for a stated value also the hard-severity
+`exception add`.
 
 `--dry-run` prints the ceiling change and the registry it would update, and
 modifies nothing.

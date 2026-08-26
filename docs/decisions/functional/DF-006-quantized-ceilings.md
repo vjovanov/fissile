@@ -75,3 +75,7 @@ just stops the tool from billing an agent for two lines.
   than picking a ceiling by hand (§FS-002-init.4), because an agent asked for a
   ceiling picks the smallest one that clears the file — which is the behavior
   this decision exists to end.
+- Amended by §DF-010-stated-ceilings-are-exact: the step quantizes what the
+  commands measure. A ceiling stated with `--max` is written as stated, and a
+  soft ceiling that reaches the rule's hard limit for a file still under it is
+  refused.

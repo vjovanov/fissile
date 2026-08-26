@@ -228,8 +228,8 @@ registry.
 ## 7. Loose Ceilings
 
 A ceiling above the file it accepts is slack, and some slack is deliberate:
-ceilings are quantized, so a fresh entry normally accepts a little more than the
-file measures today (§DF-006-quantized-ceilings). Slack wider than one
+measured ceilings are quantized, so a fresh entry normally accepts a little more
+than the file measures today (§DF-006-quantized-ceilings). Slack wider than one
 `[exceptions.bump]` step is not deliberate. It is the ratchet slipping —
 re-granting budget that a split already paid back, to whoever edits the file
 next.
@@ -246,7 +246,9 @@ An entry is **loose** when all of the following hold:
 
 `audit --stale-exceptions` reports loose entries alongside stale ones
 (§FS-004-check-audit.2), each named by its registry and `path` and carrying the
-ceiling `fissile exception retune` would write (§FS-008-exception-retune).
+ceiling `fissile exception retune` would write (§FS-008-exception-retune) — or,
+where the step would land a soft ceiling on the hard limit, the stated form
+`retune` accepts instead (§DF-010-stated-ceilings-are-exact.2).
 
 A loose entry is a report, never a failure. `[exceptions].stale` governs stale
 entries only: a stale entry accepts a file that is no longer there, while a loose

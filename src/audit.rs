@@ -62,8 +62,12 @@ struct Loose {
     actual: u64,
     limit: u64,
     /// The ceiling `exception retune` would write, never below the limit the
-    /// entry exists to accept.
-    retune_to: u64,
+    /// entry exists to accept — `None` where the step lands a soft ceiling on
+    /// the hard limit and `retune` refuses it (§DF-010-stated-ceilings-are-exact.2).
+    retune_to: Option<u64>,
+    /// The range that stated ceiling may take when `retune_to` is `None`: the
+    /// file's size up to, excluding, the hard limit.
+    stated_range: Option<(u64, u64)>,
     /// The file no longer crosses that limit at all, so the entry silences
     /// nothing and lowering it is not the remedy — removing it is.
     silences_nothing: bool,
@@ -253,6 +257,15 @@ fn loose_entries(loaded: &Loaded, files: &[Measured<'_>]) -> Vec<Loose> {
             Severity::Hard => hit.rule.budget.hard,
         }
         .unwrap_or(0);
+        let quantized = entry::quantize(hit.actual, step).max(limit);
+        // The value `retune` would write from a measurement — unless it is one
+        // `retune` refuses (§DF-010-stated-ceilings-are-exact.2).
+        let refused = hit.rule.budget.hard.filter(|hard| {
+            exception.severity == Severity::Soft
+                && hit.actual < *hard
+                && quantized >= *hard
+                && !has_hard_twin(loaded, exception)
+        });
         loose.push(Loose {
             site: exception.site(),
             severity: exception.severity,
@@ -260,11 +273,25 @@ fn loose_entries(loaded: &Loaded, files: &[Measured<'_>]) -> Vec<Loose> {
             accepted: exception.max_value,
             actual: hit.actual,
             limit,
-            retune_to: entry::quantize(hit.actual, step).max(limit),
+            retune_to: refused.is_none().then_some(quantized),
+            stated_range: refused.map(|hard| (hit.actual.max(limit), hard)),
             silences_nothing: hit.actual < limit,
         });
     }
     loose
+}
+
+/// Whether the hard registry holds the same address, which is what keeps a soft
+/// ceiling above the hard limit legitimate (§DF-010-stated-ceilings-are-exact.2).
+fn has_hard_twin(loaded: &Loaded, exception: &Exception) -> bool {
+    let address = entry::Address {
+        severity: Severity::Hard,
+        path: &exception.path,
+        match_kind: exception.match_kind,
+        rules: &exception.rules,
+        unit: exception.max_unit,
+    };
+    !entry::matching(&loaded.registries, &address).is_empty()
 }
 
 struct Coverage {
@@ -430,7 +457,16 @@ fn render_loose_text(item: &Loose) -> String {
             item.severity, item.limit
         )
     } else {
-        format!("retune to {}", item.retune_to)
+        // `retune` refuses the measured form on the hard limit, so the line names
+        // the one it accepts and the range that keeps it under
+        // (§DF-010-stated-ceilings-are-exact.2).
+        match (item.retune_to, item.stated_range) {
+            (Some(to), _) => format!("retune to {to}"),
+            (None, Some((floor, hard))) => {
+                format!("retune with --max <N> --unit {unit}, {floor} <= N < {hard}")
+            }
+            (None, None) => unreachable!("a loose entry has a remedy"),
+        }
     };
     format!("{site} accepts {accepted} {unit}, now {actual} — {advice}")
 }
@@ -537,7 +573,7 @@ fn render_json(outcomes: &[Outcome], inventory: &Inventory) -> String {
                     ("accepted", Json::UInt(item.accepted)),
                     ("actual", Json::UInt(item.actual)),
                     ("limit", Json::UInt(item.limit)),
-                    ("retune_to", Json::UInt(item.retune_to)),
+                    ("retune_to", item.retune_to.map_or(Json::Null, Json::UInt)),
                     (
                         "silences_nothing",
                         Json::UInt(u64::from(item.silences_nothing)),

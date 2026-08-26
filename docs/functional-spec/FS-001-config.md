@@ -260,10 +260,11 @@ bytes = 4096
 tokens = 1000
 ```
 
-A ceiling `fissile` writes is the smallest multiple of the unit's step at or
-above the value being accepted, so an entry records a chosen round number rather
+A ceiling `fissile` writes from a measurement is the smallest multiple of the
+unit's step at or above it, so an entry records a chosen round number rather
 than one commit's measurement (§FS-005-exception-add.2,
-§DF-006-quantized-ceilings). The same step bounds the slack before `audit` calls
+§DF-006-quantized-ceilings); a ceiling stated with `--max` is written as stated
+(§DF-010-stated-ceilings-are-exact). The same step bounds the slack before `audit` calls
 a ceiling loose (§FS-003-exceptions.7). A step of `1` writes the measurement
 exactly. The step governs what the commands write, never what a registry may
 hold: any ceiling §FS-003-exceptions.4 already accepts stays valid.

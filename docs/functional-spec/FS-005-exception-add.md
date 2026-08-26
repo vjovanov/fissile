@@ -56,17 +56,23 @@ unit. When `--max` is present, `--unit` is required, the unit must match every
 selected rule, and the value must be at least the selected soft or hard limit for
 the chosen severity and at least the current measurement for exact-path entries.
 
-Either way, the number written as `max_accepted` is that value quantized up to
-the unit's `[exceptions.bump]` step (§FS-001-config.5): the smallest multiple of
-the step at or above it. Under the default 100-line step a 488-line file is
-accepted at 500. The entry is still a ceiling and not an open-ended waiver — the
-finding returns once the file passes the number — but the number is a decision a
-reviewer can weigh rather than a reading taken on the day the entry was written
-(§DF-006-quantized-ceilings). `fissile exception retune` moves it afterwards
-(§FS-008-exception-retune).
+Which of the two supplied the value decides what is written. A measurement is
+quantized up to the unit's `[exceptions.bump]` step (§FS-001-config.5): the
+smallest multiple of the step at or above it, so under the default 100-line step
+a 488-line file is accepted at 500. The entry is still a ceiling and not an
+open-ended waiver — the finding returns once the file passes the number — but
+the number is a decision a reviewer can weigh rather than a reading taken on the
+day the entry was written (§DF-006-quantized-ceilings). A `--max` is written as
+stated: the caller has already made that decision, and rounding it would replace
+their number with one nobody chose (§DF-010-stated-ceilings-are-exact.1).
+`fissile exception retune` moves either afterwards (§FS-008-exception-retune).
 
 For `--match glob`, `--max` and `--unit` are required because there is no single
-file measurement to infer.
+file measurement to infer — so a glob ceiling is always the number stated.
+
+For a file still under the rule's hard limit, a `--severity soft` ceiling at or
+above that limit is refused (§4): the hard finding fires there and suppresses
+the soft one, so the entry would never fire (§DF-010-stated-ceilings-are-exact.2).
 
 ## 3. Generated Entry
 
@@ -126,6 +132,15 @@ modifying files when:
   file must not assert the second;
 - `--max` would make the exception invalid or smaller than the current exact-path
   measurement;
+- the ceiling would be at or above the selected rule's hard limit for a
+  `--severity soft` entry on a file still under that limit, and the hard
+  registry holds no entry at the same address
+  (§DF-010-stated-ceilings-are-exact.2) — a file already past the limit is the
+  debt the soft route below records, and is accepted as before. Whether the step produced that
+  number or `--max` did, the refusal prints the form that succeeds — this call
+  with `--max <N> --unit <unit>` and the range `N` may take — and, for a stated
+  value, the hard-severity call as the other route
+  (§DF-007-instructions-at-the-error-site);
 - the registry contains unrelated schema errors;
 - `--severity hard` was passed, standard input is not a terminal, and `--force`
   was not passed (§DF-008-hard-severity-needs-a-terminal.1). The refusal names

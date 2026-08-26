@@ -1,0 +1,20 @@
+args = [
+  "exception", "add", "src/**",
+  "--match", "glob",
+  "--severity", "soft",
+  "--rule", "rust",
+  "--max", "150",
+  "--unit", "lines",
+  "--kind", "structural",
+  "--reason", "Structural: the generator owns this whole directory.",
+]
+exit = 0
+stdout_equals = """
+appended src/** to docs/file-size-agent-exceptions.toml (accepted up to 150 lines)"""
+
+# No [exceptions.bump] in the config, so the default 100-line step applies —
+# to measurements. A glob always takes --max, and 150 is what was stated.
+[[files]]
+path = "docs/file-size-agent-exceptions.toml"
+contains = ["max_accepted = { value = 150, unit = \"lines\" }"]
+excludes = ["value = 200"]

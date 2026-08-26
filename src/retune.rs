@@ -1,5 +1,5 @@
 //! `fissile exception retune` (§FS-008-exception-retune): move the ceiling of an
-//! entry that already exists. It locates the entry, quantizes the new value, and
+//! entry that already exists. It locates the entry, settles the new value, and
 //! rewrites that one `max_accepted` line — leaving the rest of the registry alone.
 
 use std::fs;
@@ -7,7 +7,8 @@ use std::path::PathBuf;
 
 use crate::cli::{self, CommandError, Loaded};
 use crate::entry::{self, Address, Sizing};
-use crate::exceptions::MatchKind;
+use crate::exception::shell_quote;
+use crate::exceptions::{Exception, MatchKind};
 use crate::{Severity, Unit, scan};
 
 /// Inputs to `exception retune`.
@@ -108,19 +109,33 @@ pub fn run(options: &RetuneOptions) -> Result<Run, CommandError> {
         "remove the entry rather than retuning it",
     )?;
     let step = loaded.config.exceptions.bump.step(unit);
-    let ceiling = entry::quantize(base.value, step);
-    let quantization = quantization_detail(base, ceiling, step, unit);
+    let ceiling = entry::ceiling(&base, step);
+    let twin = twin(&loaded, options, &path, unit);
+    // A soft ceiling on the hard limit is refused, and the refusal carries the
+    // stated form that succeeds (§FS-008-exception-retune.4).
+    let binding = entry::binding_hard_limit(&rules, options.severity, twin.is_some());
+    entry::check_hard_limit(
+        binding,
+        &path,
+        unit,
+        &base,
+        ceiling,
+        step,
+        &routes(options, &path, unit),
+    )?;
+    let suggested = entry::suggested_step(&base, step, binding.map(|(hard, _)| hard));
+    let detail = ceiling_detail(&base, ceiling, step, unit, suggested);
 
     // A caller about to leave two registries disagreeing should learn it here
     // rather than from a later run (§FS-008-exception-retune.3).
-    let note = twin_note(&loaded, options, &path, unit, ceiling);
+    let note = twin_note(twin, unit, ceiling);
 
     if ceiling == recorded {
         // An edit that stayed inside the step is a normal outcome, not a failure.
         return Ok(Run {
             output: with_note(
                 format!(
-                    "{}: {path} already accepts {recorded} {unit}{quantization}",
+                    "{}: {path} already accepts {recorded} {unit}{detail}",
                     registry_rel.display(),
                 ),
                 note,
@@ -135,7 +150,7 @@ pub fn run(options: &RetuneOptions) -> Result<Run, CommandError> {
     entry::validate_combined(&loaded, options.severity, &new_text)?;
 
     let change = format!(
-        "{}: {path} {recorded} -> {ceiling} {unit}{quantization}",
+        "{}: {path} {recorded} -> {ceiling} {unit}{detail}",
         registry_rel.display(),
     );
     if options.dry_run {
@@ -153,21 +168,54 @@ pub fn run(options: &RetuneOptions) -> Result<Run, CommandError> {
     })
 }
 
-/// Explain the otherwise invisible arithmetic between the value supplied or
-/// measured and the ceiling written to the registry (§FS-008-exception-retune.3).
-fn quantization_detail(base: entry::Base<'_>, ceiling: u64, step: u64, unit: Unit) -> String {
-    if ceiling == base.value {
-        return String::new();
+/// Explain the arithmetic between the value supplied or measured and the
+/// ceiling written (§FS-008-exception-retune.3): a quantized measurement names
+/// the measurement and step; a stated value names the step's next multiple.
+fn ceiling_detail(
+    base: &entry::Base<'_>,
+    ceiling: u64,
+    step: u64,
+    unit: Unit,
+    suggested: Option<u64>,
+) -> String {
+    match base.source {
+        entry::BaseSource::Measured(_) if ceiling != base.value => format!(
+            " (measured {} {unit}; quantized to {step}-{} step)",
+            base.value,
+            unit.singular()
+        ),
+        entry::BaseSource::Measured(_) => String::new(),
+        entry::BaseSource::Max => suggested
+            .map(|next| format!(" (next {step}-{} step: {next})", unit.singular()))
+            .unwrap_or_default(),
     }
-    let source = match base.source {
-        entry::BaseSource::Measured(_) => "measured",
-        entry::BaseSource::Max => "requested",
-    };
-    format!(
-        " ({source} {} {unit}; quantized to {step}-{} step)",
-        base.value,
-        unit.singular()
-    )
+}
+
+/// The commands a hard-limit refusal offers (§FS-008-exception-retune.4): this
+/// address with `--max <N> --unit <unit>`, and the hard-severity `add` for it.
+fn routes(options: &RetuneOptions, path: &str, unit: Unit) -> entry::Routes {
+    let path = shell_quote(path);
+    let mut flags = String::new();
+    if let Some(config) = &options.config_path {
+        flags.push_str(&format!(
+            " --config {}",
+            shell_quote(&config.to_string_lossy())
+        ));
+    }
+    for rule in &options.rules {
+        flags.push_str(&format!(" --rule {}", shell_quote(rule)));
+    }
+    if options.match_kind == MatchKind::Glob {
+        flags.push_str(" --match glob");
+    }
+    entry::Routes {
+        stated: format!(
+            "fissile exception retune {path} --severity soft{flags} --max <N> --unit {unit}"
+        ),
+        hard: format!(
+            "fissile exception add {path} --severity hard{flags} --kind <kind> --reason \"...\""
+        ),
+    }
 }
 
 fn with_note(head: String, note: Option<String>) -> String {
@@ -177,16 +225,13 @@ fn with_note(head: String, note: Option<String>) -> String {
     }
 }
 
-/// The same address in the registry the caller did not select. `retune` never
-/// writes there — twin consistency is a repository's policy, not the tool's — but
-/// it reports a ceiling the edit is about to contradict.
-fn twin_note(
-    loaded: &Loaded,
+/// The same address in the registry the caller did not select.
+fn twin<'a>(
+    loaded: &'a Loaded,
     options: &RetuneOptions,
     path: &str,
     unit: Unit,
-    ceiling: u64,
-) -> Option<String> {
+) -> Option<&'a Exception> {
     let address = Address {
         severity: options.severity.other(),
         path,
@@ -195,6 +240,14 @@ fn twin_note(
         unit,
     };
     let (_, twin) = entry::locate(&loaded.registries, &address).ok().flatten()?;
+    Some(twin)
+}
+
+/// `retune` never writes to the twin's registry — twin consistency is a
+/// repository's policy, not the tool's — but it reports a ceiling the edit is
+/// about to contradict.
+fn twin_note(twin: Option<&Exception>, unit: Unit, ceiling: u64) -> Option<String> {
+    let twin = twin?;
     (twin.max_value != ceiling).then(|| {
         format!(
             "note: {} accepts {} up to {} {unit}",
@@ -483,47 +536,40 @@ mod tests {
     /// §FS-008-exception-retune.3: output exposes the measurement and configured
     /// step behind a quantized ceiling instead of making it resemble a budget.
     #[test]
-    fn quantization_detail_names_a_measurement_and_step() {
-        let detail = quantization_detail(
-            entry::Base {
-                value: 436,
-                measured: Some(436),
-                source: entry::BaseSource::Measured("src/model.rs"),
-            },
-            500,
-            100,
-            Unit::Lines,
-        );
+    fn ceiling_detail_names_a_measurement_and_step() {
+        let base = entry::Base {
+            value: 436,
+            measured: Some(436),
+            source: entry::BaseSource::Measured("src/model.rs"),
+        };
+        let detail = ceiling_detail(&base, 500, 100, Unit::Lines, None);
         assert_eq!(detail, " (measured 436 lines; quantized to 100-line step)");
     }
 
+    /// §DF-010-stated-ceilings-are-exact.1: a stated value is the ceiling, and
+    /// the step is named as the round number it could have been — or not at
+    /// all, when that number is one the command would refuse.
     #[test]
-    fn quantization_detail_distinguishes_an_explicit_max() {
-        let detail = quantization_detail(
-            entry::Base {
-                value: 436,
-                measured: Some(430),
-                source: entry::BaseSource::Max,
-            },
-            500,
-            100,
-            Unit::Lines,
+    fn a_stated_value_names_the_next_step_when_there_is_one() {
+        let base = entry::Base {
+            value: 436,
+            measured: Some(430),
+            source: entry::BaseSource::Max,
+        };
+        assert_eq!(
+            ceiling_detail(&base, 436, 100, Unit::Lines, Some(500)),
+            " (next 100-line step: 500)"
         );
-        assert_eq!(detail, " (requested 436 lines; quantized to 100-line step)");
+        assert!(ceiling_detail(&base, 436, 100, Unit::Lines, None).is_empty());
     }
 
     #[test]
-    fn exact_values_need_no_quantization_detail() {
-        let detail = quantization_detail(
-            entry::Base {
-                value: 500,
-                measured: Some(500),
-                source: entry::BaseSource::Measured("src/model.rs"),
-            },
-            500,
-            100,
-            Unit::Lines,
-        );
-        assert!(detail.is_empty());
+    fn exact_values_need_no_ceiling_detail() {
+        let base = entry::Base {
+            value: 500,
+            measured: Some(500),
+            source: entry::BaseSource::Measured("src/model.rs"),
+        };
+        assert!(ceiling_detail(&base, 500, 100, Unit::Lines, None).is_empty());
     }
 }
