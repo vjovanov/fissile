@@ -70,9 +70,11 @@ their number with one nobody chose (§DF-010-stated-ceilings-are-exact.1).
 For `--match glob`, `--max` and `--unit` are required because there is no single
 file measurement to infer — so a glob ceiling is always the number stated.
 
-For a file still under the rule's hard limit, a `--severity soft` ceiling at or
-above that limit is refused (§4): the hard finding fires there and suppresses
-the soft one, so the entry would never fire (§DF-010-stated-ceilings-are-exact.2).
+A `--severity soft` ceiling at or above the rule's hard limit is refused (§4):
+the hard finding fires there and suppresses the soft one, so the entry would
+never fire (§DF-010-stated-ceilings-are-exact.2). A glob is held to the same
+rule — it measures nothing, so no class of files can claim the exemption a
+single file already past the limit has.
 
 ## 3. Generated Entry
 
@@ -133,19 +135,27 @@ modifying files when:
 - `--max` would make the exception invalid or smaller than the current exact-path
   measurement;
 - the ceiling would be at or above the selected rule's hard limit for a
-  `--severity soft` entry on a file still under that limit, and the hard
-  registry holds no entry at the same address
-  (§DF-010-stated-ceilings-are-exact.2) — a file already past the limit is the
-  debt the soft route below records, and is accepted as before. Whether the step produced that
-  number or `--max` did, the refusal prints the form that succeeds — this call
-  with `--max <N> --unit <unit>` and the range `N` may take — and, for a stated
-  value, the hard-severity call as the other route
+  `--severity soft` entry, and the hard registry holds no **deferred** entry at
+  the same address (§DF-010-stated-ceilings-are-exact.2) — only a deferred twin
+  keeps the soft finding alive above the limit (§FS-003-exceptions.3); a
+  structural one ends evaluation there, leaving the soft ceiling as dead as one
+  with no twin. A file already past the limit is the debt the soft route below
+  records, and is accepted as before; a glob measures nothing and never claims
+  that exemption. Whether the step produced that number or `--max` did, the
+  refusal prints the form that succeeds — this call with `--max <N> --unit
+  <unit>` and the range `N` may take, whose floor clears every selected rule's
+  soft limit so the next call is not refused in turn — and, for a stated value,
+  the hard-severity call carrying that same ceiling, as the other route
   (§DF-007-instructions-at-the-error-site);
 - the registry contains unrelated schema errors;
 - `--severity hard` was passed, standard input is not a terminal, and `--force`
   was not passed (§DF-008-hard-severity-needs-a-terminal.1). The refusal names
   the soft-severity route, which is the one an agent can take on its own, and
-  names `--force` for the script that legitimately adds hard entries. `--dry-run`
+  names `--force` for the script that legitimately adds hard entries. That soft
+  route carries the caller's `--max` unless the number is one a soft entry may
+  not hold, in which case it asks for `--max <N>` instead: repeating a ceiling
+  the rule above refuses would close a circle between the two refusals
+  (§DF-007-instructions-at-the-error-site). `--dry-run`
   is refused on the same terms: a dry run that printed the entry would answer
   the question the gate exists to route to a person.
 
