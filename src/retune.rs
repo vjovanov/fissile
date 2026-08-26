@@ -133,7 +133,7 @@ pub fn run(options: &RetuneOptions) -> Result<Run, CommandError> {
         &base,
         ceiling,
         step,
-        &routes(options, &path, unit),
+        &routes(options, &path, unit, ceiling),
     )?;
     let suggested = entry::suggested_step(&base, step, binding.map(|binding| binding.hard));
     let detail = ceiling_detail(&base, ceiling, step, unit, suggested);
@@ -205,7 +205,14 @@ fn ceiling_detail(
 
 /// The commands a hard-limit refusal offers (§FS-008-exception-retune.4): this
 /// address with `--max <N> --unit <unit>`, and the hard-severity `add` for it.
-fn routes(options: &RetuneOptions, path: &str, unit: Unit) -> entry::Routes {
+///
+/// The hard route carries the ceiling: without `--max` the rerun measures the
+/// file, finds it under the hard limit, and is refused for needing no exception
+/// — a second refusal from the command printed to avoid one
+/// (§DF-007-instructions-at-the-error-site). `--kind` is the caller's claim to
+/// make, so the route names both spellings rather than choosing one, since only
+/// `deferred` takes `--until` (§FS-005-exception-add.1).
+fn routes(options: &RetuneOptions, path: &str, unit: Unit, ceiling: u64) -> entry::Routes {
     let path = shell_quote(path);
     let mut flags = String::new();
     if let Some(config) = &options.config_path {
@@ -225,7 +232,9 @@ fn routes(options: &RetuneOptions, path: &str, unit: Unit) -> entry::Routes {
             "fissile exception retune {path} --severity soft{flags} --max <N> --unit {unit}"
         ),
         hard: format!(
-            "fissile exception add {path} --severity hard{flags} --kind <kind> --reason \"...\""
+            "fissile exception add {path} --severity hard{flags} --max {ceiling} --unit {unit} \
+             --kind structural --reason \"...\"\n  (or --kind deferred --until \
+             '<what retires it>')"
         ),
     }
 }
