@@ -50,6 +50,15 @@ pub fn suggested_step(base: &Base<'_>, step: u64, hard_limit: Option<u64>) -> Op
     Some(next)
 }
 
+/// Whether the address names a file already at or above the hard limit — the
+/// case §DF-010-stated-ceilings-are-exact.2 leaves alone, since that file's soft
+/// entry is the record of debt §DF-008-hard-severity-needs-a-terminal.1 offers
+/// an agent in place of the hard entry it may not write. A glob measures
+/// nothing, so no class of files can claim it.
+fn past_hard(base: &Base<'_>, hard: u64) -> bool {
+    base.measured.is_some_and(|measured| measured >= hard)
+}
+
 /// The hard limit a soft ceiling has to stay under — the lowest among the rules
 /// — or `None` when nothing binds: a hard entry, or a hard-registry twin that
 /// keeps the soft finding alive above it (§DF-010-stated-ceilings-are-exact.2).
@@ -78,6 +87,8 @@ pub struct Routes {
 /// A soft ceiling at or above the hard limit never fires for a file still under
 /// it — the hard finding takes over there (§FS-003-exceptions.3) — so it is
 /// refused, and the refusal names the form that succeeds (§DF-010-stated-ceilings-are-exact.2).
+/// A glob is held to the same rule: it measures nothing, so no member of the
+/// class can claim the exemption a single file past the limit has.
 pub fn check_hard_limit(
     binding: Option<(u64, &Rule)>,
     path: &str,
@@ -90,17 +101,17 @@ pub fn check_hard_limit(
     let Some((hard, rule)) = binding else {
         return Ok(());
     };
-    // A file already past the limit is a hard finding, and its soft entry is the
-    // record of debt §DF-008-hard-severity-needs-a-terminal.1 offers in place of
-    // the hard entry an agent may not write. A glob measures nothing.
-    let Some(measured) = base.measured.filter(|measured| *measured < hard) else {
-        return Ok(());
-    };
     if ceiling < hard {
         return Ok(());
     }
+    // A file already past the limit is a hard finding, and its soft entry is the
+    // record of debt §DF-008-hard-severity-needs-a-terminal.1 offers in place of
+    // the hard entry an agent may not write.
+    if past_hard(base, hard) {
+        return Ok(());
+    }
     // The least a ceiling may be and still silence something.
-    let floor = measured.max(rule.budget.soft.unwrap_or(0));
+    let floor = base.measured.unwrap_or(0).max(rule.budget.soft.unwrap_or(0));
     let range = format!("with {floor} <= N < {hard}");
     Err(CommandError::Usage(match base.source {
         BaseSource::Measured(_) => format!(
