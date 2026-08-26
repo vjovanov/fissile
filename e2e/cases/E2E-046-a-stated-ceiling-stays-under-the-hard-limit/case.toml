@@ -1,0 +1,17 @@
+args = [
+  "exception", "retune", "src/big.rs",
+  "--severity", "soft",
+  "--rule", "rust",
+  "--max", "6",
+  "--unit", "lines",
+]
+exit = 0
+# The next 4-line step is 8, the hard limit — a number the command would refuse
+# — so no suggestion follows the stated 6.
+stdout_equals = """
+docs/file-size-agent-exceptions.toml: src/big.rs 4 -> 6 lines"""
+
+[[files]]
+path = "docs/file-size-agent-exceptions.toml"
+contains = ["max_accepted = { value = 6, unit = \"lines\" }"]
+excludes = ["value = 8"]

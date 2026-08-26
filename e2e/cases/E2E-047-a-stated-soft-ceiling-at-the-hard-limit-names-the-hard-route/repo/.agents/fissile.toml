@@ -5,6 +5,9 @@ include = ["src"]
 exclude = []
 respect_gitignore = false
 
+[exceptions.bump]
+lines = 4
+
 [[messages]]
 id = "m"
 text = "Split the file."
@@ -13,6 +16,6 @@ text = "Split the file."
 id = "rust"
 include = ["src/**/*.rs"]
 unit = "lines"
-soft = 50
-hard = 300
+soft = 2
+hard = 8
 message = "m"

@@ -59,3 +59,9 @@ The harness drives the real `fissile` binary, so every documented behavior under
 - §E2E-038-an-unbuilt-file-is-not-a-dead-entry — a path merely absent from the working tree blocks nothing.
 - §E2E-039-the-offered-soft-route-runs — the command the hard-severity refusal prints succeeds verbatim.
 - §E2E-040-json-check-explains-its-exit-code — a JSON run that fails says why, on stderr.
+- §E2E-044-a-stated-ceiling-is-written-as-stated — a `--max` is the ceiling; the step is only named.
+- §E2E-045-retune-refuses-a-soft-ceiling-on-the-hard-limit — the measured form stops where a soft ceiling would stop firing.
+- §E2E-046-a-stated-ceiling-stays-under-the-hard-limit — the stated form is the way through the last step below the limit.
+- §E2E-047-a-stated-soft-ceiling-at-the-hard-limit-names-the-hard-route — a stated value gets the same refusal, plus the other registry.
+- §E2E-048-a-glob-ceiling-is-the-number-stated — a class-wide ceiling is the policy number chosen.
+- §E2E-049-audit-names-the-stated-form-on-the-hard-limit — audit does not recommend a retune the command would refuse.

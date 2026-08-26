@@ -1,0 +1,19 @@
+args = [
+  "exception", "retune", "src/big.rs",
+  "--severity", "soft",
+  "--rule", "rust",
+]
+exit = 2
+# 5 lines, 4-line step, hard limit 8: the step lands the soft ceiling on the
+# hard limit, where it could never fire. The refusal names the stated form with
+# the range that keeps it under the limit.
+stderr_contains = [
+  "src/big.rs measures 5 lines; without --max the ceiling is the measurement rounded up to the 4-line step, and that lands on 8 — rule rust's hard limit is 8, where a soft ceiling never fires.",
+  "fissile exception retune src/big.rs --severity soft --rule rust --max <N> --unit lines",
+  "with 5 <= N < 8.",
+]
+
+[[files]]
+path = "docs/file-size-agent-exceptions.toml"
+contains = ["max_accepted = { value = 4, unit = \"lines\" }"]
+excludes = ["value = 8"]

@@ -107,6 +107,8 @@ usage: fissile exception add <path> --severity soft|hard --rule <id>
   structural  splitting is illegal — name the constraint. Never expires.
   deferred    a boundary is missing — name it and what must exist first, and
               give --until the condition that retires the entry.
+--max states the ceiling and is written as given; without it the file's
+measurement is rounded up to the configured [exceptions.bump] step.
 
 examples:
   fissile exception add src/big.rs --severity hard --rule source --kind deferred --reason \"...\" --until \"the parser module lands\"
@@ -118,9 +120,10 @@ usage: fissile exception retune <path> --severity soft|hard --rule <id>
                  [--config <path>] [--match exact|glob] [--dry-run]
 
 Moves an existing entry's ceiling, up or down, leaving its reason, kind, and
-until untouched. The new value is the current measurement — or --max — rounded
-up to the configured [exceptions.bump] step, so a ceiling reads as a decision
-rather than as whatever the file happened to measure today.
+until untouched. Without --max the new ceiling is the file's measurement rounded
+up to the configured [exceptions.bump] step (100 lines, 4096 bytes, 1000 tokens
+by default), so it reads as a decision rather than as whatever the file happened
+to measure today. With --max the ceiling is exactly the number given.
 
 examples:
   fissile exception retune src/big.rs --severity soft --rule source

@@ -11,6 +11,7 @@ use fissile::check::{self, CheckOptions};
 use fissile::cli::Format;
 use fissile::exception::{self, AddOptions};
 use fissile::exceptions::{Kind, MatchKind};
+use fissile::retune::{self, RetuneOptions};
 use fissile::{Severity, Unit};
 
 const CONFIG: &str = r#"
@@ -593,4 +594,172 @@ fn init_dry_run_prints_the_managed_block() {
     assert!(stderr.contains("would-write"));
     assert!(!stdout.contains("would-write"));
     assert!(!root.join("AGENTS.md").exists(), "a dry run writes nothing");
+}
+
+/// §DF-010-stated-ceilings-are-exact.1: a `--max` is written as stated, where
+/// the measured form would have rounded 250 up to 300.
+#[test]
+fn a_stated_max_is_written_as_stated() {
+    let root = temp_repo();
+    let mut options = add_options(&root, Kind::Deferred, Some("the parser lands"));
+    options.max = Some(260);
+    options.unit = Some(Unit::Lines);
+    exception::run(&options).expect("exception add runs");
+
+    let registry = fs::read_to_string(root.join("docs/file-size-human-exceptions.toml")).unwrap();
+    assert!(
+        registry.contains("max_accepted = { value = 260, unit = \"lines\" }"),
+        "{registry}"
+    );
+    assert!(!registry.contains("value = 300"), "{registry}");
+}
+
+/// A 150-line file under a 100/200-line rule with the default 100-line step: the
+/// measured form lands on 200, the hard limit.
+fn soft_options_for_mid(root: &Path) -> AddOptions {
+    fs::write(root.join("src/mid.rs"), rust_lines(150)).unwrap();
+    let mut options = add_options(root, Kind::Deferred, Some("the parser lands"));
+    options.path = "src/mid.rs".to_owned();
+    options.severity = Severity::Soft;
+    options
+}
+
+/// §FS-005-exception-add.4, §DF-010-stated-ceilings-are-exact.2: a soft ceiling
+/// the step lands on the hard limit is refused, and the refusal is this call
+/// with `--max <N>` and the range that keeps it under the limit.
+#[test]
+fn a_soft_ceiling_landing_on_the_hard_limit_is_refused_with_the_stated_form() {
+    let root = temp_repo();
+    let options = soft_options_for_mid(&root);
+    let error = exception::run(&options).expect_err("refused");
+    assert_eq!(
+        error.to_string(),
+        "src/mid.rs measures 150 lines; without --max the ceiling is the measurement rounded \
+         up to the 100-line step, and that lands on 200 — rule rust's hard limit is 200, where \
+         a soft ceiling never fires. State the ceiling instead:\n  \
+         fissile exception add src/mid.rs --severity soft --rule rust --kind deferred \
+         --until 'the parser lands' --reason 'a reason' --max <N> --unit lines\n\
+         with 150 <= N < 200."
+    );
+    assert!(!root.join("docs/file-size-agent-exceptions.toml").exists());
+
+    let mut stated = options;
+    stated.max = Some(180);
+    stated.unit = Some(Unit::Lines);
+    exception::run(&stated).expect("the stated form runs");
+    let registry = fs::read_to_string(root.join("docs/file-size-agent-exceptions.toml")).unwrap();
+    assert!(
+        registry.contains("max_accepted = { value = 180, unit = \"lines\" }"),
+        "{registry}"
+    );
+}
+
+/// A stated soft ceiling at the hard limit gets the same refusal, and also the
+/// hard-severity call — with the stated `--max` carried through, since a hard
+/// entry may hold it (§FS-005-exception-add.4).
+#[test]
+fn a_stated_soft_ceiling_at_the_hard_limit_names_the_hard_route() {
+    let root = temp_repo();
+    let mut options = soft_options_for_mid(&root);
+    options.max = Some(200);
+    options.unit = Some(Unit::Lines);
+    let error = exception::run(&options).expect_err("refused");
+    assert_eq!(
+        error.to_string(),
+        "--max 200 is at or above rule rust hard limit 200; a soft ceiling there silences \
+         nothing. Stay under it:\n  \
+         fissile exception add src/mid.rs --severity soft --rule rust --kind deferred \
+         --until 'the parser lands' --reason 'a reason' --max <N> --unit lines\n\
+         with 150 <= N < 200, or accept the file in the hard registry:\n  \
+         fissile exception add src/mid.rs --severity hard --rule rust --kind deferred \
+         --until 'the parser lands' --reason 'a reason' --max 200 --unit lines"
+    );
+}
+
+/// §DF-010-stated-ceilings-are-exact.2: a soft ceiling past the hard limit for a
+/// file still under it is refused — unless the hard registry holds the address,
+/// where a deferred hard entry keeps the soft finding alive above the limit and
+/// the soft ceiling is doing work. A file already past the limit is the other
+/// case: its soft entry is the record of debt
+/// §DF-008-hard-severity-needs-a-terminal.1 offers, and runs as it always did.
+#[test]
+fn a_hard_twin_makes_a_soft_ceiling_above_the_hard_limit_legitimate() {
+    let root = temp_repo();
+    let mut soft = soft_options_for_mid(&root);
+    soft.max = Some(250);
+    soft.unit = Some(Unit::Lines);
+    let error = exception::run(&soft).expect_err("refused without a twin");
+    assert!(
+        error
+            .to_string()
+            .starts_with("--max 250 is at or above rule rust hard limit 200"),
+        "{error}"
+    );
+
+    let mut hard = soft_options_for_mid(&root);
+    hard.severity = Severity::Hard;
+    hard.max = Some(250);
+    hard.unit = Some(Unit::Lines);
+    exception::run(&hard).expect("the hard entry runs");
+    let run = exception::run(&soft).expect("the soft twin runs");
+    assert!(
+        run.output.contains("accepted up to 250 lines"),
+        "{}",
+        run.output
+    );
+
+    let mut debt = add_options(&root, Kind::Deferred, Some("the parser lands"));
+    debt.severity = Severity::Soft;
+    let run = exception::run(&debt).expect("a file past the hard limit keeps its soft route");
+    assert!(
+        run.output.contains("accepted up to 300 lines"),
+        "{}",
+        run.output
+    );
+}
+
+fn retune_options(root: &Path, max: Option<u64>) -> RetuneOptions {
+    RetuneOptions {
+        root: root.to_path_buf(),
+        config_path: None,
+        path: "src/big.rs".to_owned(),
+        severity: Severity::Hard,
+        rules: vec!["rust".to_owned()],
+        match_kind: MatchKind::Exact,
+        max,
+        unit: max.map(|_| Unit::Lines),
+        dry_run: false,
+    }
+}
+
+/// §FS-008-exception-retune.2: a stated ceiling moves by exactly what was
+/// stated, so `--max` brings a rounded ceiling back down by less than a step —
+/// and the result names the step's next multiple rather than applying it.
+#[test]
+fn retune_with_max_moves_by_less_than_a_step() {
+    let root = temp_repo();
+    exception::run(&add_options(
+        &root,
+        Kind::Deferred,
+        Some("the parser lands"),
+    ))
+    .expect("the hard entry runs at 300");
+
+    let run = retune::run(&retune_options(&root, Some(260))).expect("retune runs");
+    assert_eq!(
+        run.output,
+        "docs/file-size-human-exceptions.toml: src/big.rs 300 -> 260 lines (next 100-line step: 300)"
+    );
+    let registry = fs::read_to_string(root.join("docs/file-size-human-exceptions.toml")).unwrap();
+    assert!(
+        registry.contains("max_accepted = { value = 260, unit = \"lines\" }"),
+        "{registry}"
+    );
+
+    // The measured form is unchanged: 250 lines round back up to 300.
+    let run = retune::run(&retune_options(&root, None)).expect("retune runs");
+    assert_eq!(
+        run.output,
+        "docs/file-size-human-exceptions.toml: src/big.rs 260 -> 300 lines (measured 250 lines; quantized to 100-line step)"
+    );
 }

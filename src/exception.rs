@@ -1,5 +1,5 @@
 //! `fissile exception add` (§FS-005-exception-add): append a structured entry —
-//! measure the file or take `--max`, quantize the ceiling, pick the soft or hard
+//! measure the file or take `--max`, settle the ceiling, pick the soft or hard
 //! registry, validate against §FS-003-exceptions, then append it.
 
 use std::fs;
@@ -77,9 +77,29 @@ pub fn run(options: &AddOptions) -> Result<Run, CommandError> {
         "no exception is needed here",
     )?;
     check_conflict(&loaded, options, &path, unit, base.measured)?;
-    // The caller states a requirement; the step chooses the number written
-    // (§FS-005-exception-add.2, §DF-006-quantized-ceilings.1).
-    let max = entry::quantize(base.value, loaded.config.exceptions.bump.step(unit));
+    // A measurement is rounded to the step; a stated `--max` is the number
+    // (§FS-005-exception-add.2, §DF-010-stated-ceilings-are-exact.1).
+    let step = loaded.config.exceptions.bump.step(unit);
+    let max = entry::ceiling(&base, step);
+    // A soft ceiling on the hard limit is refused, and the refusal carries the
+    // stated form that succeeds (§FS-005-exception-add.4).
+    let binding = entry::binding_hard_limit(
+        &rules,
+        options.severity,
+        has_hard_twin(&loaded, options, &path, unit),
+    );
+    entry::check_hard_limit(
+        binding,
+        &path,
+        unit,
+        &base,
+        max,
+        step,
+        &entry::Routes {
+            stated: route(options, options.severity, RouteMax::Placeholder(unit)),
+            hard: route(options, Severity::Hard, RouteMax::AsGiven),
+        },
+    )?;
 
     let rendered = render_entry(options, &path, &until, unit, max);
     let registry_rel = entry::registry_path(&loaded, options.severity);
@@ -132,12 +152,38 @@ fn check_severity_gate(options: &AddOptions) -> Result<(), CommandError> {
     )))
 }
 
+/// Whether the hard registry holds this address. Above the hard limit a
+/// deferred hard entry keeps the soft finding alive, which is what makes a soft
+/// ceiling there legitimate (§DF-010-stated-ceilings-are-exact.2).
+fn has_hard_twin(loaded: &Loaded, options: &AddOptions, path: &str, unit: Unit) -> bool {
+    let address = Address {
+        severity: Severity::Hard,
+        path,
+        match_kind: options.match_kind,
+        rules: &options.rules,
+        unit,
+    };
+    !entry::matching(&loaded.registries, &address).is_empty()
+}
+
 /// The offered command: this call with `--severity soft`, every other flag
 /// carried through — it has to run as printed, and the `--kind` is the caller's
 /// claim, not the gate's to substitute (§FS-005-exception-add.4).
 fn soft_route(options: &AddOptions) -> String {
+    route(options, Severity::Soft, RouteMax::AsGiven)
+}
+
+/// How a route spells `--max`: the caller's own, or a placeholder for the
+/// number a hard-limit refusal asks them to state (§FS-005-exception-add.4).
+enum RouteMax {
+    AsGiven,
+    Placeholder(Unit),
+}
+
+/// This call again at `severity`, every other flag carried through.
+fn route(options: &AddOptions, severity: Severity, max: RouteMax) -> String {
     let mut command = format!("fissile exception add {}", shell_quote(&options.path));
-    command.push_str(" --severity soft");
+    command.push_str(&format!(" --severity {severity}"));
     // Without the config the rerun loads a different one, and the rules the
     // caller named stop existing: a second refusal, which is the thing this
     // route is offered to avoid (§FS-005-exception-add.4).
@@ -169,8 +215,13 @@ fn soft_route(options: &AddOptions) -> String {
         ));
     }
     command.push_str(&format!(" --reason {}", shell_quote(&options.reason)));
-    if let (Some(max), Some(unit)) = (options.max, options.unit) {
-        command.push_str(&format!(" --max {max} --unit {unit}"));
+    match max {
+        RouteMax::AsGiven => {
+            if let (Some(max), Some(unit)) = (options.max, options.unit) {
+                command.push_str(&format!(" --max {max} --unit {unit}"));
+            }
+        }
+        RouteMax::Placeholder(unit) => command.push_str(&format!(" --max <N> --unit {unit}")),
     }
     // Metadata the entry would otherwise lose on the rerun.
     for (flag, value) in [
@@ -189,7 +240,7 @@ fn soft_route(options: &AddOptions) -> String {
 /// single-quoted otherwise. A glob, a path with a space, and a reason with
 /// punctuation all have to survive being copied out of the refusal, and quoting
 /// only what needs it keeps the common line readable.
-fn shell_quote(value: &str) -> String {
+pub(crate) fn shell_quote(value: &str) -> String {
     let safe = |c: char| c.is_ascii_alphanumeric() || "-_./:,+@".contains(c);
     if !value.is_empty() && value.chars().all(safe) {
         return value.to_owned();

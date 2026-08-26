@@ -271,7 +271,9 @@ docs/file-size-human-exceptions.toml: src/orders.rs 700 -> 800 lines
 
 It picks the number the same way `add` does, so a ceiling never becomes a fossil
 of one commit, and the diff is the single line that changed. Lowering works the
-same way and is how you retire a loose ceiling `audit` reports.
+same way and is how you retire a loose ceiling `audit` reports. State the number
+yourself with `--max <N> --unit lines` and it is written as stated; the step
+rounds only what the tool measured (§DF-010-stated-ceilings-are-exact).
 
 The kind also decides what a hard entry silences. A `structural` one silences the
 soft warning for the overflow it accepts as well: splitting is illegal, so the
