@@ -121,9 +121,9 @@ usage: fissile exception retune <path> --severity soft|hard --rule <id>
 
 Moves an existing entry's ceiling, up or down, leaving its reason, kind, and
 until untouched. Without --max the new ceiling is the file's measurement rounded
-up to the configured [exceptions.bump] step (100 lines, 4096 bytes, 1000 tokens
-by default), so it reads as a decision rather than as whatever the file happened
-to measure today. With --max the ceiling is exactly the number given.
+up to the configured [exceptions.bump] step, so it reads as a decision rather
+than as whatever the file happened to measure today. With --max the ceiling is
+exactly the number given.
 
 examples:
   fissile exception retune src/big.rs --severity soft --rule source
