@@ -112,8 +112,20 @@ pub fn run(options: &RetuneOptions) -> Result<Run, CommandError> {
     let ceiling = entry::ceiling(&base, step);
     let twin = twin(&loaded, options, &path, unit);
     // A soft ceiling on the hard limit is refused, and the refusal carries the
-    // stated form that succeeds (§FS-008-exception-retune.4).
-    let binding = entry::binding_hard_limit(&rules, options.severity, twin.is_some());
+    // stated form that succeeds (§FS-008-exception-retune.4). The exemption is
+    // the same one `add` applies — a *deferred* hard twin, found by overlap — so
+    // the two commands never disagree about an entry either of them wrote.
+    let binding = entry::binding_hard_limit(
+        &rules,
+        options.severity,
+        entry::has_deferred_hard_twin(
+            &loaded.registries,
+            &path,
+            options.match_kind,
+            &options.rules,
+            unit,
+        ),
+    );
     entry::check_hard_limit(
         binding,
         &path,
