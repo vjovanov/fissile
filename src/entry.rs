@@ -557,4 +557,33 @@ mod tests {
         assert_eq!(suggested_step(&stated(500), 100, None), None);
         assert_eq!(suggested_step(&measured(472), 100, None), None);
     }
+
+    /// §FS-008-exception-retune.3: "one the command would refuse" is the whole
+    /// test, and [`check_hard_limit`] spares a file already past the limit — so
+    /// its suggestion stands even though the multiple is above the hard limit.
+    #[test]
+    fn a_file_past_the_hard_limit_keeps_its_suggestion() {
+        let past = Base {
+            value: 360,
+            measured: Some(350),
+            source: BaseSource::Max,
+        };
+        assert_eq!(suggested_step(&past, 100, Some(300)), Some(400));
+
+        // Still under the limit, so 400 is a ceiling the command refuses.
+        let under = Base {
+            value: 360,
+            measured: Some(250),
+            source: BaseSource::Max,
+        };
+        assert_eq!(suggested_step(&under, 100, Some(300)), None);
+
+        // A glob measures nothing and cannot claim the exemption.
+        let glob = Base {
+            value: 360,
+            measured: None,
+            source: BaseSource::Max,
+        };
+        assert_eq!(suggested_step(&glob, 100, Some(300)), None);
+    }
 }

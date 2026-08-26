@@ -763,3 +763,182 @@ fn retune_with_max_moves_by_less_than_a_step() {
         "docs/file-size-human-exceptions.toml: src/big.rs 260 -> 300 lines (measured 250 lines; quantized to 100-line step)"
     );
 }
+
+/// §DF-010-stated-ceilings-are-exact.2: the rule is about the ceiling, not about
+/// having measured something. A glob measures nothing, so it can never claim the
+/// exemption a file already past the limit has — and its ceiling above the hard
+/// limit is just as dead, since every member under the limit is silenced by the
+/// entry and every member above it is a hard finding.
+#[test]
+fn a_glob_soft_ceiling_on_the_hard_limit_is_refused() {
+    let root = temp_repo();
+    let mut options = add_options(&root, Kind::Structural, None);
+    options.severity = Severity::Soft;
+    options.path = "src/**".to_owned();
+    options.match_kind = MatchKind::Glob;
+    options.max = Some(900);
+    options.unit = Some(Unit::Lines);
+
+    let error =
+        exception::run(&options).expect_err("a glob ceiling above the hard limit is refused");
+    let message = error.to_string();
+    assert!(
+        message.contains("--max 900 is at or above rule rust hard limit 200"),
+        "{message}"
+    );
+    // No measurement to name, so the floor is the soft limit the entry accepts.
+    assert!(message.contains("with 100 <= N < 200"), "{message}");
+
+    // Under the hard limit the glob is written as stated (E2E-048).
+    options.max = Some(150);
+    exception::run(&options).expect("a glob ceiling under the hard limit is written");
+}
+
+/// §DF-010-stated-ceilings-are-exact.2: the exemption is a *deferred* hard twin,
+/// which keeps the soft finding alive above the limit. A structural one ends
+/// evaluation instead (§FS-003-exceptions.3), so the soft ceiling it would
+/// exempt silences exactly nothing.
+#[test]
+fn only_a_deferred_hard_twin_exempts_a_soft_ceiling() {
+    for (kind, until, exempt) in [
+        (Kind::Structural, None, false),
+        (Kind::Deferred, Some("the split lands"), true),
+    ] {
+        let root = temp_repo();
+        fs::write(root.join("src/big.rs"), rust_lines(150)).unwrap();
+
+        let mut twin = add_options(&root, kind, until);
+        twin.severity = Severity::Hard;
+        twin.max = Some(400);
+        twin.unit = Some(Unit::Lines);
+        exception::run(&twin).expect("the hard twin is written");
+
+        let mut soft = add_options(&root, Kind::Structural, None);
+        soft.severity = Severity::Soft;
+        soft.max = Some(900);
+        soft.unit = Some(Unit::Lines);
+        let outcome = exception::run(&soft);
+        assert_eq!(
+            outcome.is_ok(),
+            exempt,
+            "{kind:?} twin: expected exempt={exempt}, got {outcome:?}"
+        );
+    }
+}
+
+/// §DF-007-instructions-at-the-error-site: the range a refusal prints has to be
+/// one the next call accepts. `check_min_limit` refuses a ceiling below *any*
+/// listed rule's soft limit, so the floor is the highest of them — not the soft
+/// limit of whichever rule happens to set the hard one.
+#[test]
+fn the_offered_range_clears_every_rule_soft_limit() {
+    const TWO_RULES: &str = r#"
+fissile_config_version = 1
+[scan]
+include = ["src"]
+exclude = []
+respect_gitignore = false
+[[messages]]
+id = "m"
+text = "Split {path}."
+[[rules]]
+id = "a"
+include = ["src/**/*.rs"]
+unit = "lines"
+soft = 100
+hard = 200
+message = "m"
+[[rules]]
+id = "b"
+include = ["src/**/*.rs"]
+unit = "lines"
+soft = 180
+hard = 300
+message = "m"
+"#;
+    let root = temp_repo();
+    fs::write(root.join(".agents/fissile.toml"), TWO_RULES).unwrap();
+    fs::write(root.join("src/big.rs"), rust_lines(150)).unwrap();
+
+    let mut options = add_options(&root, Kind::Structural, None);
+    options.severity = Severity::Soft;
+    options.rules = vec!["a".to_owned(), "b".to_owned()];
+    options.max = Some(900);
+    options.unit = Some(Unit::Lines);
+
+    let message = exception::run(&options)
+        .expect_err("900 is at or above rule a's hard limit")
+        .to_string();
+    // Rule a sets the hard limit at 200 and its soft limit is 100, but a ceiling
+    // under rule b's soft limit of 180 is refused by the very next call.
+    assert!(message.contains("with 180 <= N < 200"), "{message}");
+
+    options.max = Some(180);
+    exception::run(&options).expect("the floor the refusal named is accepted");
+}
+
+/// §DF-010-stated-ceilings-are-exact.2 forbids a circle between two refusals.
+/// The hard-limit refusal offers the hard `add`; the severity gate turns that
+/// down non-interactively — and must not answer with the soft command that was
+/// just refused for carrying that same `--max`.
+#[test]
+fn the_severity_gate_does_not_hand_back_a_refused_ceiling() {
+    let root = temp_repo();
+    fs::write(root.join("src/big.rs"), rust_lines(150)).unwrap();
+
+    let mut options = add_options(&root, Kind::Structural, None);
+    options.severity = Severity::Hard;
+    options.interactive = false;
+    options.max = Some(900);
+    options.unit = Some(Unit::Lines);
+
+    let message = exception::run(&options)
+        .expect_err("a hard add is refused off a terminal")
+        .to_string();
+    assert!(message.contains("--severity soft"), "{message}");
+    assert!(
+        message.contains("--max <N> --unit lines"),
+        "the route asks for a ceiling under the hard limit: {message}"
+    );
+    assert!(
+        !message.contains("--max 900"),
+        "repeating the refused ceiling closes the circle: {message}"
+    );
+
+    // A ceiling a soft entry could actually hold is carried through unchanged.
+    options.max = Some(150);
+    let message = exception::run(&options)
+        .expect_err("a hard add is refused off a terminal")
+        .to_string();
+    assert!(message.contains("--max 150 --unit lines"), "{message}");
+}
+
+/// §FS-008-exception-retune.4: the hard route has to run as printed. Without the
+/// ceiling flags the rerun measures the file, finds it under the hard limit, and
+/// is refused for needing no exception — a second refusal from the command
+/// printed to prevent one.
+#[test]
+fn the_retune_hard_route_carries_the_ceiling() {
+    let root = temp_repo();
+    fs::write(root.join("src/big.rs"), rust_lines(150)).unwrap();
+
+    let mut seed = add_options(&root, Kind::Structural, None);
+    seed.severity = Severity::Soft;
+    seed.max = Some(150);
+    seed.unit = Some(Unit::Lines);
+    exception::run(&seed).expect("the soft entry is written");
+
+    let mut options = retune_options(&root, Some(900));
+    options.severity = Severity::Soft;
+    let message = retune::run(&options)
+        .expect_err("900 is at or above the hard limit")
+        .to_string();
+    assert!(
+        message.contains("--severity hard --rule rust --max 900 --unit lines --kind structural"),
+        "{message}"
+    );
+    assert!(
+        message.contains("--kind deferred --until '<what retires it>'"),
+        "only deferred takes --until, so the route names both spellings: {message}"
+    );
+}
