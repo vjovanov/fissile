@@ -121,6 +121,7 @@
           "actual",
           "limit",
           "retune_to",
+          "stated_range",
           "silences_nothing"
         ],
         "properties": {
@@ -162,9 +163,34 @@
             "description": "The rule limit at that severity — what the entry exists to accept, and the floor `retune_to` never drops below."
           },
           "retune_to": {
-            "type": "integer",
+            "type": [
+              "integer",
+              "null"
+            ],
             "minimum": 0,
-            "description": "The ceiling `fissile exception retune` would write, never below the limit the entry accepts."
+            "description": "The ceiling `fissile exception retune` would write, never below the limit the entry accepts. Null where the step would land a soft ceiling on the hard limit and `retune` refuses it (DF-010-stated-ceilings-are-exact.2); `stated_range` carries the remedy instead."
+          },
+          "stated_range": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "required": [
+              "min",
+              "max_excluded"
+            ],
+            "description": "The range a stated ceiling may take when `retune_to` is null: the file's current size up to, excluding, the hard limit. Null whenever `retune_to` holds a value — exactly one of the two is ever set.",
+            "properties": {
+              "min": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "max_excluded": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
           },
           "silences_nothing": {
             "type": "integer",

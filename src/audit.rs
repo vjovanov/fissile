@@ -61,16 +61,25 @@ struct Loose {
     accepted: u64,
     actual: u64,
     limit: u64,
-    /// The ceiling `exception retune` would write, never below the limit the
-    /// entry exists to accept — `None` where the step lands a soft ceiling on
-    /// the hard limit and `retune` refuses it (§DF-010-stated-ceilings-are-exact.2).
-    retune_to: Option<u64>,
-    /// The range that stated ceiling may take when `retune_to` is `None`: the
-    /// file's size up to, excluding, the hard limit.
-    stated_range: Option<(u64, u64)>,
+    /// What to do about the slack, which is one thing or the other and never
+    /// neither (§DF-010-stated-ceilings-are-exact.2).
+    remedy: Remedy,
     /// The file no longer crosses that limit at all, so the entry silences
     /// nothing and lowering it is not the remedy — removing it is.
     silences_nothing: bool,
+}
+
+/// What closes the gap between an entry's ceiling and the file under it.
+#[derive(Clone, Copy, Debug)]
+enum Remedy {
+    /// The ceiling `exception retune` would write from the measurement, never
+    /// below the limit the entry exists to accept.
+    RetuneTo(u64),
+    /// `retune` refuses the measured form here, because the step lands a soft
+    /// ceiling on the hard limit (§DF-010-stated-ceilings-are-exact.2), so the
+    /// remedy is the stated form and the range it may take: the file's size up
+    /// to, excluding, the hard limit.
+    StateWithin { floor: u64, hard: u64 },
 }
 
 pub fn run(options: &AuditOptions) -> Result<Run, CommandError> {
@@ -279,8 +288,13 @@ fn loose_entries(loaded: &Loaded, files: &[Measured<'_>]) -> Vec<Loose> {
             accepted: exception.max_value,
             actual: hit.actual,
             limit,
-            retune_to: refused.is_none().then_some(quantized),
-            stated_range: refused.map(|hard| (hit.actual.max(limit), hard)),
+            remedy: match refused {
+                Some(hard) => Remedy::StateWithin {
+                    floor: hit.actual.max(limit),
+                    hard,
+                },
+                None => Remedy::RetuneTo(quantized),
+            },
             silences_nothing: hit.actual < limit,
         });
     }
@@ -453,12 +467,11 @@ fn render_loose_text(item: &Loose) -> String {
         // `retune` refuses the measured form on the hard limit, so the line names
         // the one it accepts and the range that keeps it under
         // (§DF-010-stated-ceilings-are-exact.2).
-        match (item.retune_to, item.stated_range) {
-            (Some(to), _) => format!("retune to {to}"),
-            (None, Some((floor, hard))) => {
+        match item.remedy {
+            Remedy::RetuneTo(to) => format!("retune to {to}"),
+            Remedy::StateWithin { floor, hard } => {
                 format!("retune with --max <N> --unit {unit}, {floor} <= N < {hard}")
             }
-            (None, None) => unreachable!("a loose entry has a remedy"),
         }
     };
     format!("{site} accepts {accepted} {unit}, now {actual} — {advice}")
@@ -566,7 +579,26 @@ fn render_json(outcomes: &[Outcome], inventory: &Inventory) -> String {
                     ("accepted", Json::UInt(item.accepted)),
                     ("actual", Json::UInt(item.actual)),
                     ("limit", Json::UInt(item.limit)),
-                    ("retune_to", item.retune_to.map_or(Json::Null, Json::UInt)),
+                    (
+                        "retune_to",
+                        match item.remedy {
+                            Remedy::RetuneTo(to) => Json::UInt(to),
+                            Remedy::StateWithin { .. } => Json::Null,
+                        },
+                    ),
+                    // The remedy a `null` `retune_to` stands for, so a consumer
+                    // reading JSON has the range the text line prints rather
+                    // than an absence (§FS-004-check-audit.2).
+                    (
+                        "stated_range",
+                        match item.remedy {
+                            Remedy::RetuneTo(_) => Json::Null,
+                            Remedy::StateWithin { floor, hard } => Json::Object(vec![
+                                ("min", Json::UInt(floor)),
+                                ("max_excluded", Json::UInt(hard)),
+                            ]),
+                        },
+                    ),
                     (
                         "silences_nothing",
                         Json::UInt(u64::from(item.silences_nothing)),
