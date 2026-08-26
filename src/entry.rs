@@ -58,9 +58,7 @@ pub fn suggested_step(base: &Base<'_>, step: u64, hard_limit: Option<u64>) -> Op
 
 /// Whether the address names a file already at or above the hard limit — the
 /// case §DF-010-stated-ceilings-are-exact.2 leaves alone, since that file's soft
-/// entry is the record of debt §DF-008-hard-severity-needs-a-terminal.1 offers
-/// an agent in place of the hard entry it may not write. A glob measures
-/// nothing, so no class of files can claim it.
+/// entry records the debt instead. A glob measures nothing and never claims it.
 fn past_hard(base: &Base<'_>, hard: u64) -> bool {
     base.measured.is_some_and(|measured| measured >= hard)
 }
@@ -71,17 +69,15 @@ fn past_hard(base: &Base<'_>, hard: u64) -> bool {
 pub struct Binding<'a> {
     pub hard: u64,
     pub rule: &'a Rule,
-    /// The highest soft limit among the rules the entry lists. [`check_min_limit`]
-    /// refuses a ceiling below any of them, so a range naming a lower floor would
-    /// send the caller straight into a second refusal
-    /// (§DF-007-instructions-at-the-error-site).
+    /// The highest soft limit among the rules. [`check_min_limit`] refuses a
+    /// ceiling below any of them, so a lower floor would only earn a second
+    /// refusal (§DF-007-instructions-at-the-error-site).
     pub soft_floor: u64,
 }
 
 /// The hard limit a soft ceiling has to stay under — the lowest among the rules
-/// — or `None` when nothing binds: a hard entry, or a deferred hard-registry
-/// twin that keeps the soft finding alive above it
-/// (§DF-010-stated-ceilings-are-exact.2).
+/// — or `None` when nothing binds: a hard entry, or a deferred hard twin that
+/// keeps the soft finding alive above it (§DF-010-stated-ceilings-are-exact.2).
 pub fn binding_hard_limit<'a>(
     rules: &[&'a Rule],
     severity: Severity,
@@ -106,12 +102,12 @@ pub fn binding_hard_limit<'a>(
     })
 }
 
-/// Whether the hard registry holds a *deferred* entry for this address. Above
-/// the hard limit a deferred hard entry keeps the soft finding alive, which is
-/// what makes a soft ceiling there legitimate
-/// (§DF-010-stated-ceilings-are-exact.2). A structural one ends evaluation
-/// instead (§FS-003-exceptions.3), leaving that soft ceiling as dead as one with
-/// no twin at all — so the exemption reads the kind, not just the address.
+/// Whether the hard registry holds a *deferred* entry for this address: only
+/// that kind keeps the soft finding alive above the limit, where a structural
+/// one ends evaluation (§FS-003-exceptions.3, §DF-010-stated-ceilings-are-exact.2).
+//
+// So the exemption reads the kind, not just the address: a structural twin
+// leaves the soft ceiling as dead as one with no twin at all.
 pub fn has_deferred_hard_twin(
     registries: &Registries,
     path: &str,
@@ -142,8 +138,9 @@ pub struct Routes {
 /// A soft ceiling at or above the hard limit never fires for a file still under
 /// it — the hard finding takes over there (§FS-003-exceptions.3) — so it is
 /// refused, and the refusal names the form that succeeds (§DF-010-stated-ceilings-are-exact.2).
-/// A glob is held to the same rule: it measures nothing, so no member of the
-/// class can claim the exemption a single file past the limit has.
+//
+// A glob is held to the same rule: it measures nothing, so no member of the
+// class can claim the exemption a single file past the limit has.
 pub fn check_hard_limit(
     binding: Option<Binding<'_>>,
     path: &str,

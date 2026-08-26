@@ -169,12 +169,13 @@ fn soft_route(options: &AddOptions, max: RouteMax) -> String {
     route(options, Severity::Soft, max)
 }
 
-/// How the gate's soft route spells `--max`. A ceiling at or above a hard limit
-/// is refused for a soft entry (§DF-010-stated-ceilings-are-exact.2), and that
-/// refusal offers the hard `add` this gate just turned down — so repeating the
-/// number would close a circle between two refusals. The gate reads no registry
-/// to decide it (§DF-008-hard-severity-needs-a-terminal.1), so it asks only
-/// whether some rule's hard limit is at or under the caller's number.
+/// How the gate's soft route spells `--max`: a ceiling a soft entry may not hold
+/// is refused (§DF-010-stated-ceilings-are-exact.2), and repeating it here would
+/// close a circle between two refusals (§DF-007-instructions-at-the-error-site).
+//
+// The gate reports nothing about what the registries hold, so it reads none of
+// them to decide this — it asks only whether some rule's hard limit is at or
+// under the caller's number.
 fn gate_route_max(options: &AddOptions, rules: &[&crate::Rule], unit: Unit) -> RouteMax {
     let over_hard = options.max.is_some_and(|max| {
         rules

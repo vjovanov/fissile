@@ -113,8 +113,7 @@ pub fn run(options: &RetuneOptions) -> Result<Run, CommandError> {
     let twin = twin(&loaded, options, &path, unit);
     // A soft ceiling on the hard limit is refused, and the refusal carries the
     // stated form that succeeds (§FS-008-exception-retune.4). The exemption is
-    // the same one `add` applies — a *deferred* hard twin, found by overlap — so
-    // the two commands never disagree about an entry either of them wrote.
+    // the one `add` applies, so the two commands never disagree about an entry.
     let binding = entry::binding_hard_limit(
         &rules,
         options.severity,
@@ -204,14 +203,13 @@ fn ceiling_detail(
 }
 
 /// The commands a hard-limit refusal offers (§FS-008-exception-retune.4): this
-/// address with `--max <N> --unit <unit>`, and the hard-severity `add` for it.
-///
-/// The hard route carries the ceiling: without `--max` the rerun measures the
-/// file, finds it under the hard limit, and is refused for needing no exception
-/// — a second refusal from the command printed to avoid one
-/// (§DF-007-instructions-at-the-error-site). `--kind` is the caller's claim to
-/// make, so the route names both spellings rather than choosing one, since only
-/// `deferred` takes `--until` (§FS-005-exception-add.1).
+/// address with `--max <N> --unit <unit>`, and the hard-severity `add` carrying
+/// the ceiling, so the printed route runs as printed.
+//
+// Without --max the rerun would measure the file, find it under the hard limit,
+// and be refused for needing no exception. The kind is the caller's claim to
+// make, so both spellings are named rather than one chosen, since only the
+// deferred kind takes --until.
 fn routes(options: &RetuneOptions, path: &str, unit: Unit, ceiling: u64) -> entry::Routes {
     let path = shell_quote(path);
     let mut flags = String::new();
