@@ -75,10 +75,9 @@ enum Remedy {
     /// The ceiling `exception retune` would write from the measurement, never
     /// below the limit the entry exists to accept.
     RetuneTo(u64),
-    /// `retune` refuses the measured form here, because the step lands a soft
-    /// ceiling on the hard limit (§DF-010-stated-ceilings-are-exact.2), so the
-    /// remedy is the stated form and the range it may take: the file's size up
-    /// to, excluding, the hard limit.
+    /// The step lands a soft ceiling on the hard limit, which `retune` refuses
+    /// (§DF-010-stated-ceilings-are-exact.2), so the remedy is the stated form:
+    /// the file's size up to, excluding, that limit.
     StateWithin { floor: u64, hard: u64 },
 }
 
