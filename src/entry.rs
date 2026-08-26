@@ -59,6 +59,19 @@ fn past_hard(base: &Base<'_>, hard: u64) -> bool {
     base.measured.is_some_and(|measured| measured >= hard)
 }
 
+/// The hard limit a soft ceiling has to stay under, the rule that sets it, and
+/// the floor any replacement ceiling has to clear.
+#[derive(Clone, Copy, Debug)]
+pub struct Binding<'a> {
+    pub hard: u64,
+    pub rule: &'a Rule,
+    /// The highest soft limit among the rules the entry lists. [`check_min_limit`]
+    /// refuses a ceiling below any of them, so a range naming a lower floor would
+    /// send the caller straight into a second refusal
+    /// (§DF-007-instructions-at-the-error-site).
+    pub soft_floor: u64,
+}
+
 /// The hard limit a soft ceiling has to stay under — the lowest among the rules
 /// — or `None` when nothing binds: a hard entry, or a deferred hard-registry
 /// twin that keeps the soft finding alive above it
@@ -67,14 +80,24 @@ pub fn binding_hard_limit<'a>(
     rules: &[&'a Rule],
     severity: Severity,
     has_deferred_hard_twin: bool,
-) -> Option<(u64, &'a Rule)> {
+) -> Option<Binding<'a>> {
     if severity != Severity::Soft || has_deferred_hard_twin {
         return None;
     }
-    rules
+    let (hard, rule) = rules
         .iter()
         .filter_map(|rule| rule.budget.hard.map(|hard| (hard, *rule)))
-        .min_by_key(|(hard, _)| *hard)
+        .min_by_key(|(hard, _)| *hard)?;
+    let soft_floor = rules
+        .iter()
+        .filter_map(|rule| rule.budget.soft)
+        .max()
+        .unwrap_or(0);
+    Some(Binding {
+        hard,
+        rule,
+        soft_floor,
+    })
 }
 
 /// Whether the hard registry holds a *deferred* entry for this address. Above
@@ -116,7 +139,7 @@ pub struct Routes {
 /// A glob is held to the same rule: it measures nothing, so no member of the
 /// class can claim the exemption a single file past the limit has.
 pub fn check_hard_limit(
-    binding: Option<(u64, &Rule)>,
+    binding: Option<Binding<'_>>,
     path: &str,
     unit: Unit,
     base: &Base<'_>,
@@ -124,7 +147,12 @@ pub fn check_hard_limit(
     step: u64,
     routes: &Routes,
 ) -> Result<(), CommandError> {
-    let Some((hard, rule)) = binding else {
+    let Some(Binding {
+        hard,
+        rule,
+        soft_floor,
+    }) = binding
+    else {
         return Ok(());
     };
     if ceiling < hard {
@@ -136,8 +164,9 @@ pub fn check_hard_limit(
     if past_hard(base, hard) {
         return Ok(());
     }
-    // The least a ceiling may be and still silence something.
-    let floor = base.measured.unwrap_or(0).max(rule.budget.soft.unwrap_or(0));
+    // The least a ceiling may be and still silence something — under every rule
+    // the entry lists, not only the one that sets the hard limit.
+    let floor = base.measured.unwrap_or(0).max(soft_floor);
     let range = format!("with {floor} <= N < {hard}");
     Err(CommandError::Usage(match base.source {
         BaseSource::Measured(_) => format!(

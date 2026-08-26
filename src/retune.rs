@@ -135,7 +135,7 @@ pub fn run(options: &RetuneOptions) -> Result<Run, CommandError> {
         step,
         &routes(options, &path, unit),
     )?;
-    let suggested = entry::suggested_step(&base, step, binding.map(|(hard, _)| hard));
+    let suggested = entry::suggested_step(&base, step, binding.map(|binding| binding.hard));
     let detail = ceiling_detail(&base, ceiling, step, unit, suggested);
 
     // A caller about to leave two registries disagreeing should learn it here
