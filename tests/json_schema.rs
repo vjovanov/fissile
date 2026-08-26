@@ -295,6 +295,8 @@ fn audit_reports_a_loose_ceiling_with_the_value_to_retune_to() {
     }
     // Still over the hard limit, so the remedy is a lower ceiling, not removal.
     assert!(loose.contains("\"retune_to\":300"), "{loose}");
+    // Exactly one of the two remedies is ever set (§DF-010-stated-ceilings-are-exact.2).
+    assert!(loose.contains("\"stated_range\":null"), "{loose}");
     assert!(loose.contains("\"silences_nothing\":0"), "{loose}");
     // Both halves of the text line's advice are readable from the record: which
     // registry's limit was missed, and what that limit is.

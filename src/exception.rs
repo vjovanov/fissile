@@ -517,7 +517,10 @@ mod tests {
         // It is quoted, or `<what` is a redirection and the line will not parse.
         let mut open = deferred.clone();
         open.until = None;
-        assert!(soft_route(&open, RouteMax::AsGiven).contains("--kind deferred --until '<what retires it>'"));
+        assert!(
+            soft_route(&open, RouteMax::AsGiven)
+                .contains("--kind deferred --until '<what retires it>'")
+        );
     }
 
     /// Every flag that changes what the rerun loads or writes is carried, or the
@@ -547,7 +550,10 @@ mod tests {
         glob.severity = Severity::Hard;
         glob.path = "src/*.rs".to_owned();
         glob.match_kind = MatchKind::Glob;
-        assert!(soft_route(&glob, RouteMax::AsGiven).starts_with("fissile exception add 'src/*.rs' --severity soft"));
+        assert!(
+            soft_route(&glob, RouteMax::AsGiven)
+                .starts_with("fissile exception add 'src/*.rs' --severity soft")
+        );
 
         let mut spaced = glob.clone();
         spaced.path = "src/odd dir/big.rs".to_owned();
