@@ -44,7 +44,13 @@ pub fn suggested_step(base: &Base<'_>, step: u64, hard_limit: Option<u64>) -> Op
         return None;
     }
     let next = quantize(base.value, step);
-    if next == base.value || hard_limit.is_some_and(|hard| next >= hard) {
+    if next == base.value {
+        return None;
+    }
+    // Withheld only when the command would refuse it, which is the same
+    // predicate [`check_hard_limit`] applies: a file already past the limit is
+    // spared there, so its suggestion stands here (§FS-008-exception-retune.3).
+    if hard_limit.is_some_and(|hard| next >= hard && !past_hard(base, hard)) {
         return None;
     }
     Some(next)
