@@ -264,7 +264,13 @@ fn loose_entries(loaded: &Loaded, files: &[Measured<'_>]) -> Vec<Loose> {
             exception.severity == Severity::Soft
                 && hit.actual < *hard
                 && quantized >= *hard
-                && !has_hard_twin(loaded, exception)
+                && !entry::has_deferred_hard_twin(
+                    &loaded.registries,
+                    &exception.path,
+                    exception.match_kind,
+                    std::slice::from_ref(&hit.rule.id),
+                    exception.max_unit,
+                )
         });
         loose.push(Loose {
             site: exception.site(),
@@ -279,19 +285,6 @@ fn loose_entries(loaded: &Loaded, files: &[Measured<'_>]) -> Vec<Loose> {
         });
     }
     loose
-}
-
-/// Whether the hard registry holds the same address, which is what keeps a soft
-/// ceiling above the hard limit legitimate (§DF-010-stated-ceilings-are-exact.2).
-fn has_hard_twin(loaded: &Loaded, exception: &Exception) -> bool {
-    let address = entry::Address {
-        severity: Severity::Hard,
-        path: &exception.path,
-        match_kind: exception.match_kind,
-        rules: &exception.rules,
-        unit: exception.max_unit,
-    };
-    !entry::matching(&loaded.registries, &address).is_empty()
 }
 
 struct Coverage {
