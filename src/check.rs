@@ -214,3 +214,25 @@ fn render_json(outcomes: &[Outcome]) -> String {
         .collect();
     Json::Array(records).render()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An unmeasurable staged file still names the gate that rejects the commit
+    /// (§FS-004-check-audit.1.2).
+    #[test]
+    fn staged_measurement_error_names_the_commit_gate() {
+        let text = Text {
+            outcomes: &[],
+            stale: &[],
+            success: "ok",
+            color: false,
+            staged: true,
+            blocked: Blocked::No,
+            has_errors: true,
+        };
+
+        assert_eq!(render_text(&text), report::COMMIT_GATE_UNMEASURED);
+    }
+}
