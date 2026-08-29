@@ -215,12 +215,19 @@ The `next:` block is suppressed when every selected file already exists with the
 current managed block.
 
 The block must not promise machinery the run did not install, and must not send
-the reader to a file that is not there. Two clauses follow from that:
+the reader to a file that is not there. Three clauses follow from that:
 
-- When the pre-commit hook was skipped because the target is not a git
-  repository (§6), step 2 instead points at the repair — `Run git init &&
-  fissile init to install the pre-commit hook, or wire fissile check --staged
-  into your commit flow.`
+- Step 2 reports the hook the run leaves in `.git/hooks/pre-commit`, not the
+  flag it was given: a managed block there — this run's, or an earlier run's
+  that `--no-hook` declined to touch — earns the invitation above.
+- With no such block, step 2 says what to do instead, and `--no-hook` answers
+  first when both apply: `--no-hook skipped the managed hook; wire fissile
+  check --staged into your commit flow — a hook manager or core.hooksPath, if
+  this repo uses one.` Outside a git repository (§6) the step is the repair —
+  `Run git init && fissile init to install the pre-commit hook, or wire fissile
+  check --staged into your commit flow.` Neither asserts a hook manager: `init`
+  looks for none, and `--no-hook` is equally the flag of a reader who wants no
+  hook at all.
 - The closing `see <path> for what agents are told; the findings carry the
   rest.` line names an agent entrypoint this run handled (§3), not a fixed
   filename: automatic mode

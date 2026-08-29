@@ -10,7 +10,9 @@ Schema-version bumps are called out explicitly: `fissile_config_version`
 (§FS-001-config.1), the exception registry version (§FS-003-exceptions.1), and
 the managed block versions written by `init` (§FS-002-init.4). A bump to any of
 these is a breaking change for the consumer and must appear under **Changed**
-with a migration note.
+with a migration note. A change that breaks a library caller's source is called
+out the same way and names the release it forces: the crate publishes a `[lib]`,
+and at 0.x semver puts the minor number in charge of it.
 
 ## 1. Conventions
 
@@ -29,6 +31,31 @@ with a migration note.
   published notes back with the same script (§AR-001-ci.8).
 
 ## Unreleased
+
+### Changed
+
+- §FS-002-init.5: `init::Report` carries one `HookStatus` — `Installed`,
+  `SkippedNotGit`, `SkippedByFlag` — in place of the `hook_skipped_not_git`
+  boolean, so the hook step 2 reports is a value every path has to answer for
+  instead of a flag that can be left unset. This breaks a library caller's
+  source, so the release carrying it is 0.9.0, not 0.8.1; no config, registry,
+  or managed-block version moves, and the CLI output is unchanged apart from
+  the fix below. **Migration:** reading the field becomes `report.hook ==
+  HookStatus::SkippedNotGit`, but its inverse does not — the
+  `!report.hook_skipped_not_git` idiom meant "a hook is installed", and that
+  false branch has split in two, so the installed test is now `report.hook ==
+  HookStatus::Installed`. A caller constructing a `Report` sets `hook`.
+
+### Fixed
+
+- §FS-002-init.5, §FS-002-init.6: `fissile init --no-hook` no longer tells the
+  reader to `Commit a change to see the pre-commit hook run fissile check
+  --staged` after installing no hook. Step 2 of the `next:` block was picked
+  from a boolean that only the automatic not-a-git-repository skip ever set, so
+  the one flag whose purpose is to decline the hook fell through to the promise.
+  Step 2 now reports the hook the run leaves in `.git/hooks/pre-commit`: with
+  none there it names the flag and the wiring left to do, and a hook an earlier
+  run installed still earns the commit invitation. Resolves #13.
 
 ## 2. [0.8.0] — 2026-08-26
 
