@@ -33,6 +33,26 @@ pub fn is_git_repo(root: &Path) -> bool {
     root.join(".git").is_dir()
 }
 
+/// How `init` finds, versions, and rewrites the hook block (§FS-002-init.6).
+fn hook_block() -> Block<'static> {
+    Block {
+        begin_prefix: BEGIN_PREFIX,
+        end_prefix: END_PREFIX,
+        version: SUPPORTED_VERSION,
+        body: BLOCK,
+        // A shell file has no heading to state a version on, so the marker
+        // carries it — the shape `conda init` writes (§FS-002-init.6).
+        version_heading: None,
+    }
+}
+
+/// Whether the hook file already carries the managed block, whichever version
+/// wrote it. `--no-hook` declines to install one; it does not remove the one a
+/// previous run left, and the report has to say so (§FS-002-init.5).
+pub fn is_installed(root: &Path) -> bool {
+    fs::read_to_string(hook_path(root)).is_ok_and(|hook| hook_block().is_present(&hook))
+}
+
 /// Install or refresh the managed pre-commit hook (§FS-002-init.6). The caller
 /// has already decided that a hook should be installed.
 pub fn install(root: &Path, dry_run: bool) -> Result<Outcome, InitError> {
@@ -62,16 +82,7 @@ pub fn install(root: &Path, dry_run: bool) -> Result<Outcome, InitError> {
 /// Append, replace, or leave the managed block in an existing hook file
 /// (§FS-002-init.6), by the same splice the agent block uses (§FS-002-init.4).
 fn apply_block(existing: &str, path: &Path) -> Result<(String, Action), InitError> {
-    Block {
-        begin_prefix: BEGIN_PREFIX,
-        end_prefix: END_PREFIX,
-        version: SUPPORTED_VERSION,
-        body: BLOCK,
-        // A shell file has no heading to state a version on, so the marker
-        // carries it — the shape `conda init` writes (§FS-002-init.6).
-        version_heading: None,
-    }
-    .apply(existing, path)
+    hook_block().apply(existing, path)
 }
 
 #[cfg(unix)]
@@ -90,6 +101,17 @@ fn make_executable(_path: &Path) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A run that installs nothing still reports the gate that is there
+    /// (§FS-002-init.5), so presence is the question — not whether this build
+    /// would leave the file untouched, which a stale or newer block would not.
+    #[test]
+    fn a_managed_block_is_seen_whatever_state_it_is_in() {
+        assert!(hook_block().is_present(&format!("{SHEBANG}\n{BLOCK}\n")));
+        let newer = "#!/bin/sh\n# >>> fissile managed block (v2) >>>\nfuture\n";
+        assert!(hook_block().is_present(newer));
+        assert!(!hook_block().is_present("#!/bin/sh\nrun-other-checks\n"));
+    }
 
     #[test]
     fn appends_block_to_existing_hook() {

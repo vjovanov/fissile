@@ -37,6 +37,15 @@ impl Block<'_> {
         Ok((result, action))
     }
 
+    /// Whether the file already carries this block, at any version. `apply`
+    /// decides what to do about one; this answers only whether it is there, for
+    /// a caller that reports the block without touching it (§FS-002-init.5).
+    pub fn is_present(&self, existing: &str) -> bool {
+        existing
+            .lines()
+            .any(|line| self.is_begin(line) || self.is_own_heading(line))
+    }
+
     /// The line range the block occupies, or `None` when the file has no block.
     /// A version this build cannot write is an error, not a span to overwrite.
     fn locate(

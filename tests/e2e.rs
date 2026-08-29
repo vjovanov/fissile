@@ -6,13 +6,16 @@
 //! one executable scenario.
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
 use serde::Deserialize;
 
-/// One scenario manifest (`case.toml`).
+/// One scenario manifest (`case.toml`). Unknown keys are rejected: a misspelled
+/// key would otherwise drop the assertion it names, and a dropped assertion is a
+/// passing case that checks nothing.
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Case {
     /// Arguments passed to `fissile`.
     args: Vec<String>,
@@ -40,6 +43,15 @@ struct Case {
     /// Repo-relative paths that must exist after the run (for `init`).
     #[serde(default)]
     creates: Vec<String>,
+    /// Repo-relative paths that must *not* exist after the run: the shape of a
+    /// run that declined to write something it otherwise would have, which
+    /// `creates` cannot express (§FS-002-init.6).
+    // Each path's directory has to exist after the run. Under a directory
+    // nothing created, no path could have been written whatever the command
+    // did, so the assertion would pass for a reason the case never meant: name
+    // the shallowest path that must not appear instead.
+    #[serde(default)]
+    absent: Vec<String>,
     /// Assertions on a file's bytes after the run. Stdout says what a command
     /// claims it did; these say what it actually wrote (§FS-008-exception-retune.3).
     #[serde(default)]
@@ -60,6 +72,7 @@ struct Case {
 
 /// One post-run assertion that a path is a link, and where it goes.
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct LinkAssert {
     /// Repo-relative path within the throwaway tree.
     path: String,
@@ -70,6 +83,7 @@ struct LinkAssert {
 /// One post-run assertion about a file the command wrote. Needles are compared
 /// against the raw bytes as text, so a `\r` in a needle asserts the line ending.
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct FileAssert {
     /// Repo-relative path within the throwaway tree.
     path: String,
@@ -84,6 +98,18 @@ struct FileAssert {
 /// every platform. Paths are the only place fissile emits a backslash.
 fn separator_agnostic(text: &str) -> String {
     text.replace('\\', "/")
+}
+
+/// Whether a manifest path stays inside the throwaway tree. `work.join(path)`
+/// on an absolute one yields the absolute path itself, so `/etc/passwd` would be
+/// asserted against the host filesystem rather than against the run.
+fn is_repo_relative(relative: &str) -> bool {
+    !Path::new(relative).components().any(|component| {
+        matches!(
+            component,
+            Component::Prefix(_) | Component::RootDir | Component::ParentDir
+        )
+    })
 }
 
 fn cases_dir() -> PathBuf {
@@ -126,6 +152,20 @@ fn run_case(dir: &Path) -> Result<(), String> {
 
     if case.unix_only && !cfg!(unix) {
         return Ok(());
+    }
+
+    // Every asserted path is repo-relative by contract; one that escapes would
+    // be judged against the host filesystem instead of the run.
+    let declared = case
+        .creates
+        .iter()
+        .chain(&case.absent)
+        .chain(case.files.iter().map(|assertion| &assertion.path))
+        .chain(case.links.iter().map(|assertion| &assertion.path));
+    for relative in declared {
+        if !is_repo_relative(relative) {
+            return Err(format!("{relative} is not a repo-relative path"));
+        }
     }
 
     let work = std::env::temp_dir().join(format!(
@@ -216,6 +256,16 @@ fn run_case(dir: &Path) -> Result<(), String> {
     for relative in &case.creates {
         if !work.join(relative).exists() {
             problems.push(format!("expected {relative} to be created"));
+        }
+    }
+    for relative in &case.absent {
+        let path = work.join(relative);
+        if !path.parent().is_none_or(Path::is_dir) {
+            problems.push(format!(
+                "absent {relative}: its directory does not exist, so nothing could have written it"
+            ));
+        } else if path.exists() {
+            problems.push(format!("expected {relative} not to be written"));
         }
     }
     for assertion in &case.files {

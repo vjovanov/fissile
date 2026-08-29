@@ -102,6 +102,21 @@ pub enum HookMode {
     Never,
 }
 
+/// The hook step 2 of the `next:` block has to report (§FS-002-init.5): what a
+/// run leaves in `.git/hooks/pre-commit`, not what its flags asked for. No
+/// `Default` — the only defensible one is the variant that promises a hook.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HookStatus {
+    /// The managed block is in the hook: this run wrote, appended, or refreshed
+    /// it, it was already current, or `--no-hook` left an earlier run's in
+    /// place. Under `--dry-run`, the one the run would write (§FS-002-init.6).
+    Installed,
+    /// Automatic mode found no git repository, so there is no hook to run.
+    SkippedNotGit,
+    /// `--no-hook` declined the install and no managed block was there already.
+    SkippedByFlag,
+}
+
 /// Inputs to an `init` run (§FS-002-init.1).
 #[derive(Clone, Debug)]
 pub struct InitOptions {
@@ -181,9 +196,9 @@ pub struct Outcome {
 pub struct Report {
     pub outcomes: Vec<Outcome>,
     pub dry_run: bool,
-    /// Automatic hook install found no git repository (§FS-002-init.6); the
-    /// `next:` block must not promise a hook that was not written (§FS-002-init.5).
-    pub hook_skipped_not_git: bool,
+    /// The hook this run leaves behind (§FS-002-init.6); the `next:` block must
+    /// not promise one that is not there (§FS-002-init.5).
+    pub hook: HookStatus,
     /// Agent entrypoints this run touched, in reported order (§FS-002-init.3).
     /// The `next:` block names one of these rather than a fixed filename, so it
     /// cannot point at a file that was never written (§FS-002-init.5).
@@ -207,10 +222,10 @@ impl Report {
             ));
         }
         if self.changed_anything() {
-            let hook_step = if self.hook_skipped_not_git {
-                NEXT_HOOK_STEP_NO_GIT
-            } else {
-                NEXT_HOOK_STEP
+            let hook_step = match self.hook {
+                HookStatus::Installed => NEXT_HOOK_STEP,
+                HookStatus::SkippedNotGit => NEXT_HOOK_STEP_NO_GIT,
+                HookStatus::SkippedByFlag => NEXT_HOOK_STEP_NO_HOOK,
             };
             let mut block = format!(
                 "next:\n\
@@ -237,6 +252,11 @@ const NEXT_HOOK_STEP: &str =
     "Commit a change to see the pre-commit hook run fissile check --staged.";
 const NEXT_HOOK_STEP_NO_GIT: &str = "Run git init && fissile init to install the pre-commit hook, \
     or wire fissile check --staged into your commit flow.";
+/// The flag is the reason, so the step names it and points at the commit flow.
+/// `init` never looked for a hook manager, so it does not say the repo has one
+/// (§FS-002-init.5).
+const NEXT_HOOK_STEP_NO_HOOK: &str = "--no-hook skipped the managed hook; wire fissile check \
+    --staged into your commit flow — a hook manager or core.hooksPath, if this repo uses one.";
 
 /// A failure during `init`.
 #[derive(Debug)]
@@ -343,28 +363,32 @@ pub fn run(options: &InitOptions) -> Result<Report, InitError> {
     }
 
     // 4. Managed pre-commit hook (§FS-002-init.6). Automatic mode installs only
-    //    inside a git repo; `--hook` forces it; `--no-hook` opts out.
-    let mut hook_skipped_not_git = false;
-    match options.hook {
-        HookMode::Always if !crate::hook::is_git_repo(&options.root) => {
+    //    inside a git repo; `--hook` forces it; `--no-hook` opts out. Every arm
+    //    yields a status, so a later mode cannot inherit one it never chose.
+    let is_git_repo = crate::hook::is_git_repo(&options.root);
+    let hook = match options.hook {
+        HookMode::Always | HookMode::Auto if is_git_repo => {
+            outcomes.push(crate::hook::install(&options.root, options.dry_run)?);
+            HookStatus::Installed
+        }
+        // A guarded arm does not answer for its variant, so each mode keeps an
+        // unguarded one: `--hook` outside a repository errors instead.
+        HookMode::Always => {
             return Err(InitError::NotAGitRepo {
                 root: options.root.clone(),
             });
         }
-        HookMode::Always => {
-            outcomes.push(crate::hook::install(&options.root, options.dry_run)?);
-        }
-        HookMode::Auto if crate::hook::is_git_repo(&options.root) => {
-            outcomes.push(crate::hook::install(&options.root, options.dry_run)?);
-        }
-        HookMode::Auto => hook_skipped_not_git = true,
-        HookMode::Never => {}
-    }
+        HookMode::Auto => HookStatus::SkippedNotGit,
+        // The flag declines the install; it does not remove the hook an earlier
+        // run installed, and step 2 reports the file (§FS-002-init.5).
+        HookMode::Never if crate::hook::is_installed(&options.root) => HookStatus::Installed,
+        HookMode::Never => HookStatus::SkippedByFlag,
+    };
 
     Ok(Report {
         outcomes,
         dry_run: options.dry_run,
-        hook_skipped_not_git,
+        hook,
         entrypoints,
     })
 }
@@ -562,9 +586,57 @@ mod tests {
                 action: Action::Wrote,
             }],
             dry_run: false,
-            hook_skipped_not_git: false,
+            hook: HookStatus::Installed,
             entrypoints: entrypoints.iter().map(PathBuf::from).collect(),
         }
+    }
+
+    fn report_with_hook(hook: HookStatus) -> Report {
+        Report {
+            hook,
+            ..report_for(&["AGENTS.md"])
+        }
+    }
+
+    /// Step 2 reports the hook the run leaves in place, so it never promises
+    /// machinery that is not there (§FS-002-init.5). `--no-hook` is the path
+    /// that used to fall through to the promise (§FS-002-init.6).
+    #[test]
+    fn next_block_hook_step_matches_what_the_run_installed() {
+        let installed = report_with_hook(HookStatus::Installed).render();
+        assert!(installed.contains(NEXT_HOOK_STEP));
+
+        let no_git = report_with_hook(HookStatus::SkippedNotGit).render();
+        assert!(no_git.contains(NEXT_HOOK_STEP_NO_GIT));
+        assert!(!no_git.contains(NEXT_HOOK_STEP));
+
+        let no_hook = report_with_hook(HookStatus::SkippedByFlag).render();
+        assert!(no_hook.contains(NEXT_HOOK_STEP_NO_HOOK));
+        assert!(!no_hook.contains(NEXT_HOOK_STEP));
+    }
+
+    /// `--no-hook` declines the install; it does not remove the hook an earlier
+    /// run installed, so step 2 still reports the gate that is on disk
+    /// (§FS-002-init.5).
+    #[test]
+    fn no_hook_does_not_deny_a_hook_that_is_already_installed() {
+        let root = std::env::temp_dir().join(format!("fissile-no-hook-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join(".git/hooks")).expect("a repo to install into");
+
+        let mut options = InitOptions::new(&root);
+        options.agents.agents_md = true;
+        assert_eq!(
+            run(&options).expect("first run").hook,
+            HookStatus::Installed
+        );
+
+        options.hook = HookMode::Never;
+        options.exceptions = true;
+        let declined = run(&options).expect("second run");
+        assert_eq!(declined.hook, HookStatus::Installed);
+        assert!(declined.render().contains(NEXT_HOOK_STEP));
+        let _ = fs::remove_dir_all(&root);
     }
 
     /// The closing line names an entrypoint the run handled, so it cannot send

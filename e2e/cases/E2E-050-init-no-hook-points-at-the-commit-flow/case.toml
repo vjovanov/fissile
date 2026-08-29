@@ -1,0 +1,11 @@
+# A git repository, so only `--no-hook` keeps the hook out (§FS-002-init.6); the
+# next: block has to stay true about that (§FS-002-init.5).
+args = ["init", "--agents-md", "--no-hook"]
+exit = 0
+git = true
+stderr_contains = [
+  "next:",
+  "--no-hook skipped the managed hook; wire fissile check --staged into your commit flow — a hook manager or core.hooksPath, if this repo uses one.",
+]
+creates = [".agents/fissile.toml", "AGENTS.md"]
+absent = [".git/hooks/pre-commit"]

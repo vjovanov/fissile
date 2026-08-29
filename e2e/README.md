@@ -8,7 +8,7 @@ A case directory holds:
 
 - `E2E-NNN-slug.md` — the scenario declaration, citing the behavior it verifies;
 - `case.toml` — the manifest: `args`, expected `exit`, optional `git`, and
-  stdout/stderr/`creates` assertions, plus `[[files]]` blocks asserting the bytes
+  stdout/stderr/`creates`/`absent` assertions, plus `[[files]]` blocks asserting the bytes
   a command left behind — `contains` and `excludes` needles against one path,
   which is how a scenario checks a rewrite rather than the claim about it;
 - `repo/` — the working tree copied into a throwaway directory before the run
@@ -65,3 +65,4 @@ The harness drives the real `fissile` binary, so every documented behavior under
 - §E2E-047-a-stated-soft-ceiling-at-the-hard-limit-names-the-hard-route — a stated value gets the same refusal, plus the other registry.
 - §E2E-048-a-glob-ceiling-is-the-number-stated — a class-wide ceiling is the policy number chosen.
 - §E2E-049-audit-names-the-stated-form-on-the-hard-limit — audit does not recommend a retune the command would refuse.
+- §E2E-050-init-no-hook-points-at-the-commit-flow — a declined hook sends the reader to their own commit flow.
