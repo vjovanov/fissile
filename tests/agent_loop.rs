@@ -32,11 +32,11 @@ message = \"split-source\"
 
 /// The block header §GOAL-006.2 fixes so an agent can match without parsing
 /// prose: `<severity>: <n> files over the <soft>-<unit> budget [rule: <name>,
-/// message: <id>]`.
+/// message: <id>]`; a line finding names its counting basis and budget.
 const SOFT_HEADER: &str = "soft: 1 file over the 2-line budget [rule: rust, message: split-source]";
 
-/// The per-file line inside that block: `<path>: <actual> <unit>`, indented four.
-const SOFT_FILE: &str = "    src/grew.rs: 5 lines";
+/// The per-file line inside that block: `<path>: <actual> <basis> (budget <limit>)`.
+const SOFT_FILE: &str = "    src/grew.rs: 5 non-blank lines (budget 2)";
 
 fn work_dir() -> PathBuf {
     let dir = std::env::temp_dir().join(format!("fissile-agent-loop-{}", std::process::id()));

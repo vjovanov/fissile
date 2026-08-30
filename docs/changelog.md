@@ -44,10 +44,13 @@ and at 0.x semver puts the minor number in charge of it.
   HookStatus::SkippedNotGit`, but its inverse does not — the
   `!report.hook_skipped_not_git` idiom meant "a hook is installed", and that
   false branch has split in two, so the installed test is now `report.hook ==
-  HookStatus::Installed`. A caller constructing a `Report` sets `hook`.
+  HookStatus::Installed`. A caller constructing a `Report` sets `hook`. (PR #35)
 
 ### Fixed
 
+- §GOAL-006-graded-limits.1, §GOAL-006-graded-limits.2,
+  §FS-004-check-audit.1: budget findings now fire strictly above their limits
+  and line findings name the counting basis and budget (PR #37)
 - §FS-002-init.5, §FS-002-init.6: `fissile init --no-hook` no longer tells the
   reader to `Commit a change to see the pre-commit hook run fissile check
   --staged` after installing no hook. Step 2 of the `next:` block was picked
@@ -55,7 +58,7 @@ and at 0.x semver puts the minor number in charge of it.
   the one flag whose purpose is to decline the hook fell through to the promise.
   Step 2 now reports the hook the run leaves in `.git/hooks/pre-commit`: with
   none there it names the flag and the wiring left to do, and a hook an earlier
-  run installed still earns the commit invitation. Resolves #13.
+  run installed still earns the commit invitation. Resolves #13. (PR #35)
 
 ## 2. [0.8.0] — 2026-08-26
 

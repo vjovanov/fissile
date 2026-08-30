@@ -13,16 +13,16 @@ fn reports_hard_overflow_and_suppresses_soft_for_same_rule() {
     )])
     .expect("valid checker");
 
-    let file = measure_text("src/lib.rs", "a\nb\nc\n");
+    let file = measure_text("src/lib.rs", "a\nb\nc\nd\n");
     let overflows = checker.check(&file).expect("check succeeds");
 
     assert_eq!(overflows.len(), 1);
     assert_eq!(overflows[0].severity, Severity::Hard);
-    assert_eq!(overflows[0].actual, 3);
+    assert_eq!(overflows[0].actual, 4);
     assert_eq!(overflows[0].limit, 3);
     assert_eq!(
         overflows[0].finding_line(),
-        "src/lib.rs: 3 lines > 3 lines [hard, rule: rust, message: split-rust]"
+        "src/lib.rs: 4 lines > 3 lines [hard, rule: rust, message: split-rust]"
     );
 }
 
@@ -84,6 +84,35 @@ fn token_rules_require_token_measurements() {
         error.to_string(),
         "missing tokens measurement for README.md under rule tokens"
     );
+}
+
+/// §GOAL-006-graded-limits.1: both limit tiers accept equality and begin at
+/// the first measurement above their stated boundary.
+#[test]
+fn soft_and_hard_limits_are_strictly_above() {
+    let checker = Checker::new(vec![Rule::new(
+        "rust",
+        Selector::All,
+        Budget::new(Unit::Lines, Some(2), Some(4)),
+        MessageTemplate::new("m", "Split it."),
+    )])
+    .expect("valid checker");
+
+    for (actual, expected) in [
+        (1, None),
+        (2, None),
+        (3, Some(Severity::Soft)),
+        (4, Some(Severity::Soft)),
+        (5, Some(Severity::Hard)),
+    ] {
+        let file = measure_text("src/file.rs", &"line\n".repeat(actual));
+        let overflows = checker.check(&file).expect("check succeeds");
+        assert_eq!(
+            overflows.first().map(|overflow| overflow.severity),
+            expected,
+            "unexpected finding at actual={actual}"
+        );
+    }
 }
 
 #[test]
@@ -225,7 +254,7 @@ fn line_policy_excludes_blanks_and_whole_line_comments() {
     let blanks_count = Rule::new(
         "raw",
         Selector::Extension("rs".to_owned()),
-        Budget::new(Unit::Lines, Some(6), None),
+        Budget::new(Unit::Lines, Some(5), None),
         MessageTemplate::new("m", "{actual}"),
     )
     .with_line_policy(true, true);
@@ -238,7 +267,7 @@ fn line_policy_excludes_blanks_and_whole_line_comments() {
     let code_only = Rule::new(
         "code-only",
         Selector::Extension("rs".to_owned()),
-        Budget::new(Unit::Lines, Some(2), None),
+        Budget::new(Unit::Lines, Some(1), None),
         MessageTemplate::new("m", "{actual}"),
     )
     .with_line_policy(false, false);
@@ -288,13 +317,13 @@ fn each_severity_renders_its_own_guidance() {
     .expect("valid checker");
 
     let soft = checker
-        .check(&measure_text("src/soft.rs", "a\nb\n"))
+        .check(&measure_text("src/soft.rs", "a\nb\nc\n"))
         .expect("check succeeds");
     assert_eq!(soft[0].message.id, "should-split");
     assert_eq!(soft[0].message.text, "Should split when you are next here.");
 
     let hard = checker
-        .check(&measure_text("src/hard.rs", "a\nb\nc\n"))
+        .check(&measure_text("src/hard.rs", "a\nb\nc\nd\ne\n"))
         .expect("check succeeds");
     assert_eq!(hard[0].message.id, "must-split");
     assert_eq!(hard[0].message.text, "Must split; ask a human if unsure.");

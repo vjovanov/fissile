@@ -231,9 +231,9 @@ fn measure_records_match_the_published_schema() {
     assert_eq!(sorted(&keys), sorted(&expected));
 
     // 250 lines against a 200-line hard limit: negative headroom past the
-    // highest threshold, no second field to disambiguate. -51, not -50: the
-    // limit fires at 200, so 199 is the last line that clears it.
-    assert!(run.output.contains("\"headroom\":-51"), "{}", run.output);
+    // highest threshold. -50: equality is accepted, so 200 is the last line
+    // that clears it.
+    assert!(run.output.contains("\"headroom\":-50"), "{}", run.output);
     assert!(run.output.contains("\"headroom_to\":\"hard\""));
 
     let schema = fs::read_to_string(schema_dir().join("measure.schema.json")).unwrap();

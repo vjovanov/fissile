@@ -5,7 +5,7 @@
 use super::*;
 use crate::config::Config;
 use crate::exceptions::RegistrySource;
-use crate::{RenderedMessage, Unit};
+use crate::{Budget, MessageTemplate, RenderedMessage, Rule, Selector, Unit};
 
 const HARD_REGISTRY: &str = "docs/file-size-human-exceptions.toml";
 
@@ -122,6 +122,16 @@ fn reported(path: &str, rule: &str, severity: Severity, actual: u64, text: &str)
     })
 }
 
+fn context(outcome: &Outcome, basis: &'static str) -> FindingContext {
+    let overflow = outcome.overflow();
+    FindingContext {
+        path: overflow.path.clone(),
+        rule_id: overflow.rule_id.clone(),
+        unit: overflow.unit,
+        line_basis: Some(basis),
+    }
+}
+
 #[test]
 fn files_sharing_guidance_are_listed_under_one_copy_of_it() {
     let outcomes = [
@@ -136,17 +146,21 @@ fn files_sharing_guidance_are_listed_under_one_copy_of_it() {
         reported("src/tax.rs", "source", Severity::Soft, 502, "Should split."),
     ];
 
-    let blocks = finding_blocks(&outcomes, false);
+    let contexts: Vec<_> = outcomes
+        .iter()
+        .map(|outcome| context(outcome, "non-blank lines"))
+        .collect();
+    let blocks = finding_blocks_with_context(&outcomes, false, &contexts);
 
     // Hard first, and the soft guidance is written once for both its files.
     assert_eq!(
         blocks,
         vec![
             "hard: 1 file over the 550-line budget [rule: source, message: hard-guidance]\n  \
-             Must split.\n    src/big.rs: 620 lines"
+             Must split.\n    src/big.rs: 620 non-blank lines (budget 550)"
                 .to_owned(),
             "soft: 2 files over the 350-line budget [rule: source, message: soft-guidance]\n  \
-             Should split.\n    src/tax.rs: 502 lines\n    src/util.rs: 410 lines"
+             Should split.\n    src/tax.rs: 502 non-blank lines (budget 350)\n    src/util.rs: 410 non-blank lines (budget 350)"
                 .to_owned(),
         ]
     );
@@ -180,11 +194,15 @@ fn per_file_guidance_does_not_collapse() {
         reported("src/b.rs", "source", Severity::Soft, 380, "Split src/b.rs."),
     ];
 
-    let blocks = finding_blocks(&outcomes, false);
+    let contexts: Vec<_> = outcomes
+        .iter()
+        .map(|outcome| context(outcome, "non-blank lines"))
+        .collect();
+    let blocks = finding_blocks_with_context(&outcomes, false, &contexts);
 
     assert_eq!(blocks.len(), 2);
-    assert!(blocks[0].ends_with("Split src/a.rs.\n    src/a.rs: 400 lines"));
-    assert!(blocks[1].ends_with("Split src/b.rs.\n    src/b.rs: 380 lines"));
+    assert!(blocks[0].ends_with("Split src/a.rs.\n    src/a.rs: 400 non-blank lines (budget 350)"));
+    assert!(blocks[1].ends_with("Split src/b.rs.\n    src/b.rs: 380 non-blank lines (budget 350)"));
 }
 
 #[test]
@@ -193,7 +211,11 @@ fn guidance_wraps_at_a_fixed_width() {
                 that already exists, rather than cutting the file at the line count.";
     let outcomes = [reported("src/a.rs", "source", Severity::Soft, 400, long)];
 
-    let block = finding_blocks(&outcomes, false).remove(0);
+    let contexts: Vec<_> = outcomes
+        .iter()
+        .map(|outcome| context(outcome, "non-blank lines"))
+        .collect();
+    let block = finding_blocks_with_context(&outcomes, false, &contexts).remove(0);
     let guidance: Vec<&str> = block
         .lines()
         .filter(|line| line.starts_with("  ") && !line.starts_with("    "))
@@ -222,9 +244,96 @@ fn newlines_in_a_message_are_kept() {
         "Should split.\nfissile exception add <path> --severity soft --rule source",
     )];
 
-    let block = finding_blocks(&outcomes, false).remove(0);
+    let contexts: Vec<_> = outcomes
+        .iter()
+        .map(|outcome| context(outcome, "non-blank lines"))
+        .collect();
+    let block = finding_blocks_with_context(&outcomes, false, &contexts).remove(0);
 
     assert!(block.contains(
         "\n  Should split.\n  fissile exception add <path> --severity soft --rule source\n"
     ));
+}
+
+/// §FS-001-config.3.1, §FS-004-check-audit.1: each UTF-8 line policy is named
+/// in the per-file detail, with the crossed limit carried beside the count.
+#[test]
+fn line_details_name_each_counting_policy() {
+    for ((count_blank, count_comment), expected, actual) in [
+        ((true, true), "physical lines", 4),
+        ((false, true), "non-blank lines", 3),
+        ((true, false), "non-comment lines", 3),
+        ((false, false), "non-blank, non-comment lines", 2),
+    ] {
+        let rule = Rule::new(
+            "source",
+            Selector::All,
+            Budget::new(Unit::Lines, Some(1), None),
+            MessageTemplate::new("m", "Split it."),
+        )
+        .with_line_policy(count_blank, count_comment);
+        let checker = Checker::new(vec![rule]).expect("valid checker");
+        let file = crate::measure_text("src/policy.rs", "a\n\n// comment\nb\n");
+        let hits = checker.evaluate(&file).expect("evaluation succeeds");
+        let outcomes =
+            evaluate_hits(&Registries::default(), &file, &hits).expect("reporting succeeds");
+        let contexts = contexts_for_file(&file, &hits, true);
+        let block = finding_blocks_with_context(&outcomes, false, &contexts).remove(0);
+
+        assert!(
+            block.contains(&format!("src/policy.rs: {actual} {expected} (budget 1)")),
+            "wrong detail for ({count_blank}, {count_comment}): {block}"
+        );
+    }
+}
+
+/// §FS-001-config.3.1: the raw-byte fallback is described as physical lines,
+/// not as a UTF-8 policy that was never applied.
+#[test]
+fn non_utf8_line_details_name_physical_lines() {
+    let rule = Rule::new(
+        "source",
+        Selector::All,
+        Budget::new(Unit::Lines, Some(2), None),
+        MessageTemplate::new("m", "Split it."),
+    )
+    .with_line_policy(false, false);
+    let checker = Checker::new(vec![rule]).expect("valid checker");
+    let file = FileMeasurement::new("src/binary.rs", 4).with_lines(3);
+    let hits = checker.evaluate(&file).expect("evaluation succeeds");
+    let outcomes = evaluate_hits(&Registries::default(), &file, &hits).expect("reporting succeeds");
+    let contexts = contexts_for_file(&file, &hits, false);
+    let block = finding_blocks_with_context(&outcomes, false, &contexts).remove(0);
+
+    assert!(block.contains("src/binary.rs: 3 physical lines (budget 2)"));
+}
+
+/// §FS-004-check-audit.1: non-line units retain their historical detail shape.
+#[test]
+fn byte_and_token_details_keep_their_unit_shape() {
+    for (unit, file) in [
+        (Unit::Bytes, FileMeasurement::new("src/data.bin", 3)),
+        (
+            Unit::Tokens,
+            FileMeasurement::new("src/data.txt", 3).with_tokens(3),
+        ),
+    ] {
+        let rule = Rule::new(
+            "size",
+            Selector::All,
+            Budget::new(unit, Some(2), None),
+            MessageTemplate::new("m", "Split it."),
+        );
+        let checker = Checker::new(vec![rule]).expect("valid checker");
+        let hits = checker.evaluate(&file).expect("evaluation succeeds");
+        let outcomes =
+            evaluate_hits(&Registries::default(), &file, &hits).expect("reporting succeeds");
+        let contexts = contexts_for_file(&file, &hits, true);
+        let block = finding_blocks_with_context(&outcomes, false, &contexts).remove(0);
+
+        assert!(
+            block.ends_with(&format!("    {}: 3 {}", file.path.display(), unit)),
+            "wrong {unit} detail: {block}"
+        );
+    }
 }

@@ -7,7 +7,9 @@ use std::fmt;
 
 use crate::exceptions::{Exception, ExceptionError, Kind, Registries, Verdict};
 use crate::json::Json;
-use crate::{Checker, FileMeasurement, FissileError, Overflow, RuleHit, Severity, render_overflow};
+use crate::{
+    Checker, FileMeasurement, FissileError, Overflow, RuleHit, Severity, Unit, render_overflow,
+};
 
 /// What evaluating one `(file, rule, severity)` produced.
 #[derive(Clone, Debug)]
@@ -93,7 +95,7 @@ pub fn evaluate_hits(
         // Hard overflow: a standing hard finding suppresses the soft one
         // (§GOAL-006-graded-limits). A silenced hard leaves the soft finding to
         // the accepting entry's kind (§FS-003-exceptions.3).
-        if let Some(hard) = rule.budget.hard.filter(|hard| actual >= *hard) {
+        if let Some(hard) = rule.budget.hard.filter(|hard| actual > *hard) {
             match registries.verdict(Severity::Hard, &path, &rule.id, unit, actual)? {
                 Verdict::None | Verdict::Exceeded(_) => {
                     outcomes.push(Outcome::Reported(render_overflow(
@@ -120,7 +122,7 @@ pub fn evaluate_hits(
             }
         }
 
-        if let Some(soft) = rule.budget.soft.filter(|soft| actual >= *soft) {
+        if let Some(soft) = rule.budget.soft.filter(|soft| actual > *soft) {
             match registries.verdict(Severity::Soft, &path, &rule.id, unit, actual)? {
                 Verdict::None | Verdict::Exceeded(_) => outcomes.push(Outcome::Reported(
                     render_overflow(file, rule, Severity::Soft, actual, soft),
@@ -165,6 +167,50 @@ pub fn paint(color: bool, code: &str, text: &str) -> String {
 /// rendered guidance)`, hard first, files largest first, and shared guidance
 /// written once under a severity-tinted header (§FS-004-check-audit.1).
 pub fn finding_blocks(outcomes: &[Outcome], color: bool) -> Vec<String> {
+    finding_blocks_with_context(outcomes, color, &[])
+}
+
+/// The command-only context needed to explain a line measurement without
+/// adding fields to the public [`Overflow`] or changing the public renderer's
+/// signature.
+pub(crate) struct FindingContext {
+    path: std::path::PathBuf,
+    rule_id: String,
+    unit: Unit,
+    line_basis: Option<&'static str>,
+}
+
+/// Build rendering context from the effective rule hits for one measured file.
+/// `utf8 = false` selects the raw-line fallback regardless of configured flags.
+pub(crate) fn contexts_for_file(
+    file: &FileMeasurement,
+    hits: &[RuleHit<'_>],
+    utf8: bool,
+) -> Vec<FindingContext> {
+    hits.iter()
+        .map(|hit| FindingContext {
+            path: file.path.clone(),
+            rule_id: hit.rule.id.clone(),
+            unit: hit.rule.budget.unit,
+            line_basis: (hit.rule.budget.unit == Unit::Lines).then(|| {
+                if utf8 {
+                    line_basis(hit.rule.count_blank_lines, hit.rule.count_comment_lines)
+                } else {
+                    "physical lines"
+                }
+            }),
+        })
+        .collect()
+}
+
+/// Render command findings with the line-counting context carried alongside
+/// the public outcomes. Byte and token details deliberately keep their compact
+/// historical spelling.
+pub(crate) fn finding_blocks_with_context(
+    outcomes: &[Outcome],
+    color: bool,
+    contexts: &[FindingContext],
+) -> Vec<String> {
     let mut groups: Vec<Group<'_>> = Vec::new();
 
     for overflow in outcomes
@@ -172,11 +218,17 @@ pub fn finding_blocks(outcomes: &[Outcome], color: bool) -> Vec<String> {
         .filter(|outcome| outcome.is_reported())
         .map(Outcome::overflow)
     {
-        match groups.iter_mut().find(|group| group.accepts(overflow)) {
-            Some(group) => group.overflows.push(overflow),
+        let context = contexts.iter().find(|context| {
+            context.path == overflow.path
+                && context.rule_id == overflow.rule_id
+                && context.unit == overflow.unit
+        });
+        let finding = Finding { overflow, context };
+        match groups.iter_mut().find(|group| group.accepts(&finding)) {
+            Some(group) => group.overflows.push(finding),
             None => groups.push(Group {
-                head: overflow,
-                overflows: vec![overflow],
+                head: finding,
+                overflows: vec![finding],
             }),
         }
     }
@@ -186,13 +238,23 @@ pub fn finding_blocks(outcomes: &[Outcome], color: bool) -> Vec<String> {
         // Worst first: the file that most needs splitting leads its block.
         group.overflows.sort_by(|left, right| {
             right
+                .overflow
                 .actual
-                .cmp(&left.actual)
-                .then(left.path.cmp(&right.path))
+                .cmp(&left.overflow.actual)
+                .then(left.overflow.path.cmp(&right.overflow.path))
         });
     }
 
     groups.iter().map(|group| group.render(color)).collect()
+}
+
+fn line_basis(count_blank_lines: bool, count_comment_lines: bool) -> &'static str {
+    match (count_blank_lines, count_comment_lines) {
+        (true, true) => "physical lines",
+        (false, true) => "non-blank lines",
+        (true, false) => "non-comment lines",
+        (false, false) => "non-blank, non-comment lines",
+    }
 }
 
 /// The one line a run that reported something adds, naming the number no other
@@ -274,27 +336,37 @@ const STALE_GUIDANCE: &str = "The file moved or was deleted, so the entry silenc
 
 /// The findings that share a severity, a rule, and one rendered guidance string.
 struct Group<'a> {
-    head: &'a Overflow,
-    overflows: Vec<&'a Overflow>,
+    head: Finding<'a>,
+    overflows: Vec<Finding<'a>>,
+}
+
+#[derive(Clone, Copy)]
+struct Finding<'a> {
+    overflow: &'a Overflow,
+    context: Option<&'a FindingContext>,
 }
 
 impl<'a> Group<'a> {
     /// Guidance is compared as rendered text, not by message ID: a template that
     /// interpolates `{path}` says something different about each file, so those
     /// findings must not be collapsed under one line (§FS-001-config.4).
-    fn accepts(&self, overflow: &Overflow) -> bool {
-        self.head.severity == overflow.severity
-            && self.head.rule_id == overflow.rule_id
-            && self.head.message.text == overflow.message.text
+    fn accepts(&self, finding: &Finding<'a>) -> bool {
+        self.head.overflow.severity == finding.overflow.severity
+            && self.head.overflow.rule_id == finding.overflow.rule_id
+            && self.head.overflow.message.text == finding.overflow.message.text
     }
 
     /// Hard before soft, then by rule ID, then by message ID.
     fn order(&self) -> (u8, &str, &str) {
-        let severity = match self.head.severity {
+        let severity = match self.head.overflow.severity {
             Severity::Hard => 0,
             Severity::Soft => 1,
         };
-        (severity, &self.head.rule_id, &self.head.message.id)
+        (
+            severity,
+            &self.head.overflow.rule_id,
+            &self.head.overflow.message.id,
+        )
     }
 
     fn header(&self) -> String {
@@ -305,33 +377,44 @@ impl<'a> Group<'a> {
         };
         format!(
             "{}: {files} over the {}-{} budget [rule: {}, message: {}]",
-            self.head.severity,
-            self.head.limit,
-            self.head.unit.singular(),
-            self.head.rule_id,
-            self.head.message.id,
+            self.head.overflow.severity,
+            self.head.overflow.limit,
+            self.head.overflow.unit.singular(),
+            self.head.overflow.rule_id,
+            self.head.overflow.message.id,
         )
     }
 
     fn render(&self, color: bool) -> String {
-        let code = match self.head.severity {
+        let code = match self.head.overflow.severity {
             Severity::Hard => BOLD_RED,
             Severity::Soft => BOLD_YELLOW,
         };
         let mut block = paint(color, code, &self.header());
 
-        for line in wrap(&self.head.message.text, GUIDANCE_COLUMNS) {
+        for line in wrap(&self.head.overflow.message.text, GUIDANCE_COLUMNS) {
             block.push_str("\n  ");
             block.push_str(&line);
         }
 
-        for overflow in &self.overflows {
-            block.push_str(&format!(
-                "\n    {}: {} {}",
-                overflow.path.display(),
-                overflow.actual,
-                overflow.unit
-            ));
+        for finding in &self.overflows {
+            let overflow = finding.overflow;
+            let detail = match finding.context.and_then(|context| context.line_basis) {
+                Some(basis) => format!(
+                    "{}: {} {} (budget {})",
+                    overflow.path.display(),
+                    overflow.actual,
+                    basis,
+                    overflow.limit
+                ),
+                None => format!(
+                    "{}: {} {}",
+                    overflow.path.display(),
+                    overflow.actual,
+                    overflow.unit
+                ),
+            };
+            block.push_str(&format!("\n    {detail}"));
         }
 
         block

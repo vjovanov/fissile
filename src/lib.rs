@@ -299,13 +299,13 @@ impl Checker {
         for hit in self.evaluate(file)? {
             let RuleHit { rule, actual } = hit;
             if let Some(hard) = rule.budget.hard
-                && actual >= hard
+                && actual > hard
             {
                 overflows.push(render_overflow(file, rule, Severity::Hard, actual, hard));
                 continue;
             }
             if let Some(soft) = rule.budget.soft
-                && actual >= soft
+                && actual > soft
             {
                 overflows.push(render_overflow(file, rule, Severity::Soft, actual, soft));
             }

@@ -2,7 +2,7 @@ args = ["measure", "src/big.rs", "--no-color"]
 # Zero even though the file is over the hard limit: measuring is inspection, not
 # a gate (§FS-007-measure.1).
 exit = 0
-# Two, not one: the eighth line is already over, so nine has to lose two to
+# One, not two: the ninth line is one over, so nine has to lose one to
 # clear the limit again (§FS-007-measure.2, §E2E-027-measure-headroom-is-spendable).
 stdout_equals = """
-src/big.rs 9 lines [rust] soft 2 hard 8 — 2 over hard"""
+src/big.rs 9 lines [rust] soft 2 hard 8 — 1 over hard"""

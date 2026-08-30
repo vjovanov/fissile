@@ -47,7 +47,7 @@ struct Measured {
 }
 
 /// One threshold, with the largest measurement that still clears it: a limit
-/// fires *at* the limit (§GOAL-006-graded-limits) and a ceiling silences *at*
+/// fires *above* the limit (§GOAL-006-graded-limits) and a ceiling silences *at*
 /// the ceiling (§FS-003-exceptions.3), so the two cannot share one comparison.
 struct Threshold {
     label: &'static str,
@@ -170,11 +170,12 @@ fn accepted(
 
 /// Every threshold that applies to this row, in the order they are printed.
 fn thresholds(row: &Measured) -> Vec<Threshold> {
-    // A limit is exclusive and a ceiling inclusive, so each pair carries its own
-    // "largest value that still clears it" rather than one shared rule.
+    // Limits and ceilings both accept equality now, so each pair carries its own
+    // "largest value that still clears it" rather than one shared rule in case
+    // their semantics diverge again.
     [
-        ("soft", row.soft, 1),
-        ("hard", row.hard, 1),
+        ("soft", row.soft, 0),
+        ("hard", row.hard, 0),
         ("soft-accepted", row.soft_accepted, 0),
         ("hard-accepted", row.hard_accepted, 0),
     ]
@@ -222,8 +223,8 @@ fn render_row(row: &Row, color: bool) -> String {
     }
     if let Some(Headroom { room, label }) = headroom(&thresholds, row.actual) {
         // Only a value that has actually passed a threshold is tinted; standing
-        // exactly at the last value a ceiling accepts is room, not overflow, and
-        // `check` calls it `ok` (§FS-003-exceptions.3).
+        // exactly at a limit or ceiling is room, not overflow, and `check` calls
+        // it `ok` (§GOAL-006-graded-limits, §FS-003-exceptions.3).
         let clause = if room < 0 {
             let over = format!("{} over {label}", room.unsigned_abs());
             let tint = if label.starts_with("hard") {

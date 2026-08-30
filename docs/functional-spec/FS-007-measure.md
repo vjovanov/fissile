@@ -37,8 +37,8 @@ reports both, because both can bite.
 
 ```text
 src/domain/order.rs 612 lines [rust-source] soft 350 hard 550 hard-accepted 650 — 38 to hard-accepted
-src/domain/tax.rs 289 lines [rust-source] soft 350 hard 550 — 60 to soft
-src/domain/vat.rs 980 lines [rust-source] soft 350 hard 550 — 431 over hard
+src/domain/tax.rs 289 lines [rust-source] soft 350 hard 550 — 61 to soft
+src/domain/vat.rs 980 lines [rust-source] soft 350 hard 550 — 430 over hard
 ```
 
 The fields are the path, the measured value and its unit, the rule that selected
@@ -56,10 +56,10 @@ that cannot be read off the registry, since it depends on a measurement the
 registry does not carry.
 
 It is room the caller can spend, so the arithmetic follows how each threshold
-binds rather than treating them alike. A rule limit fires *at* the limit
+binds rather than treating them alike. A rule limit fires *above* the limit
 (§GOAL-006-graded-limits), so a 349-line file under a 350-line soft limit has
-`1 to soft` and a 350-line one is already reported; an accepted ceiling silences
-*at* the ceiling (§FS-003-exceptions.3), so a file exactly at its
+`1 to soft` and a 350-line one has `0 to soft` while still passing; an accepted
+ceiling silences *at* the ceiling (§FS-003-exceptions.3), so a file exactly at its
 `hard-accepted` has `0 to hard-accepted` and `check` still calls it `ok`. A
 headroom of `n` means `n` more units of the same kind leave every verdict where
 it stands, and `0` means the next one does not.

@@ -107,12 +107,12 @@ hard_message = "must"
     let checker = config.to_checker().expect("valid checker");
 
     let soft = checker
-        .check(&crate::measure_text("src/a.rs", "a\nb\n"))
+        .check(&crate::measure_text("src/a.rs", "a\nb\nc\n"))
         .expect("check succeeds");
     assert_eq!(soft[0].message.id, "shared");
 
     let hard = checker
-        .check(&crate::measure_text("src/b.rs", "a\nb\nc\nd\n"))
+        .check(&crate::measure_text("src/b.rs", "a\nb\nc\nd\ne\n"))
         .expect("check succeeds");
     assert_eq!(hard[0].message.id, "must");
     // The multi-line template is trimmed, so rendering starts at the text.
@@ -178,7 +178,7 @@ hard_message = "must"
 
     let checker = config.to_checker().expect("valid checker");
     let overflows = checker
-        .check(&crate::measure_text("src/a.rs", "a\nb\n"))
+        .check(&crate::measure_text("src/a.rs", "a\nb\nc\n"))
         .expect("check succeeds");
     assert_eq!(overflows[0].message.id, "must");
 }

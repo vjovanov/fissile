@@ -13,9 +13,11 @@ fissile check [<paths>...] [--staged] [--config <path>] [--format text|json] [--
 
 `check --staged` receives the file set from git and applies `[scan].exclude`.
 Without `--staged`, `check` evaluates the paths passed by the caller or the
-configured scan scope. A soft overflow exits `0` unless a matching soft
-exception applies; a hard overflow exits non-zero unless a matching hard
-exception applies. Severity is not configurable. This is the stable
+configured scan scope. A file strictly above a soft limit produces a finding
+and exits `0` unless a matching soft exception applies; equality passes. A file
+strictly above a hard limit produces a finding and exits non-zero unless a
+matching hard exception applies; equality passes. Severity is not configurable.
+This is the stable
 CI/pre-commit contract: the same config must produce the same pass/fail result
 locally and remotely (§GOAL-003-friendly-output).
 
@@ -29,13 +31,13 @@ to do once and then lists what it applies to (§GOAL-003-friendly-output).
 hard: 2 files over the 550-line budget [rule: rust-source, message: split-rust-hard]
   Must split before more code lands here: move cohesive groups of items into
   sibling modules. If you cannot see a safe split, stop and ask a human.
-    src/domain/order.rs: 612 lines
-    src/domain/invoice.rs: 588 lines
+    src/domain/order.rs: 612 non-blank lines (budget 550)
+    src/domain/invoice.rs: 588 non-blank lines (budget 550)
 
 soft: 1 file over the 350-line budget [rule: rust-source, message: split-rust-soft]
   Should split the next time you touch it. If no split leaves the architecture
   cleaner, record it with `fissile exception add --severity soft`.
-    src/domain/tax.rs: 402 lines
+    src/domain/tax.rs: 402 non-blank lines (budget 350)
 ```
 
 Blocks are ordered hard before soft, then by rule ID; files within a block are
@@ -43,6 +45,13 @@ ordered by measured value descending, then by path. Blocks are separated by a
 blank line. A message that interpolates a per-file variable renders distinct
 text per file, which by the grouping key puts each file in its own block
 (§FS-001-config.4).
+
+For a line rule, each file detail is `<path>: <actual> <counting basis> (budget
+<limit>)`. UTF-8 measurements name `physical lines` when blank and comment lines
+count, `non-blank lines` when only blank lines are excluded, `non-comment lines`
+when only comment lines are excluded, and `non-blank, non-comment lines` when
+both are excluded. A non-UTF-8 raw-line measurement names `physical lines`.
+Byte and token findings retain `<path>: <actual> <unit>`.
 
 Guidance is wrapped at a fixed 78 columns, and newlines written into the message
 are kept, so a project that configures a paragraph gets a readable block. The
