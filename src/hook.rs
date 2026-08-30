@@ -1,6 +1,6 @@
 //! Managed pre-commit hook install for `fissile init` (§FS-002-init.6): a
-//! marker-delimited block inside `.git/hooks/pre-commit` that composes with hooks
-//! a project already maintains, refreshed in place like the agent block (§FS-002-init.4).
+//! marker-delimited block inside the repository's `hooks/pre-commit` that composes with
+//! hooks a project already maintains, refreshed in place like the agent block (§FS-002-init.4).
 
 use std::fs;
 use std::io;

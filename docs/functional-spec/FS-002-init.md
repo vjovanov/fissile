@@ -267,6 +267,6 @@ fissile check --staged || exit 1
 - **Reporting.** The hook path uses the same prefixes as §5
   (`wrote`/`appended`/`updated`/`exists`) and honors `--dry-run`.
 
-`init` targets `.git/hooks/pre-commit` only. A repository that relocates hooks
-via `core.hooksPath` or drives them through a hook manager should wire
-`fissile check --staged` through that manager instead.
+`init` targets the repository's own `hooks/pre-commit` only. A repository that
+relocates hooks via `core.hooksPath` or drives them through a hook manager
+should wire `fissile check --staged` through that manager instead.
