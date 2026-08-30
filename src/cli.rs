@@ -123,13 +123,28 @@ pub fn measure_each(
     staged: bool,
     files: &[String],
 ) -> (Vec<crate::FileMeasurement>, Vec<String>) {
+    let (measured, errors) = measure_each_with_context(loaded, staged, files);
+    (
+        measured.into_iter().map(|file| file.measurement).collect(),
+        errors,
+    )
+}
+
+/// The command rendering path also needs to know whether line classification
+/// used UTF-8 policies or the raw-byte fallback. Keep that fact out of the
+/// public measurement type and API.
+pub(crate) fn measure_each_with_context(
+    loaded: &Loaded,
+    staged: bool,
+    files: &[String],
+) -> (Vec<crate::scan::MeasuredFile>, Vec<String>) {
     let mut measurements = Vec::with_capacity(files.len());
     let mut errors = Vec::new();
     for rel in files {
         let measured = if staged {
-            crate::scan::measure_staged_file(&loaded.root, rel, &loaded.config.tokens)
+            crate::scan::measure_staged_file_with_context(&loaded.root, rel, &loaded.config.tokens)
         } else {
-            crate::scan::measure_file(&loaded.root, rel, &loaded.config.tokens)
+            crate::scan::measure_file_with_context(&loaded.root, rel, &loaded.config.tokens)
         };
         match measured {
             Ok(measurement) => measurements.push(measurement),

@@ -81,7 +81,64 @@ fn check_reports_hard_overflow_and_fails() {
     assert!(run.failed, "a 250-line file crosses the hard limit");
     assert!(run.output.contains("src/big.rs"));
     assert!(run.output.contains("hard: 1 file over the"));
+    assert!(
+        run.output
+            .contains("src/big.rs: 250 non-blank lines (budget 200)")
+    );
     assert!(run.output.contains("[rule: rust, message:"));
+}
+
+/// §GOAL-006-graded-limits.1, §FS-004-check-audit.1, §FS-004-check-audit.2:
+/// both command surfaces pass equality, report the first value above each
+/// threshold, and preserve the soft-versus-hard exit contract.
+#[test]
+fn limits_are_strictly_above_in_check_and_audit() {
+    let root = temp_repo();
+    for (actual, expected_severity, failed) in [
+        (99, None, false),  // below soft
+        (100, None, false), // equal soft
+        (101, Some("soft"), false),
+        (199, Some("soft"), false), // below hard
+        (200, Some("soft"), false), // equal hard
+        (201, Some("hard"), true),
+    ] {
+        fs::write(root.join("src/big.rs"), rust_lines(actual)).unwrap();
+
+        let check_run = check::run(&check_options(&root)).expect("check runs");
+        assert_eq!(check_run.failed, failed, "check failed at actual={actual}");
+        assert_severity(&check_run.output, actual, expected_severity);
+
+        let audit_run = audit::run(&AuditOptions {
+            root: root.clone(),
+            no_color: true,
+            ..AuditOptions::default()
+        })
+        .expect("audit runs");
+        assert_eq!(audit_run.failed, failed, "audit failed at actual={actual}");
+        assert_severity(&audit_run.output, actual, expected_severity);
+    }
+}
+
+fn assert_severity(output: &str, actual: usize, expected: Option<&str>) {
+    match expected {
+        None => assert_eq!(output.trim(), "ok", "unexpected finding at actual={actual}"),
+        Some(severity) => {
+            assert!(
+                output.contains(&format!("{severity}: 1 file over the")),
+                "missing {severity} finding at actual={actual}: {output}"
+            );
+            assert!(
+                output.contains(&format!(
+                    "src/big.rs: {actual} non-blank lines (budget {})",
+                    if severity == "soft" { 100 } else { 200 }
+                )),
+                "missing contextual detail at actual={actual}: {output}"
+            );
+            if severity == "soft" {
+                assert!(!output.contains("hard: 1 file over the"), "{output}");
+            }
+        }
+    }
 }
 
 /// Spec: `docs/functional-spec/FS-004-check-audit.md#1-check`.

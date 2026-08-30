@@ -1,7 +1,7 @@
 args = ["measure", "src/at_limit.rs", "src/room.rs", "--no-color"]
 exit = 0
-# 7 lines under an 8-line hard limit is zero room, not one: a limit fires at the
-# limit, so the eighth line is the one that fails (§E2E-002-check-hard-blocks).
+# 7 lines under an 8-line hard limit leaves one line of room: equality passes,
+# and the ninth line is the first one that fails (§E2E-002-check-hard-blocks).
 stdout_equals = """
-src/at_limit.rs 7 lines [rust] soft 2 hard 8 — 0 to hard
-src/room.rs 5 lines [rust] soft 2 hard 8 — 2 to hard"""
+src/at_limit.rs 7 lines [rust] soft 2 hard 8 — 1 to hard
+src/room.rs 5 lines [rust] soft 2 hard 8 — 3 to hard"""

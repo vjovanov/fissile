@@ -2,7 +2,7 @@
 
 An exception silences *at* its ceiling: `max_accepted = 9` accepts a nine-line
 file, and `check` prints `ok` for it (§FS-003-exceptions.3). A limit is the other
-way round — it fires at the limit — and `measure` reports both on one line, so
+way round — it fires above the limit — and `measure` reports both on one line, so
 the two arithmetics have to be kept apart (§FS-007-measure.2).
 
 Read as if a ceiling behaved like a limit, this file is `0 over soft-accepted`,

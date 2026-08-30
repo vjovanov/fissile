@@ -48,6 +48,10 @@ and at 0.x semver puts the minor number in charge of it.
 
 ### Fixed
 
+- Ship-time substitution required: replace `#N` with the merged pull request
+  number. §GOAL-006-graded-limits.1, §GOAL-006-graded-limits.2,
+  §FS-004-check-audit.1: budget findings now fire strictly above their limits
+  and line findings name the counting basis and budget (PR #N)
 - §FS-002-init.5, §FS-002-init.6: `fissile init --no-hook` no longer tells the
   reader to `Commit a change to see the pre-commit hook run fissile check
   --staged` after installing no hook. Step 2 of the `next:` block was picked

@@ -106,7 +106,7 @@ hard: 1 file over the 550-line budget [rule: source, message: split-source-hard]
   reason names the constraint that makes splitting illegal (--kind structural)
   or the boundary that is missing and what must exist first (--kind deferred):
   fissile exception add <path> --severity hard --rule source --kind <kind>
-    src/orders.rs: 620 lines
+    src/orders.rs: 620 non-blank lines (budget 550)
 
 soft: 2 files over the 350-line budget [rule: source, message: split-source-soft]
   Should split, next time you are in one of these files: move a cohesive group
@@ -118,17 +118,18 @@ soft: 2 files over the 350-line budget [rule: source, message: split-source-soft
   the boundary that is missing and what must exist first (--kind deferred,
   --until naming what retires it):
   fissile exception add <path> --severity soft --rule source --kind <kind>
-    src/util.rs: 410 lines
-    src/billing.rs: 372 lines
+    src/util.rs: 410 non-blank lines (budget 350)
+    src/billing.rs: 372 non-blank lines (budget 350)
 
 hint: fissile measure <path>... reports size and headroom for the files you split into.
 # exit 1
 ```
 
 The header states the severity, the crossed limit, and the rule and message that
-own the budget; every file line leads with the path, so editors and agents jump
-straight to it. Twelve files under one rule cost one copy of the guidance, not
-twelve. A passing run prints exactly `ok`.
+own the budget; every file line leads with the path and, for line rules, names
+the counting basis and budget so editors and agents know what to change. Twelve
+files under one rule cost one copy of the guidance, not twelve. A passing run
+prints exactly `ok`.
 
 The shipped messages are deliberately generic and carry no citation — they know
 nothing about your layout, and an ID from *fissile's* docs would resolve nowhere
@@ -152,12 +153,12 @@ blocking anyone, so you can see the surface before turning the hook on:
 $ fissile audit --top 5
 hard: 1 file over the 550-line budget [rule: source, message: split-source-hard]
   Must split before more code lands here: ...
-    src/orders.rs: 620 lines
+    src/orders.rs: 620 non-blank lines (budget 550)
 
 soft: 2 files over the 350-line budget [rule: source, message: split-source-soft]
   Should split, next time you are in one of these files: ...
-    src/util.rs: 410 lines
-    src/billing.rs: 372 lines
+    src/util.rs: 410 non-blank lines (budget 350)
+    src/billing.rs: 372 non-blank lines (budget 350)
 
 exceptions:
   structural (never expires): 3
@@ -194,13 +195,14 @@ not, and never fails a build:
 ```text
 $ fissile measure src/orders.rs src/util.rs
 src/orders.rs 620 lines [source] soft 350 hard 550 hard-accepted 700 — 80 to hard-accepted
-src/util.rs 410 lines [source] soft 350 hard 550 — 139 to hard
+src/util.rs 410 lines [source] soft 350 hard 550 — 140 to hard
 ```
 
 The clause after the dash is the room left before whichever threshold binds
 first — a limit, or the ceiling an exception records. It is room you can
-actually use: `0 to hard` means the next line fails the commit, because a limit
-fires at the limit. That is the number you need *before* deciding whether the
+actually use: `0 to hard` means the file is at the limit and the next line is
+the first one that fails the commit, because a limit fires above the limit. That
+is the number you need *before* deciding whether the
 new test goes in this file or a new one.
 
 ## Justified exceptions

@@ -88,33 +88,39 @@ pub fn run(options: &AuditOptions) -> Result<Run, CommandError> {
         .format
         .unwrap_or_else(|| loaded.config.output.format.into());
 
-    let mut measurements = Vec::with_capacity(files.len());
+    let mut measured_files = Vec::with_capacity(files.len());
     let mut errors = Vec::new();
     for rel in &files {
         // Skip what cannot be measured; the walk goes on (§FS-004-check-audit.5).
-        match scan::measure_file(&loaded.root, rel, &loaded.config.tokens) {
-            Ok(measurement) => measurements.push(measurement),
+        match scan::measure_file_with_context(&loaded.root, rel, &loaded.config.tokens) {
+            Ok(measured_file) => measured_files.push(measured_file),
             Err(error) => errors.push(scan::measure_error_line(rel, &error)),
         }
     }
 
     // The hits are read three times — findings, `--top`, loose ceilings — so the
     // walk evaluates each file once and the sections share the result.
-    let mut hits = Vec::with_capacity(measurements.len());
-    for measurement in &measurements {
-        hits.push(
-            loaded
-                .checker
-                .evaluate(measurement)
-                .map_err(EvalError::from)?,
-        );
+    let mut hits = Vec::with_capacity(measured_files.len());
+    let mut contexts = Vec::new();
+    for measured_file in &measured_files {
+        let measurement = &measured_file.measurement;
+        let file_hits = loaded
+            .checker
+            .evaluate(measurement)
+            .map_err(EvalError::from)?;
+        contexts.extend(report::contexts_for_file(
+            measurement,
+            &file_hits,
+            measured_file.utf8,
+        ));
+        hits.push(file_hits);
     }
 
     let mut outcomes = Vec::new();
-    for (measurement, hits) in measurements.iter().zip(&hits) {
+    for (measured_file, hits) in measured_files.iter().zip(&hits) {
         outcomes.extend(report::evaluate_hits(
             &loaded.registries,
-            measurement,
+            &measured_file.measurement,
             hits,
         )?);
     }
@@ -139,12 +145,12 @@ pub fn run(options: &AuditOptions) -> Result<Run, CommandError> {
     let stale = stale.filter(|_| loaded.config.exceptions.stale.reports());
 
     // Path and hits paired once, for the two sections that read them by file.
-    let files: Vec<Measured<'_>> = measurements
+    let files: Vec<Measured<'_>> = measured_files
         .iter()
         .zip(&hits)
         .map(|(measurement, hits)| Measured {
-            path: repo_path(measurement),
-            measurement,
+            path: repo_path(&measurement.measurement),
+            measurement: &measurement.measurement,
             hits,
         })
         .collect();
@@ -160,7 +166,7 @@ pub fn run(options: &AuditOptions) -> Result<Run, CommandError> {
             .then(|| loose_entries(&loaded, &files)),
         coverage: options
             .rule_coverage
-            .then(|| coverage(&loaded, &measurements)),
+            .then(|| coverage(&loaded, &measured_files)),
         // Default-on, no flag: the two numbers are what an inventory is for
         // (§FS-004-check-audit.2).
         kinds: loaded.registries.kind_counts(),
@@ -169,7 +175,7 @@ pub fn run(options: &AuditOptions) -> Result<Run, CommandError> {
     let output = match format {
         Format::Text => {
             let color = cli::use_color(loaded.config.output.color, options.no_color, format);
-            render_text(&loaded, &outcomes, &inventory, color, &errors)
+            render_text(&loaded, &outcomes, &contexts, &inventory, color, &errors)
         }
         Format::Json => render_json(&outcomes, &inventory),
     };
@@ -318,29 +324,30 @@ fn is_catch_all(selector: &Selector) -> bool {
 
 /// Rules matching no file, files reachable only through catch-all rules, and
 /// messages no rule uses (§FS-004-check-audit.2).
-fn coverage(loaded: &Loaded, measurements: &[FileMeasurement]) -> Coverage {
+fn coverage(loaded: &Loaded, measured_files: &[scan::MeasuredFile]) -> Coverage {
     let rules = loaded.checker.rules();
 
     let unmatched_rules = rules
         .iter()
         .filter(|rule| {
-            !measurements
+            !measured_files
                 .iter()
-                .any(|measurement| rule.selector.matches(&measurement.path))
+                .any(|file| rule.selector.matches(&file.measurement.path))
         })
         .map(|rule| rule.id.clone())
         .collect();
 
-    let catch_all_only = measurements
+    let catch_all_only = measured_files
         .iter()
-        .filter(|measurement| {
+        .filter(|file| {
+            let measurement = &file.measurement;
             let matching: Vec<&_> = rules
                 .iter()
                 .filter(|rule| rule.selector.matches(&measurement.path))
                 .collect();
             !matching.is_empty() && matching.iter().all(|rule| is_catch_all(&rule.selector))
         })
-        .map(|measurement| measurement.path.to_string_lossy().replace('\\', "/"))
+        .map(|file| file.measurement.path.to_string_lossy().replace('\\', "/"))
         .collect();
 
     let unused_messages = loaded
@@ -368,6 +375,7 @@ fn coverage(loaded: &Loaded, measurements: &[FileMeasurement]) -> Coverage {
 fn render_text(
     loaded: &Loaded,
     outcomes: &[Outcome],
+    contexts: &[report::FindingContext],
     inventory: &Inventory,
     color: bool,
     errors: &[String],
@@ -376,7 +384,7 @@ fn render_text(
 
     // Each grouped block is its own section, so the blank-line separation is the
     // same between blocks as between audit sections (§FS-004-check-audit.1).
-    let reported = report::finding_blocks(outcomes, color);
+    let reported = report::finding_blocks_with_context(outcomes, color, contexts);
     if reported.is_empty() {
         // Withheld when a file could not be measured (§FS-004-check-audit.5).
         if errors.is_empty() {

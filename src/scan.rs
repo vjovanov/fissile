@@ -12,6 +12,14 @@ use std::process::Command;
 use crate::config::{Scan, Tokens};
 use crate::{FileMeasurement, Glob, measure_bytes, measure_text};
 
+/// A measurement plus the encoding fact needed to describe a line finding
+/// truthfully. The encoding is kept out of the public [`FileMeasurement`] API;
+/// command renderers use it only while carrying one scan through evaluation.
+pub(crate) struct MeasuredFile {
+    pub measurement: FileMeasurement,
+    pub utf8: bool,
+}
+
 /// Compile a list of glob patterns once for repeated matching.
 pub fn compile_globs(patterns: &[String]) -> Vec<Glob> {
     patterns.iter().map(Glob::new).collect()
@@ -350,22 +358,41 @@ fn git_ignored(root: &Path, paths: &[String]) -> HashSet<String> {
         .collect()
 }
 
-/// Measure one repo-relative file. UTF-8 files are line-classified; others are
-/// measured by bytes only. Token counts come from the opt-in external command
-/// (§DA-001-token-external-command).
+/// Measure one repo-relative file. UTF-8 files are line-classified; others use
+/// raw physical lines alongside bytes. Token counts come from the opt-in
+/// external command (§DA-001-token-external-command).
 pub fn measure_file(root: &Path, rel: &str, tokens: &Tokens) -> io::Result<FileMeasurement> {
+    Ok(measure_file_with_context(root, rel, tokens)?.measurement)
+}
+
+/// Measure one file while retaining whether its line breakdown came from UTF-8
+/// classification or the raw-byte fallback.
+pub(crate) fn measure_file_with_context(
+    root: &Path,
+    rel: &str,
+    tokens: &Tokens,
+) -> io::Result<MeasuredFile> {
     let bytes = fs::read(root.join(rel))?;
-    let mut measurement = measure_content(rel, &bytes);
+    let mut measured = measure_content(rel, &bytes);
     if tokens.enabled
         && let Some(count) = run_token_command(root, &tokens.command, rel)?
     {
-        measurement = measurement.with_tokens(count);
+        measured.measurement = measured.measurement.with_tokens(count);
     }
-    Ok(measurement)
+    Ok(measured)
 }
 
 /// Measure a staged blob for `check --staged` (§FS-004-check-audit.1).
 pub fn measure_staged_file(root: &Path, rel: &str, tokens: &Tokens) -> io::Result<FileMeasurement> {
+    Ok(measure_staged_file_with_context(root, rel, tokens)?.measurement)
+}
+
+/// Measure a staged blob while retaining its encoding for text rendering.
+pub(crate) fn measure_staged_file_with_context(
+    root: &Path,
+    rel: &str,
+    tokens: &Tokens,
+) -> io::Result<MeasuredFile> {
     let output = Command::new("git")
         .arg("-C")
         .arg(root)
@@ -375,23 +402,29 @@ pub fn measure_staged_file(root: &Path, rel: &str, tokens: &Tokens) -> io::Resul
     if !output.status.success() {
         return Err(io::Error::other(git_failure("git show", &output.stderr)));
     }
-    let mut measurement = measure_content(rel, &output.stdout);
+    let mut measured = measure_content(rel, &output.stdout);
     if tokens.enabled
         && let Some(count) =
             run_token_command_for_staged_bytes(root, &tokens.command, rel, &output.stdout)?
     {
-        measurement = measurement.with_tokens(count);
+        measured.measurement = measured.measurement.with_tokens(count);
     }
-    Ok(measurement)
+    Ok(measured)
 }
 
-fn measure_content(rel: &str, bytes: &[u8]) -> FileMeasurement {
+fn measure_content(rel: &str, bytes: &[u8]) -> MeasuredFile {
     match std::str::from_utf8(bytes) {
-        Ok(text) => measure_text(rel, text),
+        Ok(text) => MeasuredFile {
+            measurement: measure_text(rel, text),
+            utf8: true,
+        },
         // Non-UTF-8 content still measures lines — raw physical lines, all
         // counted as content — so a stray encoding never errors the commit
         // gate (§FS-001-config.3.1, §FS-004-check-audit.5).
-        Err(_) => measure_bytes(rel, bytes).with_lines(count_raw_lines(bytes)),
+        Err(_) => MeasuredFile {
+            measurement: measure_bytes(rel, bytes).with_lines(count_raw_lines(bytes)),
+            utf8: false,
+        },
     }
 }
 
@@ -495,7 +528,7 @@ mod tests {
     #[test]
     fn binary_content_measures_raw_lines() {
         // §FS-001-config.3.1: non-UTF-8 bytes still get a physical line count.
-        let measurement = measure_content("src/odd.rs", b"a\xff\nb\xfe\nc");
+        let measurement = measure_content("src/odd.rs", b"a\xff\nb\xfe\nc").measurement;
         let lines = measurement.lines.expect("lines are measured");
         assert_eq!(lines.total, 3);
         assert_eq!((lines.blank, lines.comment), (0, 0));

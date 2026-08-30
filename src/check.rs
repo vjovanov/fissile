@@ -54,13 +54,24 @@ pub fn run(options: &CheckOptions) -> Result<Run, CommandError> {
 
     // A path that cannot be measured is skipped, not fatal: one odd file must not
     // hide every other finding (§FS-004-check-audit.5).
-    let (measurements, errors) = cli::measure_each(&loaded, options.staged, &files);
+    let (measured_files, errors) = cli::measure_each_with_context(&loaded, options.staged, &files);
+    let mut contexts = Vec::new();
     let mut outcomes = Vec::new();
-    for measurement in &measurements {
-        outcomes.extend(report::evaluate_file(
-            &loaded.checker,
+    for measured_file in &measured_files {
+        let measurement = &measured_file.measurement;
+        let hits = loaded
+            .checker
+            .evaluate(measurement)
+            .map_err(report::EvalError::from)?;
+        contexts.extend(report::contexts_for_file(
+            measurement,
+            &hits,
+            measured_file.utf8,
+        ));
+        outcomes.extend(report::evaluate_hits(
             &loaded.registries,
             measurement,
+            &hits,
         )?);
     }
 
@@ -81,6 +92,7 @@ pub fn run(options: &CheckOptions) -> Result<Run, CommandError> {
             let color = cli::use_color(loaded.config.output.color, options.no_color, format);
             let text = Text {
                 outcomes: &outcomes,
+                contexts: &contexts,
                 stale: &stale,
                 success: &loaded.config.output.success,
                 color,
@@ -162,6 +174,7 @@ fn collect_files(options: &CheckOptions, loaded: &Loaded) -> Result<Vec<String>,
 /// (§FS-004-check-audit.1).
 struct Text<'a> {
     outcomes: &'a [Outcome],
+    contexts: &'a [report::FindingContext],
     stale: &'a [&'a Exception],
     success: &'a str,
     color: bool,
@@ -171,7 +184,7 @@ struct Text<'a> {
 }
 
 fn render_text(text: &Text<'_>) -> String {
-    let mut blocks = report::finding_blocks(text.outcomes, text.color);
+    let mut blocks = report::finding_blocks_with_context(text.outcomes, text.color, text.contexts);
 
     // The marker is withheld when a file could not be measured: `ok` next to an
     // exit-2 diagnostic would be a lie (§FS-004-check-audit.5). The run still
@@ -225,6 +238,7 @@ mod tests {
     fn staged_measurement_error_names_the_commit_gate() {
         let text = Text {
             outcomes: &[],
+            contexts: &[],
             stale: &[],
             success: "ok",
             color: false,
