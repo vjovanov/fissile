@@ -217,9 +217,9 @@ current managed block.
 The block must not promise machinery the run did not install, and must not send
 the reader to a file that is not there. Three clauses follow from that:
 
-- Step 2 reports the hook the run leaves in `.git/hooks/pre-commit`, not the
-  flag it was given: a managed block there — this run's, or an earlier run's
-  that `--no-hook` declined to touch — earns the invitation above.
+- Step 2 reports the hook the run leaves behind (§6), not the flag it was
+  given: a managed block there — this run's, or an earlier run's that
+  `--no-hook` declined to touch — earns the invitation above.
 - With no such block, step 2 says what to do instead, and `--no-hook` answers
   first when both apply: `--no-hook skipped the managed hook; wire fissile
   check --staged into your commit flow — a hook manager or core.hooksPath, if
@@ -242,8 +242,8 @@ the reader to a file that is not there. Three clauses follow from that:
 
 The headline use case is a commit-time gate (§GND-001-fissile), so `init`
 installs it rather than only describing it. The hook is a managed block inside
-`<path>/.git/hooks/pre-commit`, delimited by begin/end markers so it composes
-with hooks a project already maintains:
+`hooks/pre-commit` in the repository's common git directory, delimited by
+begin/end markers so it composes with hooks a project already maintains:
 
 ```sh
 # >>> fissile managed block (v1) >>>
@@ -251,10 +251,13 @@ fissile check --staged || exit 1
 # <<< fissile managed block (v1) <<<
 ```
 
-- **When it installs.** Automatic mode installs the hook when `<path>/.git` is a
-  directory and skips silently otherwise (no git repository, nothing to hook).
-  `--hook` forces the install and errors when the target is not a git
-  repository; `--no-hook` suppresses the automatic install.
+- **When it installs.** Automatic mode installs the hook when `<path>/.git`
+  names a repository — a directory, or a `gitdir:` file (linked worktree or
+  submodule) pointing at one — and skips silently otherwise (no git
+  repository, nothing to hook). The hook goes into that repository's shared
+  `hooks/pre-commit`: `<path>/.git/hooks/` for a plain checkout, the main
+  repository's for a linked worktree. `--hook` forces the install and errors
+  outside a git repository; `--no-hook` suppresses the automatic install.
 - **How it edits.** When `pre-commit` is absent, `init` writes it with a
   `#!/bin/sh` shebang above the block and marks it executable. When it exists
   without the block, `init` appends the block and preserves prior content. When
@@ -264,6 +267,6 @@ fissile check --staged || exit 1
 - **Reporting.** The hook path uses the same prefixes as §5
   (`wrote`/`appended`/`updated`/`exists`) and honors `--dry-run`.
 
-`init` targets `.git/hooks/pre-commit` only. A repository that relocates hooks
-via `core.hooksPath` or drives them through a hook manager should wire
-`fissile check --staged` through that manager instead.
+`init` targets the repository's own `hooks/pre-commit` only. A repository that
+relocates hooks via `core.hooksPath` or drives them through a hook manager
+should wire `fissile check --staged` through that manager instead.
