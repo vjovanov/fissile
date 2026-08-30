@@ -653,6 +653,129 @@ fn init_dry_run_prints_the_managed_block() {
     assert!(!root.join("AGENTS.md").exists(), "a dry run writes nothing");
 }
 
+/// A main repository with one commit and a linked worktree of it checked out
+/// on a new branch, named uniquely so parallel tests never collide.
+fn git_worktree_pair(tag: &str) -> (PathBuf, PathBuf) {
+    static COUNTER: AtomicUsize = AtomicUsize::new(0);
+    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let pid = std::process::id();
+    let main = std::env::temp_dir().join(format!("fissile-worktree-main-{tag}-{pid}-{n}"));
+    let worktree = std::env::temp_dir().join(format!("fissile-worktree-branch-{tag}-{pid}-{n}"));
+    let _ = fs::remove_dir_all(&main);
+    let _ = fs::remove_dir_all(&worktree);
+    fs::create_dir_all(&main).unwrap();
+
+    git(&main, &["init", "-q"]);
+    git(
+        &main,
+        &[
+            "-c",
+            "user.email=e2e@fissile.invalid",
+            "-c",
+            "user.name=e2e",
+            "-c",
+            "commit.gpgsign=false",
+            "-c",
+            "core.hooksPath=e2e-no-hooks",
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "base",
+        ],
+    );
+    git(
+        &main,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            worktree.to_str().expect("temp path is utf-8"),
+            "-b",
+            "feature",
+        ],
+    );
+    assert!(
+        fs::symlink_metadata(worktree.join(".git"))
+            .unwrap()
+            .is_file()
+    );
+    (main, worktree)
+}
+
+/// The hook `init` should have installed in a main repository's shared
+/// `hooks/pre-commit`, holding the current managed block and, on Unix,
+/// executable.
+fn assert_hook_installed(main: &Path) {
+    let hook_path = main.join(".git/hooks/pre-commit");
+    let hook = fs::read_to_string(&hook_path).expect("hook installed in the main repository");
+    assert!(hook.contains("fissile check --staged || exit 1"));
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = fs::metadata(&hook_path).unwrap().permissions().mode();
+        assert_eq!(mode & 0o111, 0o111, "hook is executable");
+    }
+}
+
+/// §FS-002-init.6, §FS-002-init.5: a linked worktree's `.git` is a file naming
+/// the main repository's private gitdir, not a directory — `init` has to
+/// resolve through it and install into the main repository's shared
+/// `hooks/pre-commit`, instead of reporting "not a git repository" and sending
+/// the reader to `git init` inside a directory git already tracks (issue #36).
+#[test]
+fn init_in_a_linked_worktree_installs_the_hook_in_the_main_repository() {
+    const HOOK_STEP: &str =
+        "Commit a change to see the pre-commit hook run fissile check --staged.";
+
+    let (main, worktree) = git_worktree_pair("auto");
+    let automatic = Command::new(env!("CARGO_BIN_EXE_fissile"))
+        .args(["init", "--agents-md"])
+        .current_dir(&worktree)
+        .output()
+        .expect("fissile runs");
+    let automatic_stderr = String::from_utf8_lossy(&automatic.stderr).into_owned();
+    assert!(
+        automatic.status.success(),
+        "automatic init failed: {automatic_stderr}"
+    );
+    assert!(automatic_stderr.contains("pre-commit"));
+    assert!(automatic_stderr.contains(HOOK_STEP));
+    assert!(!automatic_stderr.contains("is not a git repository"));
+    assert!(!automatic_stderr.contains("git init"));
+    assert_hook_installed(&main);
+    // The worktree's own `.git` is still the pointer file: nothing was created
+    // under it.
+    assert!(
+        fs::symlink_metadata(worktree.join(".git"))
+            .unwrap()
+            .is_file()
+    );
+    let _ = fs::remove_dir_all(&worktree);
+    let _ = fs::remove_dir_all(&main);
+
+    let (main, worktree) = git_worktree_pair("hook-flag");
+    let forced = Command::new(env!("CARGO_BIN_EXE_fissile"))
+        .args(["init", "--agents-md", "--hook"])
+        .current_dir(&worktree)
+        .output()
+        .expect("fissile runs");
+    let forced_stderr = String::from_utf8_lossy(&forced.stderr).into_owned();
+    assert!(
+        forced.status.success(),
+        "fissile init --hook failed: {forced_stderr}"
+    );
+    assert!(forced_stderr.contains(HOOK_STEP));
+    assert_hook_installed(&main);
+    assert!(
+        fs::symlink_metadata(worktree.join(".git"))
+            .unwrap()
+            .is_file()
+    );
+    let _ = fs::remove_dir_all(&worktree);
+    let _ = fs::remove_dir_all(&main);
+}
+
 /// §DF-010-stated-ceilings-are-exact.1: a `--max` is written as stated, where
 /// the measured form would have rounded 250 up to 300.
 #[test]

@@ -103,7 +103,7 @@ pub enum HookMode {
 }
 
 /// The hook step 2 of the `next:` block has to report (§FS-002-init.5): what a
-/// run leaves in `.git/hooks/pre-commit`, not what its flags asked for. No
+/// run leaves behind, not what its flags asked for (§FS-002-init.6). No
 /// `Default` — the only defensible one is the variant that promises a hook.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HookStatus {

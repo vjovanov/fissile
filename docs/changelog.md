@@ -48,6 +48,14 @@ and at 0.x semver puts the minor number in charge of it.
 
 ### Fixed
 
+- §FS-002-init.6, §FS-002-init.5: `fissile init` recognizes a linked git
+  worktree as a repository instead of telling the reader to `git init` inside
+  one. Automatic mode wrote no hook and reported the not-a-git-repository step,
+  and `--hook` errored, because `<root>/.git` is a file there, not a directory;
+  `init` now reads that file's `gitdir:` pointer (and its `commondir`, when
+  present) to find the repository and installs the hook into its shared
+  `hooks/pre-commit`, the same file every worktree of that repository reads.
+  Resolves #36. (PR #N)
 - §GOAL-006-graded-limits.1, §GOAL-006-graded-limits.2,
   §FS-004-check-audit.1: budget findings now fire strictly above their limits
   and line findings name the counting basis and budget (PR #37)
