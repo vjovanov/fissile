@@ -36,6 +36,20 @@ and at 0.x semver puts the minor number in charge of it.
 
 ### Changed
 
+- §FS-001-config.0.1: the built-in defaults budget a Markdown file by how it is
+  read. The flat `markdown-docs` rule (`**/*.md`, 250/500) splits into
+  `citable-spec` (`**/*.md`, soft 750 / hard 2000) — a document opened when
+  needed and, with stable section IDs, read a section at a time, so its length
+  is not charged on every read the way a source file's is — and `entrypoint`
+  (the §FS-002-init.3 family plus `skills/**/*.md`, soft 250 / hard 500), which
+  is loaded whole into every agent session. An exact filename and a rooted glob
+  outrank `**/*.md` on the §FS-001-config.3.2 specificity order, so neither
+  needs a `priority`. No schema version moves; a repository that already has a
+  config owns it and is unaffected. This repository's own `spec-docs` rule
+  follows, `CLAUDE.md` moves to a new `entrypoints` rule, and the deferred
+  exception that let `FS-001-config.md` sit at its natural size is removed —
+  a 300-line ceiling under a 750-line limit is a run-level error, not merely
+  redundant. Resolves #27 and #41. (PR #42)
 - Testing: adopted grund's two non-citable test homes. The e2e corpus moved
   from `e2e/cases` to `tests/e2e/cases` (harness at `tests/e2e/main.rs`), the
   cross-part proofs that lived beside it in `tests/` moved into

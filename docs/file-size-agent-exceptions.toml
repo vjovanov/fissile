@@ -9,13 +9,3 @@ until = "indefinite"
 reason = """
 GitHub resolves a workflow's job graph inside one file — `needs:` cannot name a job in another workflow — so splitting this one would break the release ordering it exists to express. What is extractable already lives in scripts/release/ and the jobs call it; what remains is the graph, and the hard budget still caps its growth.
 """
-[[exceptions]]
-path = "docs/functional-spec/FS-001-config.md"
-match = "exact"
-rules = ["spec-docs"]
-kind = "deferred"
-max_accepted = { value = 300, unit = "lines" }
-until = "a rule-grammar spec exists and the 33 §FS-001-config.3 citations are redirected to it"
-reason = """
-Missing boundary: a spec of its own for the rule grammar. §3 Rules is over half this document and the only self-contained subject in it, but 33 citations across the crate target §FS-001-config.3 and its subsections — two of them inside archived changelog files, which record history and must not be rewritten. The split needs that citation migration first; until then the config reference has to carry the whole grammar, and a new config key cannot wait for it.
-"""
