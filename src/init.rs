@@ -9,6 +9,8 @@ use std::path::{Path, PathBuf};
 use crate::managed::Block;
 
 /// The fully-populated starter config written by `init` (§DF-002-explicit-config).
+/// Its two markdown rules are the two reading modes: a citable spec is fetched
+/// by section, an entrypoint is loaded whole (§FS-001-config.0.1).
 pub const DEFAULT_CONFIG: &str = include_str!("templates/fissile.default.toml");
 
 /// Starter soft (agent) exception registry (§FS-003-exceptions).

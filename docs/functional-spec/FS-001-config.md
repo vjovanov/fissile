@@ -17,9 +17,11 @@ A repo with no config still gets a useful guard:
 - exclude lockfiles, minified files, vendored directories, build output, VCS
   metadata, and common binary/media assets;
 - apply a conservative byte budget to every non-excluded file;
-- apply a line budget to common hand-written source extensions and to markdown,
-  wherever those files live, while leaving data and generated formats to the
-  byte budget (§GND-001-fissile);
+- apply a line budget to common hand-written source extensions, wherever those
+  files live, while leaving data and generated formats to the byte budget
+  (§GND-001-fissile);
+- apply a line budget to markdown under two rules, not one, because there are
+  two ways a markdown file is read and they cost different things (§0.1);
 - use generic messages that explain how to tune config rather than pretending to
   know the repository's architecture.
 
@@ -33,6 +35,41 @@ A hand-written config may omit any field and take its default; an omitted field
 is not an error. The config that `fissile init` *generates*, however, is fully
 populated — every field is written out at its default so the file is editable
 without consulting this spec (§DF-002-explicit-config).
+
+### 0.1 The two markdown reading modes
+
+A line budget prices what a reader pays to load a file. For source that is the
+whole file, every time. For markdown it depends on how the file is reached, and
+the defaults carry one rule for each way:
+
+- **A citable spec** — a document under `docs/`, or any other markdown that is
+  reached by name and section — is opened when someone needs it, and in a
+  repository with stable section IDs it is read one section at a time rather
+  than whole. Its total length is not charged to a reader who wanted one
+  declaration, so it takes the looser budget: **soft 750, hard 2000 lines**.
+  The soft tier is not about the cost of the read at all — 750 lines is about
+  where a document has started covering two subjects, which is a structure
+  problem worth saying out loud. The hard tier is the backstop for a file that
+  has stopped being a document.
+- **An entrypoint** — `README.md`, `AGENTS.md`, `CLAUDE.md`, a file under
+  `skills/`, and the rest of the family §FS-002-init.3 names — is read whole,
+  into every agent session, before any work starts. Every line is charged on
+  every one of those reads, so it keeps the tight budget: **soft 250, hard 500
+  lines**.
+
+The entrypoint selectors are exact filenames and a directory glob, and both
+outrank the citable-spec rule's `**/*.md` on the specificity order in §3.2, so
+the split needs no `priority`.
+
+750 is roughly 3x the p95 of a spec tree that is already kept tidy, and 2000 is
+a common ceiling for a file of any kind, so a spec that reaches it has a problem
+no budget can describe. A repository that gives markdown one budget instead
+prices a cost nobody pays: it pushes hardest on exactly the projects whose
+grounding work made their documents cheap to read.
+
+An append-only record — a changelog — is a third mode and fits neither tier;
+splitting one is meaningless. The defaults do not guess at it, and a repository
+that keeps one is better off excluding it than measuring it.
 
 ## 1. Top-level version
 

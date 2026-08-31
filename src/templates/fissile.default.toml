@@ -99,17 +99,24 @@ fissile exception add <path> --severity hard --rule {rule} --kind <kind>
 [[messages]]
 id = "split-doc-soft"
 text = """
-Should split, next time you edit one of these documents: keep one focused subject per file and move secondary detail into a child document the parent links.
-If the document has to be read whole, record it rather than cutting it up — naming what makes it indivisible (--kind structural), or the child document that does not exist yet (--kind deferred, --until naming what retires it):
+Should split, next time you edit one of these documents: a document this long is usually covering two subjects. Move the secondary one into a document of its own and link it from here. Split at a real section boundary — a link or a citation that stops resolving costs a reader more than the extra lines did.
+If the document has to be read as one piece, record it rather than cutting it up — naming what makes it indivisible (--kind structural), or the child document that does not exist yet (--kind deferred, --until naming what retires it):
 fissile exception add <path> --severity soft --rule {rule} --kind <kind>
 """
 
 [[messages]]
 id = "split-doc-hard"
 text = """
-Must split before adding more: move secondary detail into child documents the parent links, leaving one focused subject per file.
-If no split keeps the document coherent, ask a human rather than cutting at an arbitrary heading; a human-reviewed exception is the alternative:
+Must split before adding more: this has stopped being one document. Move whole subjects into documents of their own and link them from here, keeping every existing link and citation into this file resolvable.
+If no split leaves the material coherent, ask a human rather than cutting at an arbitrary heading; a human-reviewed exception is the alternative:
 fissile exception add <path> --severity hard --rule {rule}
+"""
+
+[[messages]]
+id = "trim-entrypoint"
+text = """
+This file is read whole, into every agent session, before any work starts, so each line here is paid on every one of those reads — unlike a document a reader opens only when they need it. Move depth into a document under docs/ and link it from here, keeping this file to what has to arrive before the first line of code is written. If a section has to stay inline for a reader who has nothing else loaded, say so in an exception rather than trimming what they need:
+fissile exception add <path> --severity soft --rule {rule} --kind <kind>
 """
 
 [[messages]]
@@ -158,13 +165,34 @@ count_comment_lines = true
 soft_message = "split-source-soft"
 hard_message = "split-source-hard"
 
+# Markdown gets two budgets, because there are two ways a Markdown file is read
+# and they cost different things (§FS-001-config.0.1). A document is opened when
+# needed and, with stable section IDs, read a section at a time, so its length is
+# not charged on every read the way a source file's is.
 [[rules]]
-id = "markdown-docs"
+id = "citable-spec"
 include = ["**/*.md"]
+unit = "lines"
+soft = 750
+hard = 2000
+count_blank_lines = false
+count_comment_lines = true
+soft_message = "split-doc-soft"
+hard_message = "split-doc-hard"
+
+# The other mode: an entrypoint is loaded whole into every agent session before
+# any work starts, so every line is charged on every one of those reads, and it
+# keeps the tight budget. An exact filename and `skills/**/*.md` outrank
+# `**/*.md` on specificity (§FS-001-config.3.2); add this repository's own.
+[[rules]]
+id = "entrypoint"
+include = [
+  "README.md", "AGENTS.md", "AGENTS.override.md", "CLAUDE.md", "GEMINI.md",
+  ".claude/CLAUDE.md", ".github/copilot-instructions.md", "skills/**/*.md", ".claude/skills/**/*.md",
+]
 unit = "lines"
 soft = 250
 hard = 500
 count_blank_lines = false
 count_comment_lines = true
-soft_message = "split-doc-soft"
-hard_message = "split-doc-hard"
+message = "trim-entrypoint"

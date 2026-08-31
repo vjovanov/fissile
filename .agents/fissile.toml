@@ -84,6 +84,12 @@ Must split before adding more: move secondary detail into a child declaration th
 """
 
 [[messages]]
+id = "trim-entrypoint"
+text = """
+Every agent session reads this file whole before it does anything, so each line is paid on every one of those reads. Move depth into a spec under docs/ and cite it from here: a citation costs the reader nothing until they follow it, and what it points at is then fetched one section at a time.
+"""
+
+[[messages]]
 id = "trim-readme"
 text = """
 The README is the front door, not a manual: move depth into docs/ and cite it rather than growing the overview. If a section has to stay inline for a first-time reader, say so in an exception instead of trimming what they need.
@@ -130,16 +136,38 @@ count_blank_lines = false
 count_comment_lines = true
 message = "split-rust-benchmark"
 
+# Budget follows how a document is read (§FS-001-config.0.1). This repository is
+# grounded, so a declaration is fetched by section — `grund FS-001-config.3`
+# returns §3 — and its length is never charged to a reader who wanted one part of
+# it, the way a source file's is. 750 is roughly 3x the p95 (222-225 non-blank
+# lines) of the fissile, grund and ephor spec trees, and marks where a document
+# has started covering two subjects; 2000 is the ceiling rhei's architecture spec
+# sets for any file, and 1500 would leave its largest spec 18 lines of headroom.
 [[rules]]
 id = "spec-docs"
-include = ["docs/**/*.md", "CLAUDE.md", "examples/**/*.md", "tests/e2e/**/*.md"]
+include = ["docs/**/*.md", "examples/**/*.md", "tests/e2e/**/*.md"]
 unit = "lines"
-soft = 225
-hard = 350
+soft = 750
+hard = 2000
 count_blank_lines = false
 count_comment_lines = true
 soft_message = "split-spec-soft"
 hard_message = "split-spec-hard"
+
+# The other reading mode: AGENTS.md — and CLAUDE.md, a symlink to it
+# (§DF-009-one-file-agents-read) — is read whole into every agent session, so
+# every line is charged on every one of those reads and the tight budget stays.
+# README.md is an entrypoint too but keeps its own larger rule below: it is a
+# front door for a human arriving cold, not a file loaded into a session.
+[[rules]]
+id = "entrypoints"
+include = ["AGENTS.md", "CLAUDE.md", ".claude/CLAUDE.md", "GEMINI.md"]
+unit = "lines"
+soft = 250
+hard = 500
+count_blank_lines = false
+count_comment_lines = true
+message = "trim-entrypoint"
 
 # The README is the project's front door, not a focused declaration; it gets a
 # far larger budget than the spec docs. Up to ~2000 lines is acceptable.
