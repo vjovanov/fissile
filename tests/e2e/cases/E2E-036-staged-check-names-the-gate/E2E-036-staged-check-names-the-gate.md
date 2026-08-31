@@ -7,4 +7,4 @@ the overflow into the branch (§FS-004-check-audit.1.2).
 
 Only `--staged` prints it. The same findings from CI or from `fissile check
 src/` are not blocking anything a caller is about to bypass, which is why
-§E2E-002-check-hard-blocks sees the findings and the hint and no epilogue.
+`E2E-002-check-hard-blocks` sees the findings and the hint and no epilogue.

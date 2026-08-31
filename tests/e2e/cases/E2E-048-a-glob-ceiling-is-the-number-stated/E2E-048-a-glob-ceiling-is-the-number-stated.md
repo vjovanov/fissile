@@ -8,6 +8,6 @@ unwritable under a 4096-byte step.
 
 `--max 150` on `src/**` records 150, not the 200 the default 100-line step
 would have chosen (§DF-010-stated-ceilings-are-exact.1). The same repository as
-§E2E-032-bump-defaults-to-the-configured-step, where the measured form of the
+`E2E-032-bump-defaults-to-the-configured-step`, where the measured form of the
 same command writes 200 for a 105-line file: the step is still in force, for
 measurements.

@@ -1,6 +1,6 @@
 # E2E-046-a-stated-ceiling-stays-under-the-hard-limit: the stated form is the way through the last step below the limit
 
-The same repository as §E2E-045-retune-refuses-a-soft-ceiling-on-the-hard-limit,
+The same repository as `E2E-045-retune-refuses-a-soft-ceiling-on-the-hard-limit`,
 with the ceiling stated: `--max 6` on a 5-line file under a hard limit of 8 is
 written as 6 (§FS-008-exception-retune.1, §DF-010-stated-ceilings-are-exact.1).
 

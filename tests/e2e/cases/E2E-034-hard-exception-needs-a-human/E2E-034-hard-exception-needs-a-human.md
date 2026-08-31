@@ -13,4 +13,4 @@ the outcome `fissile exception add` exists to prevent.
 The offered route is asserted whole rather than by fragments, because what it
 owes the caller is that it runs: it carries this call's own `--kind` and
 `--reason` through, changing the one flag the gate is about.
-§E2E-039-the-offered-soft-route-runs runs those exact bytes.
+`E2E-039-the-offered-soft-route-runs` runs those exact bytes.

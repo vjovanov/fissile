@@ -32,6 +32,14 @@ and at 0.x semver puts the minor number in charge of it.
 
 ## Unreleased
 
+### Changed
+
+- Testing: adopted grund's two non-citable test homes. The e2e corpus moved
+  from `e2e/cases` to `tests/e2e/cases` (harness at `tests/e2e/main.rs`), the
+  cross-part proofs that lived beside it in `tests/` moved into
+  `tests/integration/`, and every `grund.toml` `[[kinds]]` block's deprecated
+  `prefix` key is now `kind`. Resolves #39. (PR #40)
+
 ## 2. [0.8.1] — 2026-08-30
 
 ### Changed

@@ -1,5 +1,5 @@
 //! Fixture-driven end-to-end suite (§GOAL-003-friendly-output.3). Every directory
-//! under `e2e/cases/` named `E2E-*` is one scenario: a `case.toml` manifest plus a
+//! under `tests/e2e/cases/` named `E2E-*` is one scenario: a `case.toml` manifest plus a
 //! `repo/` working tree. The harness drives the real `fissile` binary against a
 //! throwaway copy of the tree and asserts the exit code and output the manifest
 //! declares, so each documented behavior under `docs/functional-spec/` has at least
@@ -113,7 +113,7 @@ fn is_repo_relative(relative: &str) -> bool {
 }
 
 fn cases_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("e2e/cases")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/e2e/cases")
 }
 
 fn copy_tree(from: &Path, to: &Path) {

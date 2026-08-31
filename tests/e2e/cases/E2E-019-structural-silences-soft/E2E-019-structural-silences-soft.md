@@ -1,6 +1,6 @@
 # E2E-019-structural-silences-soft: a structural hard exception silences the soft warning too
 
-The same fixture as §E2E-005-exception-silences-hard, with one field changed: the
+The same fixture as `E2E-005-exception-silences-hard`, with one field changed: the
 hard entry declares `kind = "structural"`. Splitting the file is illegal, so
 there is nothing to minimize and the soft warning would name work nobody may do
 — `fissile check` prints `ok` and nothing else (§FS-003-exceptions.3).

@@ -33,8 +33,8 @@ if [ "$manifest_version" != "$version" ]; then
 fi
 
 expected="stdout_equals = \"fissile ${version}\""
-if ! git show "${ref}:e2e/cases/E2E-010-cli-version/case.toml" | grep -qF "$expected"; then
-  echo "error: ${ref}: e2e/cases/E2E-010-cli-version/case.toml does not pin '$expected'" >&2
+if ! git show "${ref}:tests/e2e/cases/E2E-010-cli-version/case.toml" | grep -qF "$expected"; then
+  echo "error: ${ref}: tests/e2e/cases/E2E-010-cli-version/case.toml does not pin '$expected'" >&2
   exit 1
 fi
 
