@@ -37,6 +37,29 @@ path = "src/lib.rs"
 name = "fissile"
 path = "src/main.rs"
 
+# Cargo does not auto-discover .rs files in subdirectories of `tests/`, so each
+# integration test needs its own [[test]] block. fissile stays a single
+# published package rather than a workspace with a test-only member.
+[[test]]
+name = "commands"
+path = "tests/integration/commands.rs"
+
+[[test]]
+name = "json_schema"
+path = "tests/integration/json_schema.rs"
+
+[[test]]
+name = "agent_loop"
+path = "tests/integration/agent_loop.rs"
+
+[[test]]
+name = "config_fixtures"
+path = "tests/integration/config_fixtures.rs"
+
+[[test]]
+name = "help"
+path = "tests/integration/help.rs"
+
 [dependencies]
 # Config is data, not code (§GOAL-002-tiny-footprint): serde + toml parse the
 # versioned TOML document. The glob engine and CLI argument parsing are

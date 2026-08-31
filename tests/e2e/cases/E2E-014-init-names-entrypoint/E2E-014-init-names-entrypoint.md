@@ -14,4 +14,4 @@ editing it will stick.
 
 That line is what this case asserts, so it holds on a host that cannot make
 links at all: there the companion is `kept` and `AGENTS.md` still owns the
-block. §E2E-042-companions-link-to-agents-md asserts the link itself.
+block. `E2E-042-companions-link-to-agents-md` asserts the link itself.

@@ -38,7 +38,7 @@ proves it" stop diverging.
 
 - A fixture-driven e2e harness that drives the real `fissile` binary, with at
   least one case per documented behavior under `docs/functional-spec/`
-  (§E2E-001-check-clean and siblings under `e2e/cases`).
+  (`E2E-001-check-clean` and siblings under `tests/e2e/cases`).
 - A published, committed JSON schema for the `check`/`audit` record shape, with a
   test that validates emitted output against it (§GOAL-003-friendly-output.1,
   §GOAL-004-token-thrift.1).
@@ -65,7 +65,7 @@ contributor to hand-wire git plumbing.
   default binary stays small (§DA-001-token-external-command, §GOAL-005-configurable).
 
 This is the current focus. The managed pre-commit hook ships and is covered by
-§E2E-007-init-installs-hook; the binary-size guard runs in the pre-release
+`E2E-007-init-installs-hook`; the binary-size guard runs in the pre-release
 workflow and against every release artifact (§AR-001-ci.7). The release
 pipeline (§AR-001-ci.8) builds prebuilt binaries for six targets and publishes
 the crate; cutting and verifying the first tagged release is the open step

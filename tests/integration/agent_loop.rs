@@ -1,4 +1,4 @@
-//! The agent-minimize loop (§GOAL-006.2, §GOAL-006.4): a soft warning carries a
+//! The agent-minimize loop (§GOAL-006-graded-limits.2, §GOAL-006-graded-limits.4): a soft warning carries a
 //! byte-stable finding shape that an agent keys off, and shrinking the file it
 //! named clears the warning on the next run. This drives the real `fissile`
 //! binary through warn → shrink → clean, asserting the exact soft-finding line
@@ -30,7 +30,7 @@ hard = 10
 message = \"split-source\"
 ";
 
-/// The block header §GOAL-006.2 fixes so an agent can match without parsing
+/// The block header §GOAL-006-graded-limits.2 fixes so an agent can match without parsing
 /// prose: `<severity>: <n> files over the <soft>-<unit> budget [rule: <name>,
 /// message: <id>]`; a line finding names its counting basis and budget.
 const SOFT_HEADER: &str = "soft: 1 file over the 2-line budget [rule: rust, message: split-source]";

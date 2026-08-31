@@ -463,9 +463,8 @@ fn exception_add_rejects_overlapping_path_matchers() {
     };
 
     // The blocking entry is named by where it lives and what it matches, so the
-    // reader can go edit that entry. The refusal reports the recorded ceiling
-    // beside the current measurement and names the command that moves it —
-    // "an entry exists" is not "the file is accepted" (§FS-005-exception-add.4).
+    // reader can go edit it. The refusal reports the recorded ceiling beside
+    // the measurement and the command that moves it (§FS-005-exception-add.4).
     assert_eq!(
         error.to_string(),
         "docs/file-size-human-exceptions.toml: src/** already has an entry covering \

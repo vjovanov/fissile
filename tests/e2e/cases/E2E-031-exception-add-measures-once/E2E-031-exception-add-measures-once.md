@@ -9,5 +9,5 @@ from an external command (§DA-001-token-external-command), so measuring twice
 runs a tokenizer subprocess twice for one refusal, against
 §GOAL-001-fast-feedback. The counter here keeps a ledger, and the scenario reads
 it: one invocation for one run. Unix-gated for the same reason as
-§E2E-009-check-token-rule — the stub is a POSIX shell script, not the mode it
+`E2E-009-check-token-rule` — the stub is a POSIX shell script, not the mode it
 stands in for.

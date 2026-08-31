@@ -20,47 +20,65 @@ number_pattern = "\\d+"
 slug_pattern = "[a-z0-9][a-z0-9-]*"
 
 [[kinds]]
-prefix = "GND"
+kind = "GND"
 file = "docs/grund.md"
 title = "Reason for existence"
 
 [[kinds]]
-prefix = "GOAL"
+kind = "GOAL"
 file = "docs/goals.md"
 title = "Outcomes the project is trying to achieve"
 
 [[kinds]]
-prefix = "FS"
+kind = "FS"
 folder = "docs/functional-spec"
 title = "User-visible behavior and requirements"
 
 [[kinds]]
-prefix = "AR"
+kind = "AR"
 folder = "docs/architecture"
 title = "System design and technical structure"
 
 [[kinds]]
-prefix = "DF"
+kind = "DF"
 folder = "docs/decisions/functional"
 title = "Product behavior decisions and tradeoffs"
 
 [[kinds]]
-prefix = "DA"
+kind = "DA"
 folder = "docs/decisions/architectural"
 title = "Architecture decisions and tradeoffs"
 
+# The two test homes are places, not ID namespaces: a test cites the document
+# whose claim it proves and is never cited back.
 [[kinds]]
-prefix = "E2E"
-folder = "e2e/cases"
-title = "Executable user scenarios"
+kind = "e2e"
+folder = "tests/e2e"
+citable = false
+title = "User scenarios: black-box proof of the spec"
 
 [[kinds]]
-prefix = "RM"
+kind = "integration"
+folder = "tests/integration"
+citable = false
+title = "Integration tests: proof that the parts fit as designed"
+
+[[kinds]]
+kind = "RM"
 file = "docs/roadmap.md"
 title = "Planned milestones and sequencing"
 
+# A scenario proves the What as a user sees it; one that reads the design is
+# not black-box.
+[citations.e2e]
+must = ["FS"]
+should-not = ["AR"]
+
+[citations.integration]
+should = ["AR"]
+
 [scan]
-include = ["docs", "e2e", "src"]
+include = ["docs", "tests", "src"]
 # `repo` prunes the e2e fixture working trees: they are scenario inputs, not
 # project docs, and the E2E-012 fixture is deliberately non-UTF-8.
 exclude = ["target", "node_modules", ".git", "dist", "build", ".venv", "repo"]

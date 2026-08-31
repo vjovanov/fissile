@@ -5,7 +5,7 @@ include = [
   "src",
   "benches",
   "docs",
-  "e2e",
+  "tests/e2e",
   "examples",
   "scripts",
   ".github",
@@ -132,7 +132,7 @@ message = "split-rust-benchmark"
 
 [[rules]]
 id = "spec-docs"
-include = ["docs/**/*.md", "CLAUDE.md", "examples/**/*.md", "e2e/**/*.md"]
+include = ["docs/**/*.md", "CLAUDE.md", "examples/**/*.md", "tests/e2e/**/*.md"]
 unit = "lines"
 soft = 225
 hard = 350

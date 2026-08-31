@@ -96,7 +96,7 @@ jobs:
           cargo set-version "$next"
           cargo update --workspace
           sed -i "s/^stdout_equals = \"fissile .*\"$/stdout_equals = \"fissile ${next}\"/" \
-            e2e/cases/E2E-010-cli-version/case.toml
+            tests/e2e/cases/E2E-010-cli-version/case.toml
           python3 scripts/prepare_changelog_release.py prepare "$next"
 
       - name: Commit and push release candidate
@@ -112,7 +112,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
 
-          git add Cargo.toml Cargo.lock e2e/cases/E2E-010-cli-version/case.toml docs/changelog.md docs/changelog
+          git add Cargo.toml Cargo.lock tests/e2e/cases/E2E-010-cli-version/case.toml docs/changelog.md docs/changelog
           git commit -m "Release v${next}"
           git push -u origin "$branch"
 
