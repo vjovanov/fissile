@@ -415,6 +415,36 @@ fn audit_json_top_omits_unmeasured_units() {
     assert!(!run.output.contains("\"unit\":\"tokens\""));
 }
 
+/// §FS-004-check-audit.2: empty registries remain silent in text while JSON
+/// keeps its unconditional all-zero exceptions object.
+#[test]
+fn audit_empty_exception_inventory_keeps_text_and_json_contracts() {
+    let root = temp_repo();
+    let text = audit::run(&AuditOptions {
+        root: root.clone(),
+        format: Some(Format::Text),
+        no_color: true,
+        ..AuditOptions::default()
+    })
+    .expect("text audit runs")
+    .output;
+    assert!(!text.contains("exceptions:"), "{text}");
+
+    let json = audit::run(&AuditOptions {
+        root,
+        format: Some(Format::Json),
+        ..AuditOptions::default()
+    })
+    .expect("JSON audit runs")
+    .output;
+    assert!(
+        json.contains(
+            "\"exceptions\":{\"structural\":0,\"deferred\":0,\"structural_paths\":0,\"deferred_paths\":0}"
+        ),
+        "{json}"
+    );
+}
+
 #[test]
 fn exception_add_rejects_overlapping_path_matchers() {
     let root = temp_repo();
@@ -535,6 +565,21 @@ fn audit_counts_exceptions_by_kind() {
     let root = temp_repo();
     fs::create_dir_all(root.join("docs")).unwrap();
     fs::write(
+        root.join("docs/file-size-agent-exceptions.toml"),
+        r#"fissile_exceptions_version = 2
+
+[[exceptions]]
+path = "src/big.rs"
+match = "exact"
+rules = ["rust"]
+kind = "structural"
+max_accepted = { value = 250, unit = "lines" }
+until = "indefinite"
+reason = "the soft twin shares the structural constraint"
+"#,
+    )
+    .unwrap();
+    fs::write(
         root.join("docs/file-size-human-exceptions.toml"),
         "fissile_exceptions_version = 2\n\n\
          [[exceptions]]\n\
@@ -567,8 +612,14 @@ fn audit_counts_exceptions_by_kind() {
     .expect("audit runs");
 
     assert!(run.output.contains("exceptions:"));
-    assert!(run.output.contains("structural (never expires): 1"));
-    assert!(run.output.contains("deferred (carrying debt): 1"));
+    assert!(
+        run.output
+            .contains("structural (never expires): 2 entries across 1 paths")
+    );
+    assert!(
+        run.output
+            .contains("deferred (carrying debt): 1 entries across 1 paths")
+    );
 }
 
 /// §FS-004-check-audit.2: the stale list spans both registries, so each entry is

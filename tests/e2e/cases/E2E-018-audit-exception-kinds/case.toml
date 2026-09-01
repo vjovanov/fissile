@@ -2,6 +2,6 @@ args = ["audit", "--no-color"]
 exit = 0
 stdout_contains = [
   "exceptions:",
-  "  structural (never expires): 1",
-  "  deferred (carrying debt): 1",
+  "  structural (never expires): 2 entries across 1 paths",
+  "  deferred (carrying debt): 1 entries across 1 paths",
 ]

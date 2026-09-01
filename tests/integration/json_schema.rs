@@ -180,8 +180,23 @@ fn audit_silenced_records_carry_documented_exception_fields() {
     // build does not report them" (§FS-004-check-audit.2).
     assert!(
         run.output
-            .contains("\"exceptions\":{\"structural\":0,\"deferred\":1}")
+            .contains(
+                "\"exceptions\":{\"structural\":0,\"deferred\":1,\"structural_paths\":0,\"deferred_paths\":1}"
+            )
     );
+
+    let audit_schema = fs::read_to_string(schema_dir().join("audit.schema.json")).unwrap();
+    for field in [
+        "structural",
+        "deferred",
+        "structural_paths",
+        "deferred_paths",
+    ] {
+        assert!(
+            audit_schema.contains(&format!("\"{field}\"")),
+            "schema/audit.schema.json is missing `{field}`"
+        );
+    }
 
     // The silenced hard overflow carries the exception attribution fields.
     let silenced = extract_array(&run.output, "silenced");

@@ -27,11 +27,13 @@
     },
     "exceptions": {
       "type": "object",
-      "description": "Registry entries per kind across both registries (FS-004-check-audit.2): accepted permanently versus carrying debt. Always present, including all-zero.",
+      "description": "Registry entry and distinct literal path-expression totals per kind across both registries (FS-004-check-audit.2). `structural` and `deferred` count entries; `structural_paths` and `deferred_paths` deduplicate identical path strings, with structural taking precedence. Glob expressions count once without expansion. Always present, including all-zero.",
       "additionalProperties": false,
       "required": [
         "structural",
-        "deferred"
+        "deferred",
+        "structural_paths",
+        "deferred_paths"
       ],
       "properties": {
         "structural": {
@@ -39,6 +41,14 @@
           "minimum": 0
         },
         "deferred": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "structural_paths": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "deferred_paths": {
           "type": "integer",
           "minimum": 0
         }
