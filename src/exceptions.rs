@@ -332,7 +332,8 @@ impl Registries {
     }
 
     /// Entries per kind across both registries (§FS-004-check-audit.2): how many
-    /// files are accepted permanently, and how many carry debt to retire.
+    /// entries are accepted permanently, and how many carry debt to retire. Soft and
+    /// hard entries for the same path each contribute, so such a twin counts twice.
     pub fn kind_counts(&self) -> KindCounts {
         let mut counts = KindCounts::default();
         for entry in self.all() {
