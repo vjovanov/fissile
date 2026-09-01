@@ -200,19 +200,27 @@ state. It is for adoption and maintenance, not just pass/fail.
 
 - Default audit reports current soft and hard overflows.
 - Default audit also counts the exception registries by kind
-  (§FS-003-exceptions.2.1) — how many files are accepted permanently versus how
-  many carry debt someone has to retire:
+  (§FS-003-exceptions.2.1), both as registry entries and as distinct literal
+  `path` expressions across the soft and hard registries. The entry totals say
+  how many entries are accepted permanently versus how many carry debt someone
+  has to retire; the path totals say how many distinct path expressions carry
+  each kind. A path expression is structural when any entry with the same
+  `Exception::path` is structural, and deferred otherwise, regardless of
+  registry or entry order. A glob is one literal path expression and is counted
+  once; audit does not expand it into the files it currently matches:
 
   ```text
   exceptions:
-    structural (never expires): 3
-    deferred (carrying debt): 32
+    structural (never expires): 3 entries across 3 paths
+    deferred (carrying debt): 32 entries across 20 paths
   ```
 
   The section is omitted from text output when both registries are empty, so a
   repository with no exceptions pays nothing for it. JSON always carries the
-  object, because a consumer should not have to distinguish "no exceptions" from
-  "this build does not report them".
+  object with numeric `structural` and `deferred` entry totals plus numeric
+  `structural_paths` and `deferred_paths` distinct path totals, because a
+  consumer should not have to distinguish "no exceptions" from "this build does
+  not report them".
 - `--top <N>` reports the largest measured files per unit, after exclusions, even
   when they are under limit. Where a rule measures the file in that unit, the
   value is the one that rule counts — its line policy decides what a line is
