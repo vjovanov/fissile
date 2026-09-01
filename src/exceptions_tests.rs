@@ -23,6 +23,13 @@ fn load_soft(text: &str) -> Result<Registries, ExceptionError> {
     Registries::load(Some(RegistrySource::new(SOFT_REGISTRY, text)), None)
 }
 
+fn load_both(soft: &str, hard: &str) -> Result<Registries, ExceptionError> {
+    Registries::load(
+        Some(RegistrySource::new(SOFT_REGISTRY, soft)),
+        Some(RegistrySource::new(HARD_REGISTRY, hard)),
+    )
+}
+
 fn rules() -> Vec<Rule> {
     let toml = r#"
 fissile_config_version = 1
@@ -158,6 +165,60 @@ fn accepts_agreeing_kind_and_counts_by_kind() {
     let counts = registries.kind_counts();
     assert_eq!(counts.structural, 1);
     assert_eq!(counts.deferred, 0);
+}
+
+/// §FS-004-check-audit.2: a soft/hard twin contributes two entry totals but one
+/// distinct path-expression total.
+#[test]
+fn kind_path_counts_deduplicate_a_path_across_registries() {
+    let registries = load_both(SOFT, SOFT).expect("one deferred path in both registries");
+
+    assert_eq!(registries.kind_counts().deferred, 2);
+    assert_eq!(
+        registries.kind_path_counts(),
+        KindPathCounts {
+            structural: 0,
+            deferred: 1,
+        }
+    );
+}
+
+/// §FS-004-check-audit.2: structural takes precedence for a path, regardless
+/// of which registry supplies it first.
+#[test]
+fn structural_path_precedence_is_independent_of_registry_order() {
+    let structural = SOFT.replace(
+        "until = \"indefinite\"",
+        "kind = \"structural\"\nuntil = \"indefinite\"",
+    );
+    let deferred_first = load_both(SOFT, &structural).expect("registries load");
+    let structural_first = load_both(&structural, SOFT).expect("registries load");
+
+    let expected = KindPathCounts {
+        structural: 1,
+        deferred: 0,
+    };
+    assert_eq!(deferred_first.kind_path_counts(), expected);
+    assert_eq!(structural_first.kind_path_counts(), expected);
+}
+
+/// §FS-004-check-audit.2: a repeated glob is one literal expression, not the
+/// number of files it happens to match.
+#[test]
+fn kind_path_counts_count_repeated_glob_once_without_expansion() {
+    let glob = SOFT
+        .replace("tests/fixtures/large.json", "tests/fixtures/**/*.json")
+        .replace("match = \"exact\"", "match = \"glob\"");
+    let registries = load_both(&glob, &glob).expect("one deferred glob in both registries");
+
+    assert_eq!(registries.kind_counts().deferred, 2);
+    assert_eq!(
+        registries.kind_path_counts(),
+        KindPathCounts {
+            structural: 0,
+            deferred: 1,
+        }
+    );
 }
 
 #[test]

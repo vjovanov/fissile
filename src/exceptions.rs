@@ -2,6 +2,7 @@
 //! accept an oversized file. Severity comes from which registry an entry lives
 //! in, not a field; each entry records the largest accepted measurement.
 
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 
@@ -62,7 +63,8 @@ impl fmt::Display for Kind {
 }
 
 /// How many entries of each kind both registries hold (§FS-004-check-audit.2):
-/// accepted permanently versus carrying debt someone has to retire.
+/// accepted permanently versus carrying debt someone has to retire. These are
+/// entry totals, so a path present in both registries contributes twice.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct KindCounts {
     pub structural: usize,
@@ -71,6 +73,22 @@ pub struct KindCounts {
 
 impl KindCounts {
     /// Whether the registries hold nothing to inventory.
+    pub fn is_empty(self) -> bool {
+        self.structural == 0 && self.deferred == 0
+    }
+}
+
+/// How many distinct literal registry path expressions carry each kind
+/// (§FS-004-check-audit.2). A path present in both registries is counted once,
+/// and structural takes precedence over deferred.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct KindPathCounts {
+    pub structural: usize,
+    pub deferred: usize,
+}
+
+impl KindPathCounts {
+    /// Whether the registries hold no path expressions to inventory.
     pub fn is_empty(self) -> bool {
         self.structural == 0 && self.deferred == 0
     }
@@ -324,6 +342,26 @@ impl Registries {
             }
         }
         counts
+    }
+
+    /// Distinct literal registry paths per kind across both registries
+    /// (§FS-004-check-audit.2). Duplicate path strings, including duplicate
+    /// glob expressions, count once without expanding them; a structural entry
+    /// wins for a path regardless of iteration order.
+    pub fn kind_path_counts(&self) -> KindPathCounts {
+        let mut paths = HashMap::new();
+        for entry in self.all() {
+            paths
+                .entry(entry.path.as_str())
+                .and_modify(|structural| *structural |= entry.kind == Kind::Structural)
+                .or_insert(entry.kind == Kind::Structural);
+        }
+
+        let structural = paths.values().filter(|&&structural| structural).count();
+        KindPathCounts {
+            structural,
+            deferred: paths.len() - structural,
+        }
     }
 
     /// Entries whose path/glob matches none of `scanned` (§FS-004-check-audit.2).

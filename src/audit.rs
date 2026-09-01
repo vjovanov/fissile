@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use crate::cli::{self, CommandError, Format, Loaded};
 use crate::entry;
-use crate::exceptions::{EntrySite, Exception, KindCounts, MatchKind};
+use crate::exceptions::{EntrySite, Exception, KindCounts, KindPathCounts, MatchKind};
 use crate::json::Json;
 use crate::report::{self, EvalError, Outcome};
 use crate::{FileMeasurement, RuleHit, Selector, Severity, Unit, scan};
@@ -50,6 +50,7 @@ struct Inventory {
     loose: Option<Vec<Loose>>,
     coverage: Option<Coverage>,
     kinds: KindCounts,
+    kind_paths: KindPathCounts,
 }
 
 /// One entry accepting far more of a file that is still there. Stale is the
@@ -170,6 +171,7 @@ pub fn run(options: &AuditOptions) -> Result<Run, CommandError> {
         // Default-on, no flag: the two numbers are what an inventory is for
         // (§FS-004-check-audit.2).
         kinds: loaded.registries.kind_counts(),
+        kind_paths: loaded.registries.kind_path_counts(),
     };
 
     let output = match format {
@@ -412,9 +414,13 @@ fn render_text(
     // exceptions pays no lines for the section (§FS-004-check-audit.2).
     let kinds = inventory.kinds;
     if !kinds.is_empty() {
+        let paths = inventory.kind_paths;
         sections.push(format!(
-            "exceptions:\n  structural (never expires): {}\n  deferred (carrying debt): {}",
-            kinds.structural, kinds.deferred
+            "exceptions:\n  structural (never expires): {} entries across {} paths\n  deferred (carrying debt): {} entries across {} paths",
+            kinds.structural,
+            paths.structural,
+            kinds.deferred,
+            paths.deferred
         ));
     }
 
@@ -532,6 +538,14 @@ fn render_json(outcomes: &[Outcome], inventory: &Inventory) -> String {
             Json::Object(vec![
                 ("structural", Json::UInt(inventory.kinds.structural as u64)),
                 ("deferred", Json::UInt(inventory.kinds.deferred as u64)),
+                (
+                    "structural_paths",
+                    Json::UInt(inventory.kind_paths.structural as u64),
+                ),
+                (
+                    "deferred_paths",
+                    Json::UInt(inventory.kind_paths.deferred as u64),
+                ),
             ]),
         ),
     ];

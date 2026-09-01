@@ -1,0 +1,10 @@
+fissile_exceptions_version = 2
+
+[[exceptions]]
+path = "src/big.rs"
+match = "exact"
+rules = ["rust"]
+kind = "structural"
+max_accepted = { value = 5, unit = "lines" }
+until = "indefinite"
+reason = "the soft twin shares the structural constraint"

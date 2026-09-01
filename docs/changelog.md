@@ -32,6 +32,12 @@ and at 0.x semver puts the minor number in charge of it.
 
 ## Unreleased
 
+### Fixed
+
+- §FS-004-check-audit.2: `audit` now reports exception entry totals alongside
+  distinct path-expression totals, so soft/hard twins and repeated globs are
+  not presented as additional files. (PR #N)
+
 ## 2. [0.8.2] — 2026-08-31
 
 ### Changed
