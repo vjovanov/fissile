@@ -1,0 +1,10 @@
+# No hard registry file exists at all. The refusal still names the configured
+# path, because that is the file the reader has to create
+# (§FS-003-exceptions.2.3, §DF-005-exception-identity).
+args = ["check", "--no-color"]
+exit = 2
+stderr_contains = [
+  'fissile check: docs/file-size-agent-exceptions.toml: src/big.rs declares shadows = "hard"',
+  "but docs/file-size-human-exceptions.toml holds no entry for this path",
+  "delete shadows and state them here",
+]

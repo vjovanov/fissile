@@ -1,0 +1,13 @@
+fissile_exceptions_version = 2
+
+[[exceptions]]
+path = "src/big.rs"
+match = "exact"
+rules = ["rust"]
+kind = "structural"
+max_accepted = { value = 4, unit = "lines" }
+until = "indefinite"
+reason = """
+The generated dispatch table this file holds has no seam: the compiler needs
+every arm of it in one match, and splitting it would break that.
+"""

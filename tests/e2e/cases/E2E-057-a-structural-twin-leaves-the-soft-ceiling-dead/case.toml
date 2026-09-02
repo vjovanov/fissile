@@ -1,0 +1,21 @@
+# E2E-056's repository with one word changed: the hard entry is `structural`,
+# so evaluation ends there and the soft ceiling above the limit silences
+# nothing (§FS-005-exception-add.1.1, §DF-010-stated-ceilings-are-exact.2).
+args = [
+  "exception", "add", "src/big.rs",
+  "--severity", "soft",
+  "--rule", "rust",
+  "--shadows-hard",
+  "--max", "10",
+  "--unit", "lines",
+]
+exit = 2
+stderr_contains = [
+  "--max 10 is at or above rule rust hard limit 4; a soft ceiling there silences nothing.",
+  # The offered command is this call with the flag it was given, so it runs as
+  # printed (§FS-005-exception-add.4).
+  "fissile exception add src/big.rs --severity soft --rule rust --shadows-hard --max <N> --unit lines",
+  # No hard-severity route is offered: the hard entry is what the call points at.
+  "with 3 <= N < 4.",
+]
+absent = ["docs/file-size-agent-exceptions.toml"]

@@ -1,9 +1,15 @@
 # Soft (agent-facing) file-size exception registry (§FS-003-exceptions).
 #
 # Entries here silence soft-limit warnings for files this repo has deliberately
-# accepted as oversized, each with a written reason and a maximum accepted size
-# so the warning returns if the file grows past it. Add entries with
+# accepted as oversized, each with a rationale and a maximum accepted size so
+# the warning returns if the file grows past it. Add entries with
 # `fissile exception add --severity soft` (§FS-005-exception-add).
+#
+# The rationale is written here, or inherited: `shadows = "hard"` says the entry
+# is the twin of this path's entry in the hard registry, which carries the
+# reason and the until it would otherwise restate (§FS-003-exceptions.2.3). Such
+# an entry states neither of its own, and `fissile exception add --shadows-hard`
+# writes it (§FS-005-exception-add.1.1).
 #
 # `kind` says which claim the entry makes, and therefore what `reason` has to
 # establish (§FS-003-exceptions.2.1):
@@ -22,6 +28,8 @@ fissile_exceptions_version = 2
 # match = "exact"               # exact | glob
 # rules = ["*"]                 # rule ids this applies to, or ["*"] for all
 # kind = "deferred"             # structural | deferred
+# shadows = "hard"              # inherit until and reason from the hard entry,
+#                               # and state neither below (§FS-003-exceptions.2.3)
 # max_accepted = { value = 0, unit = "lines" }
 # until = "the condition that retires this entry"
 # reason = """

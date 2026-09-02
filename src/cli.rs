@@ -75,7 +75,11 @@ pub fn load(root: &Path, config_path: Option<&Path>) -> Result<Loaded, CommandEr
         hard_text
             .as_deref()
             .map(|text| RegistrySource::new(&config.exceptions.hard_registry, text)),
-    )?;
+    )
+    // An absent hard registry is one `Registries::load` was given no path for,
+    // and a twin pointing into it still has to say which file to open
+    // (§FS-003-exceptions.2.3).
+    .map_err(|error| error.naming_hard_registry(&config.exceptions.hard_registry))?;
     registries.validate_against(checker.rules())?;
 
     Ok(Loaded {

@@ -78,3 +78,6 @@ The harness drives the real `fissile` binary, so every documented behavior under
 - `E2E-053-shadows-hard-needs-the-entry-it-points-at` — a shadow of a decision nobody recorded is refused.
 - `E2E-054-an-orphan-shadow-fails-the-load` — deleting the original takes the twin with it.
 - `E2E-055-shadows-hard-takes-none-of-the-three` — the flag replaces --kind/--reason/--until rather than joining them.
+- `E2E-056-a-deferred-twin-lifts-a-soft-ceiling-over-the-hard-limit` — shadowing a deferred entry accepts a ceiling above the limit.
+- `E2E-057-a-structural-twin-leaves-the-soft-ceiling-dead` — the same call is refused when the entry shadowed is structural.
+- `E2E-058-an-orphan-shadow-names-a-registry-that-is-not-there` — a missing hard registry is named by its configured path.
