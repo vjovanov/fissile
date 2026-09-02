@@ -65,10 +65,22 @@ that check, because the entry it is about to delete is what fails it. Repairing
 that state is what the command is for, and a repair tool that refuses to start in
 the state it repairs is no tool at all.
 
-What `remove` still requires is a document it can read. A registry that does not
-parse, that declares an unsupported version, or that holds an entry missing a
-`reason` or a `path` cannot be addressed by index either, and those failures are
-reported exactly as they are for every other command.
+What `remove` still requires is a document it can read, and that boundary is the
+one the load already draws. Reading a registry is two stages: every entry is
+built from the document first — it parses, it declares a supported version, and
+each entry's own fields are present and consistent (§FS-003-exceptions.2) — and
+only then is what was built held against the configured rules. `remove` loosens
+the second stage and nothing of the first. So whatever stops an entry from being
+built stops `remove` too, and is reported exactly as it is for every other
+command: a blank `reason`, a blank `until`, an empty rule list, a ceiling of
+zero, a `kind` that contradicts its `until` (§FS-003-exceptions.2.1), a field
+that is not there at all.
+
+A failure at that stage is not confined to the entry that carries it. Building
+stops at the first entry that fails, so the document goes unread and every other
+entry in it is out of reach until the offending one is edited by hand. An entry
+that will not build is therefore the thing to repair first, and no command —
+this one included — will do it.
 
 Two of the rule-check failures stay out of reach for a different reason: the
 address takes its rule ids and its unit from the command line, and the unit from
@@ -79,7 +91,9 @@ refused before the registry is read, and a live id addresses a different
 condition. Those two are edited by hand, as every entry was before this command.
 Widening the address to reach them would mean an entry addressed by something
 other than the condition it accepts, which is the identity `add` and `retune`
-are built on (§DF-005-exception-identity).
+are built on (§DF-005-exception-identity). Unlike an entry that will not build,
+though, each costs only itself: the registry loads, and every other entry in it
+answers to its address as usual.
 
 No other command loosens. `check` and the hook keep failing on an invalid
 registry, because a gate that measured against entries it could not validate
@@ -132,7 +146,12 @@ The command deletes the addressed `[[exceptions]]` block together with the blank
 line that separated it from what follows. Every other byte — the version line,
 the comments that belong to another entry or to no entry, entry order, the
 fields of the other entries, and the line endings the file is stored with — is
-preserved, so the diff is one entry and nothing else.
+preserved, so the diff is one entry and nothing else. The tail is the one
+exception, and only when the removed entry was the last block: the document is
+then left ending with exactly one line terminator, in the endings it is stored
+with, so blank lines trailing the last surviving line collapse into that one and
+a registry stored without a final terminator gains one. Removing any other block
+leaves the tail as it was.
 
 A comment belongs to the entry it is written directly above. The block is
 therefore the `[[exceptions]]` header, the lines under it, and the run of
