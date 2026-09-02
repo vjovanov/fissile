@@ -97,6 +97,14 @@ only whether a tool can see it.
   not exist, and it cannot be cleared by doing the work — only by writing a
   second entry duplicating the first: same file, same rationale twice, two
   `max_accepted` values free to drift apart.
+- The `deferred` half of that rule is deliberate, and it does mean every
+  deferred hard acceptance needs a soft entry beside it before the file goes
+  quiet. That twin owns no judgment — the decision, its argument, and its
+  retirement condition were all made in the hard registry — so it declares
+  `shadows = "hard"` and inherits `reason` and `until` rather than storing a
+  second copy free to drift (§FS-003-exceptions.2.3). The one field it does own,
+  `max_accepted`, is the one the two entries are allowed to disagree about.
+  `fissile exception add --shadows-hard` writes it (§FS-005-exception-add.1.1).
 - Registry version stays `1`. An upgrade is not a migration: existing entries
   keep loading as `deferred`, and re-classifying them is a repository's own
   review pass, not something the tool forces at load time.
