@@ -5,8 +5,8 @@ git = true
 git_removes = ["src/moved.rs"]
 stdout_equals = """
 stale: 1 exception accepts a file that is not there [registry: docs/file-size-agent-exceptions.toml]
-  The file moved or was deleted, so the entry silences nothing. Remove it, or
-  point it at the path the file moved to.
+  The file moved or was deleted, so the entry silences nothing. Remove it with
+  `fissile exception remove`, or point it at the path the file moved to.
     src/moved.rs [soft, rule: rust]
 
 commit blocked by fissile. Remove the exception entry above, or point it at the

@@ -1,0 +1,19 @@
+# The same removal E2E-061 performs, asked for as a dry run: it says what it
+# would do and the registry keeps every byte (§FS-009-exception-remove.4).
+args = [
+  "exception", "remove", "src/moved.rs",
+  "--severity", "soft",
+  "--rule", "rust",
+  "--dry-run",
+]
+exit = 0
+stdout_contains = [
+  "docs/file-size-agent-exceptions.toml: would remove src/moved.rs (accepted up to 20 lines)",
+  "would update docs/file-size-agent-exceptions.toml",
+]
+[[files]]
+path = "docs/file-size-agent-exceptions.toml"
+contains = [
+  "path = \"src/moved.rs\"",
+  "max_accepted = { value = 20, unit = \"lines\" }",
+]

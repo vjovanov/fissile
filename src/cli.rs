@@ -57,6 +57,18 @@ pub struct Loaded {
 
 /// Load and validate everything a `check`/`audit`/`exception` run needs.
 pub fn load(root: &Path, config_path: Option<&Path>) -> Result<Loaded, CommandError> {
+    let loaded = load_unvalidated(root, config_path)?;
+    loaded.registries.validate_against(loaded.checker.rules())?;
+    Ok(loaded)
+}
+
+/// The same load, stopping before the entries are held against the rules — the
+/// check §FS-003-exceptions.4 aborts a run on. Only `exception remove` reads it:
+/// the entry it deletes is what fails that check, so the one command that
+/// repairs the registry has to start in the state it repairs
+/// (§FS-009-exception-remove.2). Everything a command needs to *read* the
+/// document still applies here — a registry that will not parse is refused.
+pub fn load_unvalidated(root: &Path, config_path: Option<&Path>) -> Result<Loaded, CommandError> {
     let config = Config::load(root, config_path)?;
     let checker = config.to_checker()?;
 
@@ -80,7 +92,6 @@ pub fn load(root: &Path, config_path: Option<&Path>) -> Result<Loaded, CommandEr
     // and a twin pointing into it still has to say which file to open
     // (§FS-003-exceptions.2.3).
     .map_err(|error| error.naming_hard_registry(&config.exceptions.hard_registry))?;
-    registries.validate_against(checker.rules())?;
 
     Ok(Loaded {
         config,

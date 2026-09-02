@@ -1,10 +1,11 @@
 # FS-006-cli: the top-level command line is small, self-describing, and versioned
 
 `fissile` is one binary with five commands: `init`, `check`, `measure`, `audit`,
-and `exception`, the last carrying the `add` and `retune` subcommands
+and `exception`, the last carrying the `add`, `retune` and `remove` subcommands
 (§FS-002-init, §FS-004-check-audit, §FS-007-measure, §FS-005-exception-add,
-§FS-008-exception-retune). Everything above the commands — dispatch, help,
-version — is specified here so the top level cannot drift between surfaces.
+§FS-008-exception-retune, §FS-009-exception-remove). Everything above the
+commands — dispatch, help, version — is specified here so the top level cannot
+drift between surfaces.
 
 `check` and `measure` are separate commands over the same measurement, because
 they answer different questions under different contracts: `check` is a gate that

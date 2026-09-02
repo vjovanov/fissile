@@ -9,6 +9,7 @@ use crate::cli::{self, CommandError, Loaded};
 use crate::entry::{self, Address, Sizing};
 use crate::exception::shell_quote;
 use crate::exceptions::{Exception, MatchKind};
+use crate::toml_lines;
 use crate::{Severity, Unit, scan};
 
 /// Inputs to `exception retune`.
@@ -100,13 +101,17 @@ pub fn run(options: &RetuneOptions) -> Result<Run, CommandError> {
     };
     let base = entry::resolve_base(sizing, &loaded, unit, rules[0])?;
     // `audit --stale-exceptions` calls this state "silences nothing" and names
-    // removal as the remedy, so the refusal names the same (§FS-003-exceptions.7).
+    // removal as the remedy, so the refusal names the same (§FS-003-exceptions.7)
+    // — and the command that performs it (§FS-009-exception-remove).
     entry::check_min_limit(
         &rules,
         options.severity,
         unit,
         &base,
-        "remove the entry rather than retuning it",
+        &format!(
+            "remove the entry rather than retuning it:\n  {}",
+            remove_route(options, &path)
+        ),
     )?;
     let step = loaded.config.exceptions.bump.step(unit);
     let ceiling = entry::ceiling(&base, step);
@@ -212,6 +217,22 @@ fn ceiling_detail(
 // deferred kind takes --until.
 fn routes(options: &RetuneOptions, path: &str, unit: Unit, ceiling: u64) -> entry::Routes {
     let path = shell_quote(path);
+    let flags = address_flags(options);
+    entry::Routes {
+        stated: format!(
+            "fissile exception retune {path} --severity soft{flags} --max <N> --unit {unit}"
+        ),
+        hard: Some(format!(
+            "fissile exception add {path} --severity hard{flags} --max {ceiling} --unit {unit} \
+             --kind structural --reason \"...\"\n  (or --kind deferred --until \
+             '<what retires it>')"
+        )),
+    }
+}
+
+/// The `--config`, `--rule` and `--match` flags of the caller's own address, so
+/// an offered command addresses the entry the caller just addressed.
+fn address_flags(options: &RetuneOptions) -> String {
     let mut flags = String::new();
     if let Some(config) = &options.config_path {
         flags.push_str(&format!(
@@ -225,16 +246,19 @@ fn routes(options: &RetuneOptions, path: &str, unit: Unit, ceiling: u64) -> entr
     if options.match_kind == MatchKind::Glob {
         flags.push_str(" --match glob");
     }
-    entry::Routes {
-        stated: format!(
-            "fissile exception retune {path} --severity soft{flags} --max <N> --unit {unit}"
-        ),
-        hard: Some(format!(
-            "fissile exception add {path} --severity hard{flags} --max {ceiling} --unit {unit} \
-             --kind structural --reason \"...\"\n  (or --kind deferred --until \
-             '<what retires it>')"
-        )),
-    }
+    flags
+}
+
+/// The `exception remove` call for this address (§FS-009-exception-remove.1),
+/// offered where a ceiling has fallen under the limit it exists to accept and
+/// there is nothing left to retune.
+fn remove_route(options: &RetuneOptions, path: &str) -> String {
+    format!(
+        "fissile exception remove {} --severity {}{}",
+        shell_quote(path),
+        options.severity,
+        address_flags(options)
+    )
 }
 
 fn with_note(head: String, note: Option<String>) -> String {
@@ -289,24 +313,14 @@ fn rewrite_ceiling(
     // Split rather than `lines()`: this round-trips the original bytes, including
     // the final newline and any `\r`, since only one line may change.
     let mut lines: Vec<String> = text.split('\n').map(str::to_owned).collect();
-    let mut block: Option<usize> = None;
-    let mut target = None;
-    let mut open = None;
-
-    for (number, line) in lines.iter().enumerate() {
-        // Only a line that begins outside a string holds TOML structure. Inside
-        // one, `[[exceptions]]` and `max_accepted` are prose someone wrote in a
-        // `reason`, and counting them would shift every index after it.
-        if open.is_none() {
-            let trimmed = line.trim();
-            if trimmed.starts_with("[[exceptions]]") {
-                block = Some(block.map_or(0, |current| current + 1));
-            } else if block == Some(index) && is_max_accepted(trimmed) {
-                target = Some(number);
-            }
-        }
-        open = scan_line(line, open);
-    }
+    // Only a line that begins outside a string holds TOML structure. Inside one,
+    // `[[exceptions]]` and `max_accepted` are prose someone wrote in a `reason`.
+    let structural = toml_lines::structural_lines(&lines);
+    let starts = toml_lines::block_starts(&lines);
+    let target = starts.get(index).and_then(|start| {
+        let end = starts.get(index + 1).copied().unwrap_or(lines.len());
+        (*start..end).find(|number| structural[*number] && is_max_accepted(lines[*number].trim()))
+    });
 
     // Reached only by a registry that spells the ceiling as a sub-table rather
     // than the inline form both commands write. Refusing beats guessing at a
@@ -339,82 +353,6 @@ fn is_max_accepted(trimmed: &str) -> bool {
     trimmed
         .strip_prefix("max_accepted")
         .is_some_and(|rest| rest.trim_start().starts_with('='))
-}
-
-/// Which multi-line string delimiter is currently open, if any. TOML closes a
-/// `"""` string only with `"""` and a `'''` string only with `'''`, so the two
-/// cannot be tracked as one toggle.
-#[derive(Clone, Copy)]
-enum Fence {
-    Basic,
-    Literal,
-}
-
-impl Fence {
-    fn delimiter(self) -> &'static str {
-        match self {
-            Fence::Basic => "\"\"\"",
-            Fence::Literal => "'''",
-        }
-    }
-}
-
-/// Walk one line of TOML and report which multi-line string is open at its end.
-/// Enough of a lexer to keep structure and prose apart: comments and single-line
-/// strings are skipped so a `#` note or a `path = "a\"\"\"b"` value cannot open a
-/// fence, and only a real delimiter changes the state.
-fn scan_line(line: &str, mut open: Option<Fence>) -> Option<Fence> {
-    let mut at = 0;
-    while at < line.len() {
-        if let Some(fence) = open {
-            match line[at..].find(fence.delimiter()) {
-                Some(offset) => {
-                    at += offset + fence.delimiter().len();
-                    open = None;
-                }
-                None => return Some(fence),
-            }
-            continue;
-        }
-        let rest = &line[at..];
-        if rest.starts_with('#') {
-            return None;
-        }
-        if rest.starts_with("\"\"\"") || rest.starts_with("'''") {
-            let fence = if rest.starts_with('"') {
-                Fence::Basic
-            } else {
-                Fence::Literal
-            };
-            open = Some(fence);
-            at += fence.delimiter().len();
-            continue;
-        }
-        if let Some(quote) = rest.chars().next().filter(|c| *c == '"' || *c == '\'') {
-            at += quote.len_utf8() + single_line_string(&rest[quote.len_utf8()..], quote);
-            continue;
-        }
-        at += rest.chars().next().map_or(1, char::len_utf8);
-    }
-    open
-}
-
-/// The byte length consumed by a single-line string body and its closing quote.
-/// An unterminated one runs to end of line, which is what a malformed registry
-/// gets; the write is refused later by revalidation, never by a bad guess here.
-fn single_line_string(rest: &str, quote: char) -> usize {
-    let escapes = quote == '"';
-    let mut chars = rest.char_indices();
-    while let Some((offset, character)) = chars.next() {
-        if escapes && character == '\\' {
-            chars.next();
-            continue;
-        }
-        if character == quote {
-            return offset + character.len_utf8();
-        }
-    }
-    rest.len()
 }
 
 #[cfg(test)]

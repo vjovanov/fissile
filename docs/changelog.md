@@ -47,6 +47,16 @@ and at 0.x semver puts the minor number in charge of it.
   missing hard entry. `max_accepted` stays required and local, and the pair may
   differ. No registry version moves; existing registries are unaffected.
   Resolves #16. (PR #52)
+- §FS-009-exception-remove: new `fissile exception remove <path> --severity
+  soft|hard --rule <id>` deletes one exception entry, addressing it exactly as
+  `exception retune` does and supporting `--config`, `--match` and `--dry-run`.
+  It refuses to delete an entry that is still silencing a finding, and it is the
+  one command that loads a registry the rule check rejects — so an entry whose
+  ceiling a raised limit left below that limit, which aborted `check`, `audit`,
+  `measure` and the hook before they measured anything, is now removable without
+  hand-editing TOML. `retune`'s min-limit refusal, `check`'s stale-entry
+  guidance and `audit`'s "silences nothing" line all name the new command.
+  (PR #52)
 
 ### Changed
 

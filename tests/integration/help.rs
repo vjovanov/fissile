@@ -44,7 +44,7 @@ fn subcommand_help_fits_one_screen_and_shows_examples() {
 /// so the shared screen stays a dispatcher rather than growing two flag lists.
 #[test]
 fn exception_subcommand_help_fits_one_screen() {
-    for subcommand in ["add", "retune"] {
+    for subcommand in ["add", "retune", "remove"] {
         let text = help(&["exception", subcommand, "--help"]);
         let lines = text.lines().count();
         assert!(
@@ -55,6 +55,26 @@ fn exception_subcommand_help_fits_one_screen() {
         assert!(
             text.contains("examples:"),
             "fissile exception {subcommand} --help should include compact examples"
+        );
+    }
+}
+
+/// §FS-006-cli.1: `exception` dispatches on its first argument, and the screen it
+/// prints on a miss lists every subcommand there is — a surface that named two of
+/// three is how §FS-009-exception-remove came to be missing for a release.
+#[test]
+fn the_exception_screen_lists_every_subcommand() {
+    let text = help(&["exception", "--help"]);
+    for subcommand in ["add", "retune", "remove"] {
+        assert!(
+            text.contains(&format!("\n  {subcommand} ")),
+            "the exception usage screen should list `{subcommand}`"
+        );
+        // Each one answers `--help` for itself, so the shared screen stays a
+        // dispatcher (§FS-006-cli.2).
+        assert!(
+            help(&["exception", subcommand, "--help"]).contains(&format!("exception {subcommand}")),
+            "fissile exception {subcommand} --help should name the subcommand"
         );
     }
 }

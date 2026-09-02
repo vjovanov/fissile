@@ -14,5 +14,6 @@ By convention every spec under this directory is linked from this README so the 
 | [§FS-006-cli](FS-006-cli.md#fs-006-cli-the-top-level-command-line-is-small-self-describing-and-versioned) | the top-level command line is small, self-describing, and versioned |
 | [§FS-007-measure](FS-007-measure.md#fs-007-measure-fissile-measure-reports-what-fissile-counts) | fissile measure reports what fissile counts |
 | [§FS-008-exception-retune](FS-008-exception-retune.md#fs-008-exception-retune-fissile-exception-retune-moves-a-recorded-ceiling) | fissile exception retune moves a recorded ceiling |
+| [§FS-009-exception-remove](FS-009-exception-remove.md#fs-009-exception-remove-fissile-exception-remove-deletes-an-entry-that-accepts-nothing) | fissile exception remove deletes an entry that accepts nothing |
 
 This index is navigational — citations should target the spec ID directly, never this file.

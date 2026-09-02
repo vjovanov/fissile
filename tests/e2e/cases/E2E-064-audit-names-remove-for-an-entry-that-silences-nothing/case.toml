@@ -1,0 +1,9 @@
+# The entry accepts 20 lines of a 1-line file under a soft limit of 2: the file
+# no longer crosses the limit at all, so lowering the ceiling is not the remedy
+# and the report names the command that is (§FS-003-exceptions.7).
+args = ["audit", "--stale-exceptions", "--no-color"]
+exit = 0
+stdout_contains = [
+  "loose ceilings:",
+  "silences nothing now; the soft limit is 2 — remove it with `fissile exception remove`",
+]

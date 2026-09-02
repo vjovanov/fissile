@@ -1,0 +1,5 @@
+# The state E2E-059 leaves behind: the entry is gone, so the registry the run
+# aborted on now loads and the inventory runs (§FS-009-exception-remove.2).
+args = ["audit", "--stale-exceptions", "--no-color"]
+exit = 0
+stdout_contains = ["stale exceptions:", "  none"]

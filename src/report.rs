@@ -332,7 +332,7 @@ pub fn stale_blocks(entries: &[&Exception], color: bool) -> Vec<String> {
         .collect()
 }
 
-const STALE_GUIDANCE: &str = "The file moved or was deleted, so the entry silences nothing. Remove it, or point it at the path the file moved to.";
+const STALE_GUIDANCE: &str = "The file moved or was deleted, so the entry silences nothing. Remove it with `fissile exception remove`, or point it at the path the file moved to.";
 
 /// The findings that share a severity, a rule, and one rendered guidance string.
 struct Group<'a> {

@@ -1,0 +1,20 @@
+# `src/moved.rs` is gone, which is what `check` reports as a dead entry and names
+# removal for (§FS-004-check-audit.1.3). The entry silences nothing, so `remove`
+# deletes it — and leaves the entry beside it untouched, byte for byte.
+args = [
+  "exception", "remove", "src/moved.rs",
+  "--severity", "soft",
+  "--rule", "rust",
+]
+exit = 0
+stdout_contains = [
+  "docs/file-size-agent-exceptions.toml: removed src/moved.rs (accepted up to 20 lines)",
+]
+[[files]]
+path = "docs/file-size-agent-exceptions.toml"
+contains = [
+  "path = \"src/big.rs\"",
+  "max_accepted = { value = 20, unit = \"lines\" }",
+  "Missing boundary: the module this belongs in does not exist yet.",
+]
+excludes = ["src/moved.rs"]

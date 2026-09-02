@@ -9,4 +9,7 @@ exit = 2
 stderr_contains = [
   "src/big.rs measures 1 lines, under rule rust soft limit 2",
   "silence nothing — remove the entry rather than retuning it",
+  # The remedy names the command that performs it (§FS-009-exception-remove.1),
+  # addressed as the caller addressed the entry — so it runs as printed.
+  "fissile exception remove src/big.rs --severity soft --rule rust",
 ]
