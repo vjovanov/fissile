@@ -34,6 +34,11 @@ and at 0.x semver puts the minor number in charge of it.
 
 ### Changed
 
+- §AR-001-ci: every declaration is listed in its folder's index. `grund check`
+  warned that thirteen declarations were absent from their index README and that
+  the warning becomes an error in grund 0.13.0; the two decision folders that had
+  no index at all now have one. (PR #51)
+
 - §AR-001-ci.8.2: after a release, main opens the next patch as `X.Y.Z-dev`
   instead of keeping the version it just published. A build from main previously
   reported the tag it was already ahead of, so a merged-but-uninstalled fix was
