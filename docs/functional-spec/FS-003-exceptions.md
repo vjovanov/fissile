@@ -163,9 +163,12 @@ read a shadowing entry exactly like any other (§5).
   `match`, and the same `max_accepted.unit`, whose `rules` cover every rule the
   shadowing entry lists. Exactly one hard entry must answer it: none is a schema
   error and more than one is an ambiguity error, each naming the shadowing
-  entry's site (§4). Deleting the hard entry therefore fails the load until the
-  twin goes too, which is what makes "retires with its twin" a fact rather than
-  a convention.
+  entry's site (§4). Both also name the hard registry's configured path, whether
+  or not that file exists, since the reader's next edit is in it; and the
+  ambiguity names what tells the two candidates apart, reporting a duplicate
+  when their rule lists are equal and nothing does. Deleting the hard entry
+  therefore fails the load until the twin goes too, which is what makes "retires
+  with its twin" a fact rather than a convention.
 - `kind` stays the shadowing entry's own field, and the §2.1 agreement is
   checked against the **inherited** `until`. So a `deferred` twin of a
   structural hard entry inherits `indefinite` and fails to load — the forced
@@ -233,7 +236,9 @@ multiple rules only when all listed rules use the same unit.
 - `max_accepted.unit` is `bytes`, `lines`, or `tokens`;
 - `max_accepted.unit` matches every rule the entry can silence;
 - `max_accepted.value` is at least the corresponding soft or hard rule limit;
-- `reason` is not empty after trimming whitespace;
+- `reason` is stated and not empty after trimming whitespace — an omitted field
+  and a blank one are one defect, the entry carries no rationale, and are
+  reported as one;
 - a declared `kind` agrees with `until` (§2.1): `structural` requires
   `indefinite`, `deferred` forbids it — for a shadowing entry, against the
   `until` it inherited (§2.3);
@@ -249,7 +254,7 @@ entry's `path`, because that pair is the line the reader has to edit
 (§DF-005-exception-identity):
 
 ```text
-docs/file-size-human-exceptions.toml: src/orders.rs has an empty reason
+docs/file-size-human-exceptions.toml: src/orders.rs states no reason
 ```
 
 The registry file is part of the identifier: the same path may appear in both

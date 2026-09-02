@@ -75,6 +75,15 @@ it looked in (§4): the shadow of a decision nobody recorded is not a shadow, an
 guessing which of two entries it points at would decide the thing the flag
 exists to state.
 
+The hard-limit rule in §4 applies unchanged, and `--shadows-hard` does not buy
+past it. The flag guarantees a hard entry at the address, not a **deferred**
+one: shadowing a `deferred` entry accepts a ceiling at or above the rule's hard
+limit, because that entry keeps the soft finding alive up there
+(§FS-003-exceptions.3); shadowing a `structural` one is refused on the same
+terms as any other soft entry, since evaluation ends at the hard entry and the
+soft ceiling would never fire. A file already at or above the limit is spared by
+§4's own exemption, whichever kind the twin declares.
+
 The restatement check (§4) does not apply to a shadowing entry. There is no
 reason of its own to judge, which is the point of writing it this way.
 
