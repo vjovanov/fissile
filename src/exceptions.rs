@@ -3,7 +3,6 @@
 //! in, not a field; each entry records the largest accepted measurement.
 
 use std::collections::HashMap;
-use std::error::Error;
 use std::fmt;
 
 use serde::Deserialize;
@@ -60,6 +59,15 @@ impl fmt::Display for Kind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
     }
+}
+
+/// What a soft entry may say in place of a rationale of its own: `"hard"` points
+/// at the hard entry at the same address, which carries the `reason` and the
+/// `until` for both (§FS-003-exceptions.2.3).
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Shadows {
+    Hard,
 }
 
 /// How many entries of each kind both registries hold (§FS-004-check-audit.2):
@@ -126,12 +134,20 @@ struct RawException {
     match_kind: MatchKind,
     rules: Vec<String>,
     max_accepted: MaxAccepted,
-    until: String,
-    reason: String,
+    /// Required, except on a shadowing entry, which has them filled in from its
+    /// hard twin before the entry is built (§FS-003-exceptions.2.3).
+    #[serde(default)]
+    until: Option<String>,
+    #[serde(default)]
+    reason: Option<String>,
     /// Optional: an entry that omits it reads as `Deferred`, and the `until`
     /// agreement is not checked (§FS-003-exceptions.2.1).
     #[serde(default)]
     kind: Option<Kind>,
+    /// Soft-registry only: this entry's rationale lives in the hard entry at
+    /// the same address (§FS-003-exceptions.2.3).
+    #[serde(default)]
+    shadows: Option<Shadows>,
     #[serde(default)]
     title: Option<String>,
     #[serde(default)]
@@ -228,13 +244,31 @@ pub struct Registries {
 impl Registries {
     /// Parse the soft and hard registry documents. A `None` source means the
     /// registry file is absent, which is treated as empty.
+    ///
+    /// Both documents are read before either is built: a shadowing soft entry
+    /// takes its `reason` and `until` off the hard entry at the same address,
+    /// so neither is known until the hard registry has been read
+    /// (§FS-003-exceptions.2.3).
     pub fn load(
         soft: Option<RegistrySource<'_>>,
         hard: Option<RegistrySource<'_>>,
     ) -> Result<Self, ExceptionError> {
+        let mut soft_raw = parse_raw(soft)?;
+        let hard_raw = parse_raw(hard)?;
+        // A rationale lives in the hard registry, so nothing there has anything
+        // above it to point at (§FS-003-exceptions.2.3).
+        if let Some(entry) = hard_raw.iter().find(|entry| entry.shadows.is_some()) {
+            return Err(ExceptionError::ShadowsInHardRegistry {
+                site: site(registry_path(hard), &entry.path),
+            });
+        }
+        // The hard registry is built first, so a defect in an entry a twin
+        // points at is reported where it lives, not at the twin inheriting it.
+        let hard_entries = build_all(hard_raw, Severity::Hard, hard)?;
+        resolve_shadows(&mut soft_raw, &hard_entries, registry_path(soft), hard)?;
         Ok(Self {
-            soft: parse_registry(soft, Severity::Soft)?,
-            hard: parse_registry(hard, Severity::Hard)?,
+            soft: build_all(soft_raw, Severity::Soft, soft)?,
+            hard: hard_entries,
         })
     }
 
@@ -375,10 +409,7 @@ impl Registries {
     }
 }
 
-fn parse_registry(
-    source: Option<RegistrySource<'_>>,
-    severity: Severity,
-) -> Result<Vec<Exception>, ExceptionError> {
+fn parse_raw(source: Option<RegistrySource<'_>>) -> Result<Vec<RawException>, ExceptionError> {
     let Some(source) = source else {
         return Ok(Vec::new());
     };
@@ -406,10 +437,97 @@ fn parse_registry(
         return Err(unsupported(file.fissile_exceptions_version));
     }
 
-    file.exceptions
-        .into_iter()
-        .map(|raw| build_exception(raw, severity, source.path))
+    Ok(file.exceptions)
+}
+
+/// The configured path of one registry, for a diagnostic to name. An absent
+/// file holds no entries, so the empty label it yields never reaches a message.
+fn registry_path(source: Option<RegistrySource<'_>>) -> &str {
+    source.map_or("", |source| source.path)
+}
+
+fn build_all(
+    raw: Vec<RawException>,
+    severity: Severity,
+    source: Option<RegistrySource<'_>>,
+) -> Result<Vec<Exception>, ExceptionError> {
+    raw.into_iter()
+        .map(|raw| build_exception(raw, severity, registry_path(source)))
         .collect()
+}
+
+/// Give every `shadows = "hard"` soft entry the `reason` and `until` of the one
+/// hard entry at its address, and refuse the shapes that would make the pointer
+/// meaningless (§FS-003-exceptions.2.3).
+fn resolve_shadows(
+    soft: &mut [RawException],
+    hard: &[Exception],
+    soft_registry: &str,
+    hard_source: Option<RegistrySource<'_>>,
+) -> Result<(), ExceptionError> {
+    for entry in soft.iter_mut().filter(|entry| entry.shadows.is_some()) {
+        // An entry with a rationale of its own is not shadowing one, and a
+        // second copy of either field is the drift the pointer removes.
+        for (field, stated) in [
+            ("reason", entry.reason.is_some()),
+            ("until", entry.until.is_some()),
+        ] {
+            if stated {
+                return Err(ExceptionError::ShadowsWithOwnRationale {
+                    site: site(soft_registry, &entry.path),
+                    field,
+                });
+            }
+        }
+        let unit = entry.max_accepted.unit.into();
+        let twins = shadow_twins(hard, &entry.path, entry.match_kind, unit, &entry.rules);
+        let twin = match twins.as_slice() {
+            [twin] => *twin,
+            [] => {
+                return Err(ExceptionError::ShadowsWithoutTwin {
+                    site: site(soft_registry, &entry.path),
+                    registry: hard_source.map(|source| source.path.to_owned()),
+                });
+            }
+            [first, second, ..] => {
+                return Err(ExceptionError::ShadowsAmbiguousTwin {
+                    site: site(soft_registry, &entry.path),
+                    registry: registry_path(hard_source).to_owned(),
+                    rules: [rule_list(first), rule_list(second)],
+                });
+            }
+        };
+        entry.reason = Some(twin.reason.clone());
+        entry.until = Some(twin.until.clone());
+    }
+    Ok(())
+}
+
+/// The hard entries a `shadows = "hard"` soft entry at this address inherits
+/// from (§FS-003-exceptions.2.3): the same `path` spelling, the same `match`,
+/// the same unit, and `rules` covering every rule the twin lists. Exactly one
+/// of them is a legal registry, and `exception add` holds `--shadows-hard` to
+/// the same count before it writes (§FS-005-exception-add.1.1).
+pub fn shadow_twins<'a>(
+    hard: &'a [Exception],
+    path: &str,
+    match_kind: MatchKind,
+    unit: Unit,
+    rules: &[String],
+) -> Vec<&'a Exception> {
+    hard.iter()
+        .filter(|entry| {
+            entry.path == path
+                && entry.match_kind == match_kind
+                && entry.max_unit == unit
+                && rules.iter().all(|rule| entry.applies_to_rule(rule))
+        })
+        .collect()
+}
+
+/// One entry's rule list, as a diagnostic spells it apart from another's.
+fn rule_list(entry: &Exception) -> String {
+    format!("[{}]", entry.rules.join(", "))
 }
 
 /// The declared version of a document the strict parse rejected, when it has one.
@@ -420,20 +538,21 @@ fn declared_version(text: &str) -> Option<u32> {
 }
 
 fn build_exception(
-    raw: RawException,
+    mut raw: RawException,
     severity: Severity,
     registry: &str,
 ) -> Result<Exception, ExceptionError> {
+    // Absent and blank are one defect — the entry carries no rationale — and a
+    // shadowing entry has its twin's filled in by now (§FS-003-exceptions.2.3).
+    let reason = raw.reason.take().unwrap_or_default();
+    let until = raw.until.take().unwrap_or_default();
     // An entry has no name, so every diagnostic locates it: registry file plus
     // the entry's own `path` (§DF-005-exception-identity).
-    let site = || EntrySite {
-        registry: registry.to_owned(),
-        path: raw.path.clone(),
-    };
-    if raw.reason.trim().is_empty() {
+    let site = || site(registry, &raw.path);
+    if reason.trim().is_empty() {
         return Err(ExceptionError::EmptyReason { site: site() });
     }
-    if raw.until.trim().is_empty() {
+    if until.trim().is_empty() {
         return Err(ExceptionError::EmptyUntil { site: site() });
     }
     if raw.max_accepted.value == 0 {
@@ -443,9 +562,10 @@ fn build_exception(
         return Err(ExceptionError::NoRules { site: site() });
     }
     // Checked only when the entry declares a kind, so an entry that omits one
-    // keeps loading (§FS-003-exceptions.2.1).
+    // keeps loading (§FS-003-exceptions.2.1). A shadowing entry is checked here
+    // too, against the `until` it inherited (§FS-003-exceptions.2.3).
     if let Some(kind) = raw.kind
-        && (kind == Kind::Structural) != is_indefinite(&raw.until)
+        && (kind == Kind::Structural) != is_indefinite(&until)
     {
         return Err(ExceptionError::KindUntilMismatch { site: site(), kind });
     }
@@ -463,9 +583,9 @@ fn build_exception(
         rules: raw.rules,
         max_value: raw.max_accepted.value,
         max_unit: raw.max_accepted.unit.into(),
-        until: raw.until,
+        until,
         kind: raw.kind.unwrap_or_default(),
-        reason: raw.reason,
+        reason,
         title: raw.title,
         owner: raw.owner,
         issue: raw.issue,
@@ -473,159 +593,13 @@ fn build_exception(
     })
 }
 
-/// Where one entry lives: the registry file and the entry's `path`. Diagnostics
-/// lead with the pair because it is the line the reader has to edit — an entry
-/// has no name to quote (§FS-003-exceptions.4, §DF-005-exception-identity).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct EntrySite {
-    pub registry: String,
-    pub path: String,
-}
-
-impl fmt::Display for EntrySite {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}: {}", self.registry, self.path)
-    }
-}
-
-/// A failure while loading or validating an exception registry.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ExceptionError {
-    Parse {
-        registry: String,
-        reason: String,
-    },
-    UnsupportedVersion {
-        registry: String,
-        version: u32,
-    },
-    EmptyReason {
-        site: EntrySite,
-    },
-    EmptyUntil {
-        site: EntrySite,
-    },
-    KindUntilMismatch {
-        site: EntrySite,
-        kind: Kind,
-    },
-    NonPositiveMax {
-        site: EntrySite,
-    },
-    NoRules {
-        site: EntrySite,
-    },
-    UnknownRule {
-        site: EntrySite,
-        rule: String,
-    },
-    UnitMismatch {
-        site: EntrySite,
-        rule: String,
-    },
-    NoSeverityLimit {
-        site: EntrySite,
-        rule: String,
-        severity: Severity,
-    },
-    BelowLimit {
-        site: EntrySite,
-        rule: String,
-        max: u64,
-        limit: u64,
-    },
-    MultipleMatches {
-        registry: String,
-        path: String,
-        rule: String,
-        unit: Unit,
-    },
-}
-
-impl fmt::Display for ExceptionError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ExceptionError::Parse { registry, reason } => {
-                write!(f, "{registry}: exception registry parse error: {reason}")
-            }
-            // Every adopter meets this once, on upgrade, so it names both edits
-            // rather than stating a fact (§FS-003-exceptions.2.2).
-            ExceptionError::UnsupportedVersion { registry, version } if *version == 1 => write!(
-                f,
-                "{registry}: exception registry version 1 is unsupported; this build supports {SUPPORTED_VERSION}\n\
-                 to migrate this file: set fissile_exceptions_version = {SUPPORTED_VERSION}, and delete every id and replaces line — version {SUPPORTED_VERSION} removed both, because an entry is identified by the registry it lives in and what it accepts"
-            ),
-            ExceptionError::UnsupportedVersion { registry, version } => write!(
-                f,
-                "{registry}: exception registry version {version} is unsupported; this build supports {SUPPORTED_VERSION}"
-            ),
-            ExceptionError::EmptyReason { site } => {
-                write!(f, "{site} has an empty reason")
-            }
-            ExceptionError::EmptyUntil { site } => {
-                write!(f, "{site} has an empty until")
-            }
-            // The message names the distinction rather than the rule it broke:
-            // the fix is usually the other kind, not a different `until`
-            // (§DF-004-exception-kind.1).
-            ExceptionError::KindUntilMismatch {
-                site,
-                kind: Kind::Structural,
-            } => write!(
-                f,
-                "{site} is structural, so until must be \"{INDEFINITE}\"; if something would retire it, no constraint makes the split illegal and the entry is deferred"
-            ),
-            ExceptionError::KindUntilMismatch {
-                site,
-                kind: Kind::Deferred,
-            } => write!(
-                f,
-                "{site} is deferred, so until must name what retires it, not \"{INDEFINITE}\"; use kind = \"structural\" if splitting the file is genuinely illegal"
-            ),
-            ExceptionError::NonPositiveMax { site } => {
-                write!(f, "{site} max_accepted.value must be a positive integer")
-            }
-            ExceptionError::NoRules { site } => {
-                write!(f, "{site} must list at least one rule id")
-            }
-            ExceptionError::UnknownRule { site, rule } => {
-                write!(f, "{site} references unknown rule id {rule}")
-            }
-            ExceptionError::UnitMismatch { site, rule } => write!(
-                f,
-                "{site} max_accepted.unit does not match the unit of rule {rule}"
-            ),
-            ExceptionError::NoSeverityLimit {
-                site,
-                rule,
-                severity,
-            } => write!(
-                f,
-                "{site} targets rule {rule}, which has no {severity} limit to accept"
-            ),
-            ExceptionError::BelowLimit {
-                site,
-                rule,
-                max,
-                limit,
-            } => write!(
-                f,
-                "{site} max_accepted.value {max} is below rule {rule} limit {limit}"
-            ),
-            ExceptionError::MultipleMatches {
-                registry,
-                path,
-                rule,
-                unit,
-            } => write!(
-                f,
-                "{registry}: more than one exception matches {path} for {unit} rule {rule}"
-            ),
-        }
-    }
-}
-
-impl Error for ExceptionError {}
+// The diagnostics live beside the format they report on, in their own file:
+// what a registry may say and how a defect in it is worded are two subjects,
+// and the wording is the part §GOAL-003-friendly-output holds to a standard.
+#[path = "exceptions_errors.rs"]
+mod errors;
+use errors::site;
+pub use errors::{EntrySite, ExceptionError};
 
 #[cfg(test)]
 #[path = "exceptions_tests.rs"]

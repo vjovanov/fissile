@@ -1,0 +1,23 @@
+# The ticket's transcript, answered in one flag: the hard entry at this address
+# already carries the kind, the reason, and the retirement condition, so the
+# soft twin states none of them (§FS-005-exception-add.1.1).
+args = [
+  "exception", "add", "src/big.rs",
+  "--severity", "soft",
+  "--rule", "rust",
+  "--shadows-hard",
+]
+exit = 0
+stdout_contains = ["appended src/big.rs to docs/file-size-agent-exceptions.toml"]
+[[files]]
+path = "docs/file-size-agent-exceptions.toml"
+contains = [
+  'path = "src/big.rs"',
+  'kind = "deferred"',
+  'shadows = "hard"',
+  # The ceiling is the twin's own: the measurement, quantized. It sits above
+  # rule `rust`'s hard limit of 4, which only a deferred hard twin allows.
+  'max_accepted = { value = 100, unit = "lines" }',
+]
+# Neither field is restated. That is the whole point of the entry.
+excludes = ["reason", "until"]

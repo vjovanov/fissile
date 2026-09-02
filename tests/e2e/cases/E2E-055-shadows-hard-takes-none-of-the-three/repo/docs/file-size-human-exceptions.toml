@@ -1,0 +1,13 @@
+fissile_exceptions_version = 2
+
+[[exceptions]]
+path = "src/big.rs"
+match = "exact"
+rules = ["rust"]
+kind = "deferred"
+max_accepted = { value = 6, unit = "lines" }
+until = "the parser module lands"
+reason = """
+Missing boundary: the parser module that would own half of this file. Until it
+exists the split can only be made by hand, at a seam the code does not have.
+"""

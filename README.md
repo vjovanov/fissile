@@ -246,6 +246,21 @@ entry, and an ordinary edit no longer trips it. Grow the file past it and the
 finding returns. The soft warning still nudges the agent, because
 this entry is `deferred`: there is a split to keep asking for.
 
+Silencing that warning takes a second entry, in the soft registry — and it holds
+no argument of its own, since what to accept, why, and what retires it were all
+decided above. `--shadows-hard` says where the argument lives instead of copying
+it:
+
+```sh
+fissile exception add src/orders.rs --severity soft --rule source --shadows-hard
+```
+
+The twin it writes carries `shadows = "hard"`, the kind copied from the entry it
+points at, and a `max_accepted` of its own — the one number the pair is allowed
+to disagree about, so *hard debt to 620, warn again above 400* still works.
+Delete the hard entry and the twin stops loading with it, which is what keeps
+the two from drifting apart (§FS-003-exceptions.2.3).
+
 `--kind` is the field that keeps the registry honest, because a reason answers
 one of two questions and they are not the same question
 (§DF-004-exception-kind):

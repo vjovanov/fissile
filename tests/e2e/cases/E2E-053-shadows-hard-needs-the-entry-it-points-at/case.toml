@@ -1,0 +1,17 @@
+# No hard registry, so there is nothing to shadow. The refusal names the file it
+# looked in and both ways forward (§FS-005-exception-add.1.1).
+args = [
+  "exception", "add", "src/big.rs",
+  "--severity", "soft",
+  "--rule", "rust",
+  "--shadows-hard",
+]
+exit = 2
+stderr_contains = [
+  "--shadows-hard inherits the kind, reason, and until of the hard entry for src/big.rs",
+  "docs/file-size-human-exceptions.toml holds none",
+  "Record the hard acceptance first, or state this entry's own --kind, --reason, and --until.",
+]
+# Nothing is written at all, so the shallowest path that must not appear is
+# the directory the registry would have gone in.
+absent = ["docs"]

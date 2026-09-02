@@ -73,3 +73,8 @@ The harness drives the real `fissile` binary, so every documented behavior under
 - `E2E-048-a-glob-ceiling-is-the-number-stated` — a class-wide ceiling is the policy number chosen.
 - `E2E-049-audit-names-the-stated-form-on-the-hard-limit` — audit does not recommend a retune the command would refuse.
 - `E2E-050-init-no-hook-points-at-the-commit-flow` — a declined hook sends the reader to their own commit flow.
+- `E2E-051-a-shadowing-twin-needs-no-second-argument` — the soft twin points at the hard entry instead of restating it.
+- `E2E-052-a-shadowing-twin-silences-the-soft-finding` — the pair reads back as one accepted file.
+- `E2E-053-shadows-hard-needs-the-entry-it-points-at` — a shadow of a decision nobody recorded is refused.
+- `E2E-054-an-orphan-shadow-fails-the-load` — deleting the original takes the twin with it.
+- `E2E-055-shadows-hard-takes-none-of-the-three` — the flag replaces --kind/--reason/--until rather than joining them.

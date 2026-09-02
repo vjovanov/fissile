@@ -7,8 +7,26 @@ use std::path::PathBuf;
 
 use crate::cli::{self, CommandError, Loaded};
 use crate::entry::{self, Address};
-use crate::exceptions::{INDEFINITE, Kind, MatchKind, is_indefinite};
+use crate::exceptions::{INDEFINITE, Kind, MatchKind, is_indefinite, shadow_twins};
 use crate::{Severity, Unit, scan};
+
+/// Where an added entry's `kind`, `reason`, and `until` come from.
+#[derive(Clone, Debug)]
+pub enum Rationale {
+    /// Stated on the command line: the claim a reviewer can disagree with
+    /// (§FS-005-exception-add.1).
+    Stated {
+        /// What the entry claims, and therefore what `reason` must establish.
+        kind: Kind,
+        reason: String,
+        /// Retirement condition. `None` is legal only for [`Kind::Structural`],
+        /// which defaults it to `indefinite`.
+        until: Option<String>,
+    },
+    /// `--shadows-hard`: all three belong to the hard entry at this address,
+    /// which is the one that carries the judgment (§FS-005-exception-add.1.1).
+    ShadowsHard,
+}
 
 /// Inputs to `exception add`.
 #[derive(Clone, Debug)]
@@ -18,13 +36,7 @@ pub struct AddOptions {
     pub path: String,
     pub severity: Severity,
     pub rules: Vec<String>,
-    /// What the entry claims, and therefore what `reason` must establish
-    /// (§FS-005-exception-add.1).
-    pub kind: Kind,
-    pub reason: String,
-    /// Retirement condition. `None` is legal only for [`Kind::Structural`],
-    /// which defaults it to `indefinite` (§FS-005-exception-add.1).
-    pub until: Option<String>,
+    pub rationale: Rationale,
     pub match_kind: MatchKind,
     pub title: Option<String>,
     pub owner: Option<String>,
@@ -55,13 +67,23 @@ pub fn run(options: &AddOptions) -> Result<Run, CommandError> {
     };
 
     entry::validate_match(options.match_kind, &path)?;
-    let until = resolve_until(options)?;
+    let until = match &options.rationale {
+        Rationale::Stated { kind, until, .. } => Some(resolve_until(*kind, until.as_deref())?),
+        // A shadowing entry states none of its own (§FS-005-exception-add.1.1).
+        Rationale::ShadowsHard => None,
+    };
     let rules = entry::resolve_rules(&loaded, &options.rules)?;
     // After the flags are known well-formed, before anything is read about the
     // file: contradictory flags are named as such, and the refusal never
     // reports what the registry holds (§DF-008-hard-severity-needs-a-terminal.1).
     let unit = rules[0].budget.unit;
     check_severity_gate(options, &rules, unit)?;
+    // The kind is written either way, so a reader never has to follow the
+    // pointer to learn which claim the entry makes (§FS-005-exception-add.3).
+    let kind = match &options.rationale {
+        Rationale::Stated { kind, .. } => *kind,
+        Rationale::ShadowsHard => shadowed_kind(&loaded, options, &path, unit)?,
+    };
     let sizing = entry::Sizing {
         path: &path,
         match_kind: options.match_kind,
@@ -103,11 +125,17 @@ pub fn run(options: &AddOptions) -> Result<Run, CommandError> {
         step,
         &entry::Routes {
             stated: route(options, options.severity, RouteMax::Placeholder(unit)),
-            hard: route(options, Severity::Hard, RouteMax::AsGiven),
+            // A shadowing call's hard entry already exists — pointing at it is
+            // what the call is — so accepting the file there is not a route
+            // left to offer (§FS-005-exception-add.1.1).
+            hard: match options.rationale {
+                Rationale::ShadowsHard => None,
+                Rationale::Stated { .. } => Some(route(options, Severity::Hard, RouteMax::AsGiven)),
+            },
         },
     )?;
 
-    let rendered = render_entry(options, &path, &until, unit, max);
+    let rendered = render_entry(options, &path, kind, until.as_deref(), unit, max);
     let registry_rel = entry::registry_path(&loaded, options.severity);
     let registry_path = loaded.root.join(&registry_rel);
 
@@ -216,22 +244,35 @@ fn route(options: &AddOptions, severity: Severity, max: RouteMax) -> String {
     if options.match_kind == MatchKind::Glob {
         command.push_str(" --match glob");
     }
-    command.push_str(&format!(" --kind {}", options.kind));
-    // A structural entry never expires and takes no `--until` (§FS-005-exception-add.1).
-    if options.kind == Kind::Deferred {
-        let until = options.until.as_deref().map(str::trim).unwrap_or("");
-        command.push_str(&format!(
-            " --until {}",
-            // Quoted like any other value: `<what retires it>` bare is a
-            // redirection, and a template the shell chokes on is not fillable.
-            if until.is_empty() {
-                shell_quote("<what retires it>")
-            } else {
-                shell_quote(until)
+    match &options.rationale {
+        // Carried as one flag, since restating the three it replaces is the
+        // thing it exists to avoid (§FS-005-exception-add.1.1).
+        Rationale::ShadowsHard => command.push_str(" --shadows-hard"),
+        Rationale::Stated {
+            kind,
+            reason,
+            until,
+        } => {
+            command.push_str(&format!(" --kind {kind}"));
+            // A structural entry never expires and takes no `--until`
+            // (§FS-005-exception-add.1).
+            if *kind == Kind::Deferred {
+                let until = until.as_deref().map(str::trim).unwrap_or("");
+                command.push_str(&format!(
+                    " --until {}",
+                    // Quoted like any other value: `<what retires it>` bare is
+                    // a redirection, and a template the shell chokes on is not
+                    // fillable.
+                    if until.is_empty() {
+                        shell_quote("<what retires it>")
+                    } else {
+                        shell_quote(until)
+                    }
+                ));
             }
-        ));
+            command.push_str(&format!(" --reason {}", shell_quote(reason)));
+        }
     }
-    command.push_str(&format!(" --reason {}", shell_quote(&options.reason)));
     match max {
         RouteMax::AsGiven => {
             if let (Some(max), Some(unit)) = (options.max, options.unit) {
@@ -269,7 +310,11 @@ pub(crate) fn shell_quote(value: &str) -> String {
 /// Strip the entry's own facts and count what is left: this catches a reason
 /// that is *entirely* restatement, which is why it warns rather than refuses.
 fn restatement_warning(options: &AddOptions, path: &str, unit: Unit) -> Option<String> {
-    let mut remaining = options.reason.to_lowercase();
+    // A shadowing entry states no reason for this to judge (§FS-005-exception-add.1.1).
+    let Rationale::Stated { reason, .. } = &options.rationale else {
+        return None;
+    };
+    let mut remaining = reason.to_lowercase();
     // Paths and rule ids are multi-token identifiers, so they come out as
     // substrings; the unit is one word and comes out as one, or `pipeline`
     // would be scored as `pipe` (§FS-005-exception-add.4).
@@ -305,9 +350,9 @@ const RESTATEMENT_WORDS: usize = 5;
 /// Reconcile `--until` with `--kind` (§FS-005-exception-add.1): a structural
 /// entry never expires, a deferred one must name what retires it. Each error
 /// offers the other kind, usually the real correction.
-fn resolve_until(options: &AddOptions) -> Result<String, CommandError> {
-    let until = options.until.as_deref().map(str::trim);
-    match (options.kind, until) {
+fn resolve_until(kind: Kind, until: Option<&str>) -> Result<String, CommandError> {
+    let until = until.map(str::trim);
+    match (kind, until) {
         (Kind::Structural, None) => Ok(INDEFINITE.to_owned()),
         (Kind::Structural, Some(until)) if is_indefinite(until) => Ok(until.to_owned()),
         (Kind::Structural, Some(_)) => Err(CommandError::Usage(format!(
@@ -371,7 +416,54 @@ fn check_conflict(
     )))
 }
 
-fn render_entry(options: &AddOptions, path: &str, until: &str, unit: Unit, max: u64) -> String {
+/// The one hard entry a `--shadows-hard` call points at, and the kind it copies
+/// (§FS-005-exception-add.1.1). The address is §FS-003-exceptions.2.3's — the
+/// one the load-time resolution uses — so an entry this writes is one that
+/// loads back.
+fn shadowed_kind(
+    loaded: &Loaded,
+    options: &AddOptions,
+    path: &str,
+    unit: Unit,
+) -> Result<Kind, CommandError> {
+    let registry = &loaded.config.exceptions.hard_registry;
+    let twins = shadow_twins(
+        &loaded.registries.hard,
+        path,
+        options.match_kind,
+        unit,
+        &options.rules,
+    );
+    let listed = |entry: &crate::exceptions::Exception| format!("[{}]", entry.rules.join(", "));
+    match twins.as_slice() {
+        [twin] => Ok(twin.kind),
+        // Both refusals name the two ways forward, because recording the hard
+        // acceptance is as often the fix as dropping the flag
+        // (§DF-007-instructions-at-the-error-site).
+        [] => Err(CommandError::Usage(format!(
+            "--shadows-hard inherits the kind, reason, and until of the hard entry for {path}, \
+             and {registry} holds none with this match and unit covering every --rule given. \
+             Record the hard acceptance first, or state this entry's own --kind, --reason, \
+             and --until."
+        ))),
+        [first, second, ..] => Err(CommandError::Usage(format!(
+            "--shadows-hard inherits one rationale, and more than one entry in {registry} \
+             answers {path} — one lists rules {}, another {}. Remove the duplicate, or name \
+             only rules a single hard entry covers.",
+            listed(first),
+            listed(second)
+        ))),
+    }
+}
+
+fn render_entry(
+    options: &AddOptions,
+    path: &str,
+    kind: Kind,
+    until: Option<&str>,
+    unit: Unit,
+    max: u64,
+) -> String {
     // No id line: the entry is identified by this registry, this path, and what
     // it accepts (§FS-005-exception-add.3, §DF-005-exception-identity).
     let mut lines = vec!["[[exceptions]]".to_owned()];
@@ -387,22 +479,25 @@ fn render_entry(options: &AddOptions, path: &str, until: &str, unit: Unit, max: 
     // `kind` and `until` are always written, even when `until` took the
     // structural default, so the entry never depends on a reader knowing the
     // command's defaults (§FS-005-exception-add.3).
-    lines.push(format!(
-        "kind = {}",
-        entry::quote(&options.kind.to_string())
-    ));
+    lines.push(format!("kind = {}", entry::quote(&kind.to_string())));
+    // The pointer stands in for the two fields a twin would otherwise restate
+    // (§FS-005-exception-add.3, §FS-003-exceptions.2.3).
+    if matches!(options.rationale, Rationale::ShadowsHard) {
+        lines.push("shadows = \"hard\"".to_owned());
+    }
     lines.push(entry::max_accepted_line(max, unit));
-    lines.push(format!("until = {}", entry::quote(until)));
+    if let Some(until) = until {
+        lines.push(format!("until = {}", entry::quote(until)));
+    }
     if let Some(owner) = &options.owner {
         lines.push(format!("owner = {}", entry::quote(owner)));
     }
     if let Some(issue) = &options.issue {
         lines.push(format!("issue = {}", entry::quote(issue)));
     }
-    lines.push(format!(
-        "reason = \"\"\"\n{}\n\"\"\"",
-        options.reason.trim()
-    ));
+    if let Rationale::Stated { reason, .. } = &options.rationale {
+        lines.push(format!("reason = \"\"\"\n{}\n\"\"\"", reason.trim()));
+    }
     lines.join("\n")
 }
 
@@ -432,9 +527,11 @@ mod tests {
             path: "src/big.rs".to_owned(),
             severity: Severity::Soft,
             rules: vec!["rust-source".to_owned()],
-            kind: Kind::Structural,
-            reason: reason.to_owned(),
-            until: None,
+            rationale: Rationale::Stated {
+                kind: Kind::Structural,
+                reason: reason.to_owned(),
+                until: None,
+            },
             match_kind: MatchKind::Exact,
             title: None,
             owner: None,
@@ -507,8 +604,11 @@ mod tests {
         );
 
         let mut deferred = scripted.clone();
-        deferred.kind = Kind::Deferred;
-        deferred.until = Some("the parser moves to its own module".to_owned());
+        deferred.rationale = Rationale::Stated {
+            kind: Kind::Deferred,
+            reason: "the generator owns this file byte-identically".to_owned(),
+            until: Some("the parser moves to its own module".to_owned()),
+        };
         assert!(
             soft_route(&deferred, RouteMax::AsGiven)
                 .contains("--kind deferred --until 'the parser moves to its own module'")
@@ -517,11 +617,40 @@ mod tests {
         // No `--until` to carry: the placeholder stands in, and the flag stays.
         // It is quoted, or `<what` is a redirection and the line will not parse.
         let mut open = deferred.clone();
-        open.until = None;
+        open.rationale = Rationale::Stated {
+            kind: Kind::Deferred,
+            reason: "the generator owns this file byte-identically".to_owned(),
+            until: None,
+        };
         assert!(
             soft_route(&open, RouteMax::AsGiven)
                 .contains("--kind deferred --until '<what retires it>'")
         );
+    }
+
+    /// A shadowing call carries one flag where the other three would go, so the
+    /// offered rerun still writes the entry the caller asked for
+    /// (§FS-005-exception-add.1.1, §FS-005-exception-add.4).
+    #[test]
+    fn the_offered_route_carries_shadows_hard_in_place_of_the_three() {
+        let mut shadowing = options("unused");
+        shadowing.rationale = Rationale::ShadowsHard;
+
+        let command = route(
+            &shadowing,
+            Severity::Soft,
+            RouteMax::Placeholder(Unit::Lines),
+        );
+        assert_eq!(
+            command,
+            "fissile exception add src/big.rs --severity soft --rule rust-source \
+             --shadows-hard --max <N> --unit lines"
+        );
+        for absent in ["--kind", "--reason", "--until"] {
+            assert!(!command.contains(absent), "{command}");
+        }
+        // No reason of its own is no reason to judge (§FS-005-exception-add.1.1).
+        assert!(restatement_warning(&shadowing, "src/big.rs", Unit::Lines).is_none());
     }
 
     /// Every flag that changes what the rerun loads or writes is carried, or the
