@@ -13,7 +13,9 @@ carries neither `reason` nor `until` (§FS-005-exception-add.1.1,
 §FS-005-exception-add.3).
 
 The ceiling is worth reading twice: 100 lines is far above rule `rust`'s hard
-limit of 4. A soft ceiling there is normally refused as one that could never
-fire, and it is accepted here only because a *deferred* hard twin keeps the
-soft finding alive above the limit (§FS-005-exception-add.4) — which a
-shadowing entry has by construction.
+limit of 4. What spares it here is the file, not the twin — `src/big.rs`
+measures 6 lines and is already past the limit, so its soft entry is the record
+of debt §FS-005-exception-add.4 accepts as before, whatever kind the hard entry
+declares. The other exemption, a *deferred* hard twin keeping the soft finding
+alive above the limit, is what E2E-056 and E2E-057 pin, on a file still under
+the limit where the two come apart.

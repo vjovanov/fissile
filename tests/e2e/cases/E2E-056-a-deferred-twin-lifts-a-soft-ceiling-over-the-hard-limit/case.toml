@@ -1,0 +1,22 @@
+# The file is under rule `rust`'s hard limit of 4, so nothing spares this
+# ceiling but the twin's kind: a deferred hard entry keeps the soft finding
+# alive above the limit, and a ceiling of 10 there still has work to do
+# (§FS-005-exception-add.1.1, §DF-010-stated-ceilings-are-exact.2).
+args = [
+  "exception", "add", "src/big.rs",
+  "--severity", "soft",
+  "--rule", "rust",
+  "--shadows-hard",
+  "--max", "10",
+  "--unit", "lines",
+]
+exit = 0
+stdout_contains = ["appended src/big.rs to docs/file-size-agent-exceptions.toml"]
+[[files]]
+path = "docs/file-size-agent-exceptions.toml"
+contains = [
+  'path = "src/big.rs"',
+  'kind = "deferred"',
+  'shadows = "hard"',
+  'max_accepted = { value = 10, unit = "lines" }',
+]

@@ -960,6 +960,36 @@ fn a_hard_twin_makes_a_soft_ceiling_above_the_hard_limit_legitimate() {
     );
 }
 
+/// §FS-003-exceptions.2.3: a twin inherits one rationale, and two hard entries
+/// listing the same rules are told apart by nothing — so the refusal reports the
+/// duplicate rather than printing one rule list twice as if it distinguished
+/// them (§DF-007-instructions-at-the-error-site).
+#[test]
+fn a_duplicated_hard_entry_is_refused_as_a_duplicate_not_as_two_rule_lists() {
+    let root = temp_repo();
+    let entry = "\n[[exceptions]]\npath = \"src/big.rs\"\nmatch = \"exact\"\nrules = [\"rust\"]\n\
+                 kind = \"deferred\"\nmax_accepted = { value = 300, unit = \"lines\" }\n\
+                 until = \"the parser lands\"\nreason = \"a reason\"\n";
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(
+        root.join("docs/file-size-human-exceptions.toml"),
+        format!("fissile_exceptions_version = 2\n{entry}{entry}"),
+    )
+    .unwrap();
+
+    let mut options = add_options(&root, Kind::Deferred, Some("the parser lands"));
+    options.severity = Severity::Soft;
+    options.rationale = Rationale::ShadowsHard;
+    let error = exception::run(&options).expect_err("two entries answer the address");
+    assert_eq!(
+        error.to_string(),
+        "--shadows-hard inherits one rationale, and docs/file-size-human-exceptions.toml holds \
+         more than one entry for src/big.rs, each listing rules [rust]. Delete the duplicate \
+         entry there."
+    );
+    assert!(!root.join("docs/file-size-agent-exceptions.toml").exists());
+}
+
 fn retune_options(root: &Path, max: Option<u64>) -> RetuneOptions {
     RetuneOptions {
         root: root.to_path_buf(),

@@ -1,0 +1,9 @@
+fissile_exceptions_version = 2
+
+[[exceptions]]
+path = "src/big.rs"
+match = "exact"
+rules = ["rust"]
+kind = "deferred"
+shadows = "hard"
+max_accepted = { value = 3, unit = "lines" }

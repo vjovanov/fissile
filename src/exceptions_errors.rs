@@ -43,11 +43,16 @@ pub enum ExceptionError {
         registry: String,
         version: u32,
     },
+    /// Omitted and blank are one defect — the entry carries no rationale — so
+    /// one variant reports both (§FS-003-exceptions.4). The severity decides
+    /// whether inheriting one is a way out: only a soft entry may shadow.
     EmptyReason {
         site: EntrySite,
+        severity: Severity,
     },
     EmptyUntil {
         site: EntrySite,
+        severity: Severity,
     },
     KindUntilMismatch {
         site: EntrySite,
@@ -99,10 +104,34 @@ pub enum ExceptionError {
     ShadowsAmbiguousTwin {
         site: EntrySite,
         registry: String,
-        /// The rule lists that tell the two candidate entries apart; their
-        /// paths cannot, being the same string by construction.
+        /// The two candidate entries' rule lists — the only field that can tell
+        /// them apart, their paths being the same string by construction. Equal
+        /// lists mean nothing does, and the message reports a duplicate instead
+        /// (§FS-003-exceptions.2.3).
         rules: [String; 2],
     },
+}
+
+impl ExceptionError {
+    /// Name `registry` where an absent hard registry file left the label
+    /// unfilled. [`Registries::load`] is handed the text of a file that exists,
+    /// so it never learns the configured path of one that does not; every
+    /// caller has it from the config (§FS-003-exceptions.2.3).
+    ///
+    /// [`Registries::load`]: super::Registries::load
+    #[must_use]
+    pub fn naming_hard_registry(self, registry: &str) -> Self {
+        match self {
+            Self::ShadowsWithoutTwin {
+                site,
+                registry: None,
+            } => Self::ShadowsWithoutTwin {
+                site,
+                registry: Some(registry.to_owned()),
+            },
+            other => other,
+        }
+    }
 }
 
 impl fmt::Display for ExceptionError {
@@ -122,11 +151,28 @@ impl fmt::Display for ExceptionError {
                 f,
                 "{registry}: exception registry version {version} is unsupported; this build supports {SUPPORTED_VERSION}"
             ),
-            ExceptionError::EmptyReason { site } => {
-                write!(f, "{site} has an empty reason")
+            // "states no" is true of the omitted field and the blank one alike
+            // (§FS-003-exceptions.4), and only a soft entry has the other way
+            // out: nothing sits above a hard one (§FS-003-exceptions.2.3).
+            ExceptionError::EmptyReason {
+                site,
+                severity: Severity::Soft,
+            } => write!(
+                f,
+                "{site} states no reason; write one, or declare shadows = \"hard\" to inherit the hard entry's"
+            ),
+            ExceptionError::EmptyReason { site, .. } => {
+                write!(f, "{site} states no reason")
             }
-            ExceptionError::EmptyUntil { site } => {
-                write!(f, "{site} has an empty until")
+            ExceptionError::EmptyUntil {
+                site,
+                severity: Severity::Soft,
+            } => write!(
+                f,
+                "{site} states no until; name what retires the entry, or declare shadows = \"hard\" to inherit the hard entry's"
+            ),
+            ExceptionError::EmptyUntil { site, .. } => {
+                write!(f, "{site} states no until")
             }
             // The message names the distinction rather than the rule it broke:
             // the fix is usually the other kind, not a different `until`
@@ -199,6 +245,17 @@ impl fmt::Display for ExceptionError {
                 f,
                 "{site} declares shadows = \"hard\", but {} holds no entry for this path with the same match and unit covering every rule it lists — add the hard entry whose reason and until this one would inherit, or delete shadows and state them here",
                 registry.as_deref().unwrap_or("the hard registry")
+            ),
+            // Equal rule lists tell the candidates apart from nothing, so
+            // printing both would read as a contradiction: the defect is the
+            // duplicate itself, and that is what the message reports.
+            ExceptionError::ShadowsAmbiguousTwin {
+                site,
+                registry,
+                rules: [first, second],
+            } if first == second => write!(
+                f,
+                "{site} declares shadows = \"hard\", but {registry} holds more than one entry for that address, each listing rules {first}; a shadowing entry inherits one rationale, so delete the duplicate entry there"
             ),
             ExceptionError::ShadowsAmbiguousTwin {
                 site,

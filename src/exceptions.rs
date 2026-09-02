@@ -550,10 +550,16 @@ fn build_exception(
     // the entry's own `path` (§DF-005-exception-identity).
     let site = || site(registry, &raw.path);
     if reason.trim().is_empty() {
-        return Err(ExceptionError::EmptyReason { site: site() });
+        return Err(ExceptionError::EmptyReason {
+            site: site(),
+            severity,
+        });
     }
     if until.trim().is_empty() {
-        return Err(ExceptionError::EmptyUntil { site: site() });
+        return Err(ExceptionError::EmptyUntil {
+            site: site(),
+            severity,
+        });
     }
     if raw.max_accepted.value == 0 {
         return Err(ExceptionError::NonPositiveMax { site: site() });

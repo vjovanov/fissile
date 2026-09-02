@@ -446,6 +446,16 @@ fn shadowed_kind(
              Record the hard acceptance first, or state this entry's own --kind, --reason, \
              and --until."
         ))),
+        // Two entries listing the same rules are told apart by nothing, so the
+        // refusal reports the duplicate rather than printing one list twice
+        // (§FS-003-exceptions.2.3).
+        [first, second, ..] if listed(first) == listed(second) => {
+            Err(CommandError::Usage(format!(
+                "--shadows-hard inherits one rationale, and {registry} holds more than one \
+                 entry for {path}, each listing rules {}. Delete the duplicate entry there.",
+                listed(first)
+            )))
+        }
         [first, second, ..] => Err(CommandError::Usage(format!(
             "--shadows-hard inherits one rationale, and more than one entry in {registry} \
              answers {path} — one lists rules {}, another {}. Remove the duplicate, or name \

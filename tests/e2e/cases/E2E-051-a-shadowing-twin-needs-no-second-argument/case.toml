@@ -16,7 +16,9 @@ contains = [
   'kind = "deferred"',
   'shadows = "hard"',
   # The ceiling is the twin's own: the measurement, quantized. It sits above
-  # rule `rust`'s hard limit of 4, which only a deferred hard twin allows.
+  # rule `rust`'s hard limit of 4, allowed because the 6-line file is already
+  # past that limit (§FS-005-exception-add.4) — not because the twin is
+  # deferred. E2E-056 and E2E-057 pin that distinction.
   'max_accepted = { value = 100, unit = "lines" }',
 ]
 # Neither field is restated. That is the whole point of the entry.

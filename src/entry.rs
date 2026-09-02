@@ -474,7 +474,8 @@ pub fn validate_combined(
             .map(|text| RegistrySource::new(&loaded.config.exceptions.soft_registry, text)),
         hard.as_deref()
             .map(|text| RegistrySource::new(&loaded.config.exceptions.hard_registry, text)),
-    )?;
+    )
+    .map_err(|error| error.naming_hard_registry(&loaded.config.exceptions.hard_registry))?;
     registries.validate_against(loaded.checker.rules())?;
     Ok(())
 }

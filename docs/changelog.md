@@ -50,6 +50,28 @@ and at 0.x semver puts the minor number in charge of it.
 
 ### Changed
 
+- §FS-005-exception-add.1.1: `fissile::exception::AddOptions` replaces its public
+  `kind`, `reason`, and `until` fields with one `rationale: Rationale`, so a
+  shadowing call is a value the type admits rather than three fields left blank.
+  A library caller's struct literal stops compiling. Wrap the three it used to
+  pass in `Rationale::Stated { kind, reason, until }`, or write
+  `Rationale::ShadowsHard`. A 0.x source break, so the minor number moves.
+  (PR #52)
+
+- §FS-003-exceptions.4: `fissile::exceptions::ExceptionError` gains four variants
+  for the `shadows` refusals, and `EmptyReason`/`EmptyUntil` gain a `severity`
+  field — the soft-registry wording offers `shadows = "hard"` as the way out and
+  the hard-registry wording cannot. The enum is not `#[non_exhaustive]`, so an
+  exhaustive external `match` on it stops compiling: add the new arms, or a
+  wildcard. Whether the enum should become `#[non_exhaustive]` is left open
+  rather than settled here. Same minor bump. (PR #52)
+
+- §FS-003-exceptions.4: an entry that states no `reason` or no `until` now reads
+  `states no reason` rather than `has an empty reason`. Both fields became
+  optional in the schema so a shadowing entry can omit them, which makes an
+  absent field and a blank one one defect; the old wording was true of only one
+  of them. (PR #52)
+
 - §AR-001-ci: every declaration is listed in its folder's index. `grund check`
   warned that thirteen declarations were absent from their index README and that
   the warning becomes an error in grund 0.13.0; the two decision folders that had

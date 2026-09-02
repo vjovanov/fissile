@@ -113,7 +113,26 @@ reason = "   "
     // the entry's own `path` are the line to edit (§FS-003-exceptions.4).
     assert_eq!(
         error.to_string(),
-        format!("{SOFT_REGISTRY}: a has an empty reason")
+        format!(
+            "{SOFT_REGISTRY}: a states no reason; write one, or declare shadows = \"hard\" to inherit the hard entry's"
+        )
+    );
+
+    // Omitting the field is the same defect and reads the same way: `reason` is
+    // optional in the schema only so a shadowing entry can leave it out
+    // (§FS-003-exceptions.4).
+    let omitted = toml.replace("reason = \"   \"\n", "");
+    let error = load_soft(&omitted).expect_err("no reason at all");
+    assert!(matches!(error, ExceptionError::EmptyReason { .. }));
+    assert!(error.to_string().contains("a states no reason"), "{error}");
+
+    // Nothing sits above the hard registry to inherit from, so the entry there
+    // is told to write one and nothing else (§FS-003-exceptions.2.3).
+    let error = Registries::load(None, Some(RegistrySource::new(HARD_REGISTRY, &omitted)))
+        .expect_err("no reason at all");
+    assert_eq!(
+        error.to_string(),
+        format!("{HARD_REGISTRY}: a states no reason")
     );
 }
 
@@ -286,17 +305,19 @@ fn an_orphan_shadowing_twin_is_a_schema_error() {
     let error = load_both(SHADOWING_TWIN, &other_rule).expect_err("a twin for other rules");
     assert!(matches!(error, ExceptionError::ShadowsWithoutTwin { .. }));
 
-    // With no hard registry file on disk there is no path to name, so the
-    // message says which registry it means rather than dropping the clause.
+    // With no hard registry file on disk `load` is given no path for it, so the
+    // caller that has one from the config supplies it: the reader's next edit is
+    // in that file whether or not it exists yet (§FS-003-exceptions.2.3).
     let error = Registries::load(
         Some(RegistrySource::new(SOFT_REGISTRY, SHADOWING_TWIN)),
         None,
     )
-    .expect_err("no hard registry at all");
+    .expect_err("no hard registry at all")
+    .naming_hard_registry(HARD_REGISTRY);
     assert!(
         error
             .to_string()
-            .contains("the hard registry holds no entry"),
+            .contains(&format!("{HARD_REGISTRY} holds no entry")),
         "{error}"
     );
 }
@@ -319,6 +340,23 @@ fn an_ambiguous_shadowing_twin_is_a_schema_error() {
         message.contains("[fixtures]") && message.contains("[*]"),
         "{message}"
     );
+
+    // True duplicates are told apart by nothing, and a message printing one rule
+    // list twice would read as a contradiction: the duplicate is the defect
+    // (§FS-003-exceptions.2.3).
+    let twice = format!(
+        "{HARD_TWIN}{}",
+        HARD_TWIN.replace("fissile_exceptions_version = 2", "")
+    );
+    let error = load_both(SHADOWING_TWIN, &twice).expect_err("the same address twice");
+    let message = error.to_string();
+    assert!(
+        message.contains(&format!(
+            "{HARD_REGISTRY} holds more than one entry for that address, each listing rules [fixtures]"
+        )) && message.contains("delete the duplicate entry there"),
+        "{message}"
+    );
+    assert!(!message.contains("another"), "{message}");
 }
 
 /// §FS-003-exceptions.2.3: the hard registry is where a rationale lives, so
@@ -389,6 +427,19 @@ fn rejects_empty_until() {
     let toml = SOFT.replace("until = \"indefinite\"", "until = \"  \"");
     let error = load_soft(&toml).expect_err("empty until");
     assert!(matches!(error, ExceptionError::EmptyUntil { .. }));
+    // Blank and omitted are one defect here too, and the soft entry is offered
+    // the pointer that would fill it (§FS-003-exceptions.4).
+    assert_eq!(
+        error.to_string(),
+        format!(
+            "{SOFT_REGISTRY}: tests/fixtures/large.json states no until; name what retires the entry, or declare shadows = \"hard\" to inherit the hard entry's"
+        )
+    );
+
+    let omitted = SOFT.replace("until = \"indefinite\"\n", "");
+    let error = load_soft(&omitted).expect_err("no until at all");
+    assert!(matches!(error, ExceptionError::EmptyUntil { .. }));
+    assert!(error.to_string().contains("states no until"), "{error}");
 }
 
 /// §FS-003-exceptions.2.2: version 2 removed `id`/`replaces` rather than
