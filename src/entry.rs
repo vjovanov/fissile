@@ -251,6 +251,15 @@ pub fn path_matchers_overlap(entry: &Exception, match_kind: MatchKind, path: &st
     }
 }
 
+/// How a `match` value is spelled — in a registry entry and in a diagnostic that
+/// names one (§DF-005-exception-identity).
+pub fn match_str(match_kind: MatchKind) -> &'static str {
+    match match_kind {
+        MatchKind::Exact => "exact",
+        MatchKind::Glob => "glob",
+    }
+}
+
 /// `--match` must agree with the path's shape: a glob entry needs a glob, and a
 /// metacharacter in an exact path is a mistake worth naming.
 pub fn validate_match(match_kind: MatchKind, path: &str) -> Result<(), CommandError> {

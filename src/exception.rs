@@ -483,7 +483,7 @@ fn render_entry(
     lines.push(format!("path = {}", entry::quote(path)));
     lines.push(format!(
         "match = {}",
-        entry::quote(match_str(options.match_kind))
+        entry::quote(entry::match_str(options.match_kind))
     ));
     lines.push(format!("rules = [{}]", rule_list(&options.rules)));
     // `kind` and `until` are always written, even when `until` took the
@@ -517,13 +517,6 @@ fn rule_list(rules: &[String]) -> String {
         .map(|rule| entry::quote(rule))
         .collect::<Vec<_>>()
         .join(", ")
-}
-
-fn match_str(match_kind: MatchKind) -> &'static str {
-    match match_kind {
-        MatchKind::Exact => "exact",
-        MatchKind::Glob => "glob",
-    }
 }
 
 #[cfg(test)]

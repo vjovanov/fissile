@@ -53,13 +53,15 @@ pub fn run(options: &RemoveOptions) -> Result<Run, CommandError> {
         rules: &options.rules,
         unit,
     };
-    // An address with no entry behind it has nothing to delete, and the audit is
-    // what lists the entries that are there (§FS-009-exception-remove.1).
+    // An address with no entry behind it has nothing to delete, and the entries
+    // that are there are listed from what was just read
+    // (§FS-009-exception-remove.1).
     let Some((index, existing)) = entry::locate(&loaded.registries, &address)? else {
         return Err(CommandError::Usage(format!(
             "{}: no entry accepts {path} for this rule and unit, so there is nothing to \
-             remove; `fissile audit --stale-exceptions` lists the entries that are there",
-            registry_rel.display()
+             remove{}",
+            registry_rel.display(),
+            addressable(&loaded.registries, options.severity)
         )));
     };
     let existing = existing.clone();
@@ -101,6 +103,40 @@ pub fn run(options: &RemoveOptions) -> Result<Run, CommandError> {
     Ok(Run {
         output: with_note(head, note),
     })
+}
+
+/// How many entries a refusal lists before it says how many more there are. An
+/// error message is not a report (§GOAL-003-friendly-output).
+const LISTED: usize = 10;
+
+/// The entries the caller could have addressed, from the registry `remove` has
+/// already read. `audit --stale-exceptions` would abort in exactly the state
+/// this command exists to repair, so the refusal answers its own question
+/// rather than naming a command that cannot run (§FS-009-exception-remove.1,
+/// §DF-007-instructions-at-the-error-site).
+fn addressable(registries: &Registries, severity: Severity) -> String {
+    let entries = match severity {
+        Severity::Soft => &registries.soft,
+        Severity::Hard => &registries.hard,
+    };
+    if entries.is_empty() {
+        return "; it holds no entries".to_owned();
+    }
+    let mut listed = String::from("; it holds:");
+    for existing in entries.iter().take(LISTED) {
+        listed.push_str(&format!(
+            "\n  {} ({}, rules {}, up to {} {})",
+            existing.path,
+            entry::match_str(existing.match_kind),
+            existing.rules.join(" "),
+            existing.max_value,
+            existing.max_unit
+        ));
+    }
+    if entries.len() > LISTED {
+        listed.push_str(&format!("\n  and {} more", entries.len() - LISTED));
+    }
+    listed
 }
 
 /// An address is a matcher, not just a path (§DF-005-exception-identity), so a
@@ -244,8 +280,10 @@ fn reported(
         .collect())
 }
 
-/// Delete the `index`-th `[[exceptions]]` block, preserving every other byte
-/// (§FS-009-exception-remove.4).
+/// Delete the `index`-th `[[exceptions]]` block — its header, its fields, and
+/// the comment run written directly above it — preserving every other byte,
+/// including the comments that lead into the entries that stay and the notes a
+/// blank line leaves attached to no entry (§FS-009-exception-remove.4).
 fn delete_block(
     text: &str,
     index: usize,
@@ -264,23 +302,59 @@ fn delete_block(
             registry.display()
         )));
     };
-    match starts.get(index + 1) {
-        // The blank line that separated the two goes with the block, so the
-        // entries that remain keep the spacing they had.
-        Some(&next) => {
-            lines.drain(start..next);
+    let structural = toml_lines::structural_lines(&lines);
+    // Where the next entry's own lines begin: its header, less the comment run
+    // written directly above it, which documents that entry and stays with it.
+    let next = starts.get(index + 1).copied();
+    let boundary = next.map_or(lines.len(), |next| lead_run(&lines, &structural, next));
+
+    // The block's own last line. What trails it — blank lines, and comments a
+    // blank line detached from every header — belongs to no entry, so it stays.
+    let mut end = boundary;
+    while end > start + 1 && is_gap(&lines[end - 1], structural[end - 1]) {
+        end -= 1;
+    }
+    // The blank lines that separated this block from what follows go with it, so
+    // the entries that remain keep the spacing they had.
+    let mut cut = end;
+    while cut < boundary && lines[cut].trim().is_empty() {
+        cut += 1;
+    }
+    // The comment run written directly above the header records why this entry
+    // is here, so it goes with the entry.
+    let block = lead_run(&lines, &structural, start);
+    lines.drain(block..cut);
+
+    // Nothing follows the removed block but blank lines, so the document ends
+    // where its last remaining line does, with one trailing newline.
+    if next.is_none() {
+        while lines.last().is_some_and(|line| line.trim().is_empty()) {
+            lines.pop();
         }
-        // Nothing follows, so the document ends where this block began — with
-        // one trailing newline, not the blank lines that led into the entry.
-        None => {
-            lines.truncate(start);
-            while lines.last().is_some_and(|line| line.trim().is_empty()) {
-                lines.pop();
-            }
-            lines.push(String::new());
-        }
+        lines.push(String::new());
     }
     Ok(lines.join("\n"))
+}
+
+/// The first line of the comment run written directly above `at`, or `at` itself
+/// when a blank line separates the two: a comment belongs to the entry it leads
+/// into, and a detached one belongs to no entry (§FS-009-exception-remove.4).
+fn lead_run(lines: &[String], structural: &[bool], at: usize) -> usize {
+    let mut start = at;
+    while start > 0 && is_comment(&lines[start - 1], structural[start - 1]) {
+        start -= 1;
+    }
+    start
+}
+
+/// Whether a line carries no entry field — blank, or a comment.
+fn is_gap(line: &str, structural: bool) -> bool {
+    line.trim().is_empty() || is_comment(line, structural)
+}
+
+/// A `#` line that is TOML structure rather than the prose of a `reason`.
+fn is_comment(line: &str, structural: bool) -> bool {
+    structural && line.trim_start().starts_with('#')
 }
 
 /// The document about to be written must hold exactly the entries that were

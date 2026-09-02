@@ -1398,3 +1398,60 @@ fn a_dry_run_removal_writes_nothing() {
     );
     assert_eq!(fs::read_to_string(&registry).unwrap(), before);
 }
+
+/// §FS-009-exception-remove.1: a missed address is answered from the registry
+/// `remove` has already read. In the state the command exists for the registry
+/// is one every other command aborts on, so pointing at `audit
+/// --stale-exceptions` would name a command that cannot run
+/// (§DF-007-instructions-at-the-error-site).
+#[test]
+fn a_missed_address_lists_the_entries_that_are_there() {
+    let root = temp_repo();
+    fs::write(root.join("src/big.rs"), rust_lines(10)).unwrap();
+    fs::write(root.join("src/ok.rs"), rust_lines(10)).unwrap();
+    let entry = |path: &str, max: u64| {
+        format!(
+            "[[exceptions]]\npath = \"{path}\"\nmatch = \"exact\"\nrules = [\"rust\"]\n\
+             kind = \"deferred\"\nmax_accepted = {{ value = {max}, unit = \"lines\" }}\n\
+             until = \"the module lands\"\nreason = \"Missing boundary.\"\n"
+        )
+    };
+    write_soft_registry(
+        &root,
+        &format!("{}\n{}", entry("src/big.rs", 20), entry("src/ok.rs", 30)),
+    );
+
+    // Both ceilings are under the soft limit of 100, so this is the blocked
+    // state: `check` and `audit` stop before measuring anything.
+    assert!(check::run(&check_options(&root)).is_err());
+
+    let message = remove::run(&remove_options(&root, "src/typo.rs", MatchKind::Exact))
+        .expect_err("no entry answers that address")
+        .to_string();
+    assert!(message.contains("nothing to remove"), "{message}");
+    assert!(
+        message.contains("\n  src/big.rs (exact, rules rust, up to 20 lines)"),
+        "{message}"
+    );
+    assert!(
+        message.contains("\n  src/ok.rs (exact, rules rust, up to 30 lines)"),
+        "{message}"
+    );
+    assert!(
+        !message.contains("--stale-exceptions"),
+        "the refusal names no command that aborts here: {message}"
+    );
+}
+
+/// The same refusal on an empty registry says so rather than printing a heading
+/// with nothing under it (§GOAL-003-friendly-output).
+#[test]
+fn a_missed_address_on_an_empty_registry_says_it_holds_nothing() {
+    let root = temp_repo();
+    write_soft_registry(&root, "");
+
+    let message = remove::run(&remove_options(&root, "src/big.rs", MatchKind::Exact))
+        .expect_err("an empty registry has nothing to remove")
+        .to_string();
+    assert!(message.contains("it holds no entries"), "{message}");
+}
