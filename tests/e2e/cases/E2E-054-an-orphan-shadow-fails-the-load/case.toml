@@ -1,0 +1,9 @@
+# The hard entry this twin points at is gone. Loading fails rather than reading
+# the twin as an entry with no rationale (§FS-003-exceptions.2.3).
+args = ["check", "--no-color"]
+exit = 2
+stderr_contains = [
+  'fissile check: docs/file-size-agent-exceptions.toml: src/big.rs declares shadows = "hard"',
+  "docs/file-size-human-exceptions.toml",
+  "delete shadows and state them here",
+]

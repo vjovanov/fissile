@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use fissile::audit::{self, AuditOptions};
 use fissile::check::{self, CheckOptions};
 use fissile::cli::Format;
-use fissile::exception::{self, AddOptions};
+use fissile::exception::{self, AddOptions, Rationale};
 use fissile::exceptions::{Kind, MatchKind};
 use fissile::retune::{self, RetuneOptions};
 use fissile::{Severity, Unit};
@@ -187,9 +187,11 @@ fn hard_exception_silences_hard_but_keeps_soft() {
         path: "./src/big.rs".to_owned(),
         severity: Severity::Hard,
         rules: vec!["rust".to_owned()],
-        kind: Kind::Deferred,
-        reason: "no module owns the generated cases yet".to_owned(),
-        until: Some("the case-builder module lands".to_owned()),
+        rationale: Rationale::Stated {
+            kind: Kind::Deferred,
+            reason: "no module owns the generated cases yet".to_owned(),
+            until: Some("the case-builder module lands".to_owned()),
+        },
         match_kind: MatchKind::Exact,
         title: None,
         owner: None,
@@ -279,7 +281,11 @@ fn unmigrated_registry_is_refused_with_both_edits_named() {
 fn structural_hard_exception_also_silences_soft() {
     let root = temp_repo();
     let mut options = add_options(&root, Kind::Structural, None);
-    options.reason = "a generated table the snapshot test asserts byte-identical".to_owned();
+    options.rationale = Rationale::Stated {
+        kind: Kind::Structural,
+        reason: "a generated table the snapshot test asserts byte-identical".to_owned(),
+        until: None,
+    };
     exception::run(&options).expect("exception add runs");
 
     let run = check::run(&check_options(&root)).expect("check runs");
@@ -454,9 +460,11 @@ fn exception_add_rejects_overlapping_path_matchers() {
         path: "src/**".to_owned(),
         severity: Severity::Hard,
         rules: vec!["rust".to_owned()],
-        kind: Kind::Structural,
-        reason: "generated tree asserted byte-identical by the snapshot test".to_owned(),
-        until: None,
+        rationale: Rationale::Stated {
+            kind: Kind::Structural,
+            reason: "generated tree asserted byte-identical by the snapshot test".to_owned(),
+            until: None,
+        },
         match_kind: MatchKind::Glob,
         title: None,
         owner: None,
@@ -475,9 +483,11 @@ fn exception_add_rejects_overlapping_path_matchers() {
         path: "src/big.rs".to_owned(),
         severity: Severity::Hard,
         rules: vec!["rust".to_owned()],
-        kind: Kind::Deferred,
-        reason: "accepted exact file".to_owned(),
-        until: Some("the case-builder module lands".to_owned()),
+        rationale: Rationale::Stated {
+            kind: Kind::Deferred,
+            reason: "accepted exact file".to_owned(),
+            until: Some("the case-builder module lands".to_owned()),
+        },
         match_kind: MatchKind::Exact,
         title: None,
         owner: None,
@@ -510,9 +520,11 @@ fn add_options(root: &Path, kind: Kind, until: Option<&str>) -> AddOptions {
         path: "src/big.rs".to_owned(),
         severity: Severity::Hard,
         rules: vec!["rust".to_owned()],
-        kind,
-        reason: "a reason".to_owned(),
-        until: until.map(str::to_owned),
+        rationale: Rationale::Stated {
+            kind,
+            reason: "a reason".to_owned(),
+            until: until.map(str::to_owned),
+        },
         match_kind: MatchKind::Exact,
         title: None,
         owner: None,

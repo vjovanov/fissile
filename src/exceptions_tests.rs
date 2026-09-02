@@ -221,6 +221,169 @@ fn kind_path_counts_count_repeated_glob_once_without_expansion() {
     );
 }
 
+/// A hard entry carrying the judgment a soft twin points at
+/// (§FS-003-exceptions.2.3). Its ceiling differs from the twin's on purpose:
+/// `max_accepted` is the one field the pair is allowed to disagree about.
+const HARD_TWIN: &str = r#"
+fissile_exceptions_version = 2
+
+[[exceptions]]
+path = "tests/fixtures/large.json"
+match = "exact"
+rules = ["fixtures"]
+kind = "deferred"
+max_accepted = { value = 400000, unit = "bytes" }
+until = "the fixture generator lands"
+reason = "no generator reproduces this corpus from the incident descriptions yet"
+"#;
+
+/// The twin: a ceiling, a kind, and a pointer — no rationale of its own.
+const SHADOWING_TWIN: &str = r#"
+fissile_exceptions_version = 2
+
+[[exceptions]]
+path = "tests/fixtures/large.json"
+match = "exact"
+rules = ["fixtures"]
+kind = "deferred"
+shadows = "hard"
+max_accepted = { value = 300000, unit = "bytes" }
+"#;
+
+/// §FS-003-exceptions.2.3: the twin states neither field and reads back with
+/// both, so every reporting surface treats it like any other entry.
+#[test]
+fn a_shadowing_twin_inherits_its_hard_entrys_reason_and_until() {
+    let registries = load_both(SHADOWING_TWIN, HARD_TWIN).expect("the twin resolves");
+    registries.validate_against(&rules()).expect("validates");
+
+    let twin = &registries.soft[0];
+    assert_eq!(twin.reason, registries.hard[0].reason);
+    assert_eq!(twin.until, "the fixture generator lands");
+    // The one field a twin owns stays local, and the pair may differ.
+    assert_eq!(twin.max_value, 300000);
+    assert_eq!(registries.hard[0].max_value, 400000);
+}
+
+/// §FS-003-exceptions.2.3: the address is the same `path`, `match`, and unit,
+/// covering every rule listed — so a hard entry for other rules is not a twin,
+/// and pointing at nothing fails the load rather than resolving to nothing.
+#[test]
+fn an_orphan_shadowing_twin_is_a_schema_error() {
+    let empty = "fissile_exceptions_version = 2\n";
+    let error = load_both(SHADOWING_TWIN, empty).expect_err("nothing to shadow");
+    assert!(matches!(error, ExceptionError::ShadowsWithoutTwin { .. }));
+    let message = error.to_string();
+    // The twin's own site leads, and the file the missing entry belongs in is
+    // named (§DF-005-exception-identity).
+    assert!(
+        message.starts_with(&format!("{SOFT_REGISTRY}: tests/fixtures/large.json")),
+        "{message}"
+    );
+    assert!(message.contains(HARD_REGISTRY), "{message}");
+
+    let other_rule = HARD_TWIN.replace("\"fixtures\"", "\"other\"");
+    let error = load_both(SHADOWING_TWIN, &other_rule).expect_err("a twin for other rules");
+    assert!(matches!(error, ExceptionError::ShadowsWithoutTwin { .. }));
+
+    // With no hard registry file on disk there is no path to name, so the
+    // message says which registry it means rather than dropping the clause.
+    let error = Registries::load(
+        Some(RegistrySource::new(SOFT_REGISTRY, SHADOWING_TWIN)),
+        None,
+    )
+    .expect_err("no hard registry at all");
+    assert!(
+        error
+            .to_string()
+            .contains("the hard registry holds no entry"),
+        "{error}"
+    );
+}
+
+/// §FS-003-exceptions.2.3: a twin inherits one rationale, so two hard entries
+/// answering its address is an ambiguity, not a pick.
+#[test]
+fn an_ambiguous_shadowing_twin_is_a_schema_error() {
+    let two = format!(
+        "{HARD_TWIN}{}",
+        HARD_TWIN
+            .replace("fissile_exceptions_version = 2", "")
+            .replace("[\"fixtures\"]", "[\"*\"]")
+    );
+    let error = load_both(SHADOWING_TWIN, &two).expect_err("two entries answer the address");
+    assert!(matches!(error, ExceptionError::ShadowsAmbiguousTwin { .. }));
+    let message = error.to_string();
+    // Their paths are the same string, so the rule lists are what tell them apart.
+    assert!(
+        message.contains("[fixtures]") && message.contains("[*]"),
+        "{message}"
+    );
+}
+
+/// §FS-003-exceptions.2.3: the hard registry is where a rationale lives, so
+/// nothing in it has anything above it to point at.
+#[test]
+fn shadows_in_the_hard_registry_is_a_schema_error() {
+    let error = load_both(
+        SOFT,
+        &HARD_TWIN.replace("kind =", "shadows = \"hard\"\nkind ="),
+    )
+    .expect_err("a hard entry may not shadow");
+    assert!(matches!(
+        error,
+        ExceptionError::ShadowsInHardRegistry { .. }
+    ));
+    assert!(error.to_string().starts_with(HARD_REGISTRY), "{error}");
+}
+
+/// §FS-003-exceptions.2.3: `shadows` excludes both fields it replaces. A second
+/// copy of either is the drift the pointer exists to remove, so it is named
+/// rather than ignored.
+#[test]
+fn shadows_beside_a_stated_rationale_is_a_schema_error() {
+    for field in ["reason", "until"] {
+        let stated = format!("{SHADOWING_TWIN}{field} = \"a copy that can drift\"\n");
+        let error = load_both(&stated, HARD_TWIN).expect_err("shadows plus {field}");
+        assert!(
+            matches!(error, ExceptionError::ShadowsWithOwnRationale { field: named, .. } if named == field),
+            "{error}"
+        );
+        // Both edits are named: dropping the pointer is as often the fix.
+        let message = error.to_string();
+        assert!(message.contains(&format!("delete {field}")), "{message}");
+        assert!(message.contains("delete shadows"), "{message}");
+    }
+}
+
+/// §FS-003-exceptions.2.3: the §FS-003-exceptions.2.1 agreement is checked
+/// against the *inherited* `until`, so a twin whose original flips kind stops
+/// loading — the forced revisit, rather than a silent disagreement.
+#[test]
+fn a_declared_kind_is_checked_against_the_inherited_until() {
+    let structural_original = HARD_TWIN
+        .replace("kind = \"deferred\"", "kind = \"structural\"")
+        .replace(
+            "until = \"the fixture generator lands\"",
+            "until = \"indefinite\"",
+        );
+    let error = load_both(SHADOWING_TWIN, &structural_original)
+        .expect_err("a deferred twin inherits indefinite");
+    assert!(matches!(
+        error,
+        ExceptionError::KindUntilMismatch {
+            kind: Kind::Deferred,
+            ..
+        }
+    ));
+    assert!(error.to_string().starts_with(SOFT_REGISTRY), "{error}");
+
+    // Following the original's kind loads again, on the same inherited value.
+    let agreeing = SHADOWING_TWIN.replace("kind = \"deferred\"", "kind = \"structural\"");
+    let registries = load_both(&agreeing, &structural_original).expect("the twin agrees");
+    assert_eq!(registries.soft[0].until, "indefinite");
+}
+
 #[test]
 fn rejects_empty_until() {
     let toml = SOFT.replace("until = \"indefinite\"", "until = \"  \"");

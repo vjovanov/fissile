@@ -32,6 +32,22 @@ and at 0.x semver puts the minor number in charge of it.
 
 ## Unreleased
 
+### Added
+
+- §FS-003-exceptions.2.3, §FS-005-exception-add.1.1: a soft entry may declare
+  `shadows = "hard"` and inherit its `reason` and `until` from the hard entry at
+  the same address, and `fissile exception add --shadows-hard` writes one. A
+  deferred hard entry leaves the soft finding standing (§FS-003-exceptions.3),
+  so every deferred hard acceptance needs a soft twin, and that twin had to
+  restate an argument and a retirement condition it does not own. The pairing is
+  now checked at load: exactly one hard entry must answer the twin's address, so
+  deleting the original fails the load until the twin goes too. `shadows` is
+  forbidden alongside `reason` or `until` and in the hard registry, and
+  `--shadows-hard` refuses `--severity hard`, the other three flags, and a
+  missing hard entry. `max_accepted` stays required and local, and the pair may
+  differ. No registry version moves; existing registries are unaffected.
+  Resolves #16. (PR #52)
+
 ### Changed
 
 - §AR-001-ci: every declaration is listed in its folder's index. `grund check`

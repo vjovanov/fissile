@@ -10,7 +10,7 @@ use std::slice::Iter;
 use fissile::audit::{self, AuditOptions};
 use fissile::check::{self, CheckOptions};
 use fissile::cli::Format;
-use fissile::exception::{self, AddOptions};
+use fissile::exception::{self, AddOptions, Rationale};
 use fissile::exceptions::{Kind, MatchKind};
 use fissile::init::{self, AgentTargets, HookMode, InitOptions};
 use fissile::measure::{self, MeasureOptions};
@@ -89,6 +89,8 @@ file does not:
   structural  splitting is illegal — name the constraint. Never expires.
   deferred    a boundary is missing — name it and what must exist first, and
               give --until the condition that retires the entry.
+A soft entry whose rationale is already in the hard registry takes
+--shadows-hard instead of all three.
 
 examples:
   fissile exception add src/big.rs --severity hard --rule source --kind deferred --reason \"...\" --until \"the parser module lands\"
@@ -99,6 +101,7 @@ run `fissile exception <add|retune> --help` for the full options";
 const EXCEPTION_ADD_USAGE: &str = "\
 usage: fissile exception add <path> --severity soft|hard --rule <id>
                  --kind structural|deferred --reason <text> [--until <text>]
+                 [--shadows-hard]
                  [--config <path>] [--match exact|glob] [--title <text>]
                  [--owner <text>] [--issue <text>] [--force] [--dry-run]
                  [--max <N> --unit bytes|lines|tokens]
@@ -107,11 +110,15 @@ usage: fissile exception add <path> --severity soft|hard --rule <id>
   structural  splitting is illegal — name the constraint. Never expires.
   deferred    a boundary is missing — name it and what must exist first, and
               give --until the condition that retires the entry.
+--shadows-hard is the soft twin of a hard entry: it takes that entry's kind,
+reason, and until instead of restating them, so it needs none of the three.
+Soft severity only, and the hard entry has to exist already.
 --max states the ceiling and is written as given; without it the file's
 measurement is rounded up to the configured [exceptions.bump] step.
 
 examples:
   fissile exception add src/big.rs --severity hard --rule source --kind deferred --reason \"...\" --until \"the parser module lands\"
+  fissile exception add src/big.rs --severity soft --rule source --shadows-hard
   fissile exception add \"tests/fixtures/**\" --match glob --severity soft --rule fixtures --max 300000 --unit bytes --kind structural --reason \"...\"";
 
 const EXCEPTION_RETUNE_USAGE: &str = "\
@@ -452,6 +459,10 @@ fn run_exception_add(args: &[String]) -> ExitCode {
                 builder.force = true;
                 Ok(())
             }
+            "--shadows-hard" => {
+                builder.shadows_hard = true;
+                Ok(())
+            }
             "--rule" => value(&mut iter, "--rule").map(|v| builder.rules.push(v)),
             "--severity" => value(&mut iter, "--severity").and_then(|v| builder.set_severity(&v)),
             "--kind" => value(&mut iter, "--kind").and_then(|v| builder.set_kind(&v)),
@@ -623,6 +634,7 @@ struct AddBuilder {
     max: Option<u64>,
     unit: Option<Unit>,
     config: Option<String>,
+    shadows_hard: bool,
     force: bool,
     dry_run: bool,
 }
@@ -664,21 +676,15 @@ impl AddBuilder {
     /// into options and nothing else, so what it returns does not depend on how
     /// the process was launched (§DF-008-hard-severity-needs-a-terminal.1).
     fn build(self, interactive: bool) -> Result<AddOptions, String> {
+        let severity = self.severity.ok_or("--severity is required")?;
+        let rationale = self.rationale(severity)?;
         Ok(AddOptions {
             root: PathBuf::from("."),
             config_path: self.config.map(PathBuf::from),
             path: self.path.ok_or("a <path> is required")?,
-            severity: self.severity.ok_or("--severity is required")?,
-            // Required rather than defaulted: which of the two claims the entry
-            // makes is the author's call, and the error is the moment to say
-            // what each one means (§DF-004-exception-kind.1).
-            kind: self.kind.ok_or(
-                "--kind is required: structural = an architectural constraint makes the split \
-                 illegal; deferred = the boundary is simply missing and someone has to build it",
-            )?,
+            severity,
             rules: self.rules,
-            reason: self.reason.ok_or("--reason is required")?,
-            until: self.until,
+            rationale,
             match_kind: self.match_kind.unwrap_or(MatchKind::Exact),
             title: self.title,
             owner: self.owner,
@@ -689,6 +695,50 @@ impl AddBuilder {
             force: self.force,
             dry_run: self.dry_run,
         })
+    }
+}
+
+impl AddBuilder {
+    /// What the entry will claim: the caller's own three flags, or the pointer
+    /// that replaces all three (§FS-005-exception-add.1.1). A shadowing entry
+    /// forbids them rather than ignoring them — a second copy of a rationale is
+    /// exactly what the flag exists to remove (§FS-003-exceptions.2.3).
+    fn rationale(&self, severity: Severity) -> Result<Rationale, String> {
+        if !self.shadows_hard {
+            return Ok(Rationale::Stated {
+                // Required rather than defaulted: which of the two claims the
+                // entry makes is the author's call, and the error is the moment
+                // to say what each one means (§DF-004-exception-kind.1).
+                kind: self.kind.ok_or(
+                    "--kind is required: structural = an architectural constraint makes the \
+                     split illegal; deferred = the boundary is simply missing and someone has \
+                     to build it",
+                )?,
+                reason: self.reason.clone().ok_or("--reason is required")?,
+                until: self.until.clone(),
+            });
+        }
+        if severity != Severity::Soft {
+            return Err(
+                "--shadows-hard writes the soft twin of a hard entry, so it takes \
+                 --severity soft; the hard entry is the one that carries the rationale"
+                    .to_owned(),
+            );
+        }
+        for (flag, given) in [
+            ("--kind", self.kind.is_some()),
+            ("--reason", self.reason.is_some()),
+            ("--until", self.until.is_some()),
+        ] {
+            if given {
+                return Err(format!(
+                    "--shadows-hard takes the hard entry's kind, reason, and until, so \
+                     {flag} has nothing to add here — drop {flag}, or drop --shadows-hard \
+                     and state all three"
+                ));
+            }
+        }
+        Ok(Rationale::ShadowsHard)
     }
 }
 

@@ -11,7 +11,7 @@ use fissile::Unit;
 use fissile::audit::{self, AuditOptions};
 use fissile::check::{self, CheckOptions};
 use fissile::cli::Format;
-use fissile::exception::{self, AddOptions};
+use fissile::exception::{self, AddOptions, Rationale};
 use fissile::exceptions::{Kind, MatchKind};
 use fissile::measure::{self, MeasureOptions};
 
@@ -145,9 +145,11 @@ fn audit_silenced_records_carry_documented_exception_fields() {
         path: "src/big.rs".to_owned(),
         severity: Severity::Hard,
         rules: vec!["rust".to_owned()],
-        kind: Kind::Deferred,
-        reason: "no module owns the staged-blob reader yet".to_owned(),
-        until: Some("the reader module lands".to_owned()),
+        rationale: Rationale::Stated {
+            kind: Kind::Deferred,
+            reason: "no module owns the staged-blob reader yet".to_owned(),
+            until: Some("the reader module lands".to_owned()),
+        },
         match_kind: MatchKind::Exact,
         title: None,
         owner: None,
@@ -271,9 +273,11 @@ fn audit_reports_a_loose_ceiling_with_the_value_to_retune_to() {
         path: "src/big.rs".to_owned(),
         severity: Severity::Hard,
         rules: vec!["rust".to_owned()],
-        kind: Kind::Deferred,
-        reason: "no module owns the staged-blob reader yet".to_owned(),
-        until: Some("the reader module lands".to_owned()),
+        rationale: Rationale::Stated {
+            kind: Kind::Deferred,
+            reason: "no module owns the staged-blob reader yet".to_owned(),
+            until: Some("the reader module lands".to_owned()),
+        },
         match_kind: MatchKind::Exact,
         title: None,
         owner: None,

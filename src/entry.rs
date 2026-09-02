@@ -129,10 +129,12 @@ pub fn has_deferred_hard_twin(
 
 /// The commands a refusal offers in place of the one that failed: the caller's
 /// own call with `--max <N> --unit <unit>`, and the hard-severity `add`
-/// (§DF-007-instructions-at-the-error-site).
+/// (§DF-007-instructions-at-the-error-site). The second is `None` where the
+/// hard entry already exists, which is not a route left to take
+/// (§FS-005-exception-add.1.1).
 pub struct Routes {
     pub stated: String,
-    pub hard: String,
+    pub hard: Option<String>,
 }
 
 /// A soft ceiling at or above the hard limit never fires for a file still under
@@ -184,9 +186,14 @@ pub fn check_hard_limit(
         ),
         BaseSource::Max => format!(
             "--max {} is at or above rule {} hard limit {hard}; a soft ceiling there \
-             silences nothing. Stay under it:\n  {}\n{range}, or accept the file in the \
-             hard registry:\n  {}",
-            base.value, rule.id, routes.stated, routes.hard
+             silences nothing. Stay under it:\n  {}\n{range}{}",
+            base.value,
+            rule.id,
+            routes.stated,
+            routes.hard.as_deref().map_or_else(
+                || ".".to_owned(),
+                |hard| format!(", or accept the file in the hard registry:\n  {hard}"),
+            )
         ),
     }))
 }

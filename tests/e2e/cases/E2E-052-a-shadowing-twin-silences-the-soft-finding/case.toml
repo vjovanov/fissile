@@ -1,0 +1,5 @@
+# The pair the previous case writes, read back: the twin resolves to its hard
+# entry, inherits that entry's reason and until, and silences the warning.
+args = ["check", "--no-color"]
+exit = 0
+stdout_equals = "ok"

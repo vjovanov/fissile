@@ -229,11 +229,11 @@ fn routes(options: &RetuneOptions, path: &str, unit: Unit, ceiling: u64) -> entr
         stated: format!(
             "fissile exception retune {path} --severity soft{flags} --max <N> --unit {unit}"
         ),
-        hard: format!(
+        hard: Some(format!(
             "fissile exception add {path} --severity hard{flags} --max {ceiling} --unit {unit} \
              --kind structural --reason \"...\"\n  (or --kind deferred --until \
              '<what retires it>')"
-        ),
+        )),
     }
 }
 

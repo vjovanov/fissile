@@ -1,0 +1,15 @@
+# A shadowing entry with a reason of its own is the second copy the pointer
+# exists to remove, so it is named rather than silently ignored.
+args = [
+  "exception", "add", "src/big.rs",
+  "--severity", "soft",
+  "--rule", "rust",
+  "--shadows-hard",
+  "--reason", "the same argument, written out a second time",
+]
+exit = 2
+stderr_contains = [
+  "--shadows-hard takes the hard entry's kind, reason, and until, so --reason has nothing to add here",
+  "drop --reason, or drop --shadows-hard and state all three",
+]
+absent = ["docs/file-size-agent-exceptions.toml"]
