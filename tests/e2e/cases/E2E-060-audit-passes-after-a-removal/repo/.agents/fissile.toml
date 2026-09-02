@@ -1,0 +1,21 @@
+fissile_config_version = 1
+
+[scan]
+include = ["docs", "src"]
+exclude = []
+respect_gitignore = false
+
+[exceptions.bump]
+lines = 4
+
+[[messages]]
+id = "m"
+text = "Split the file."
+
+[[rules]]
+id = "spec-docs"
+include = ["docs/**/*.md"]
+unit = "lines"
+soft = 20
+hard = 40
+message = "m"

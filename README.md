@@ -292,6 +292,22 @@ same way and is how you retire a loose ceiling `audit` reports. State the number
 yourself with `--max <N> --unit lines` and it is written as stated; the step
 rounds only what the tool measured (§DF-010-stated-ceilings-are-exact).
 
+### Removing an entry
+
+When the file is split, the path is gone, or the rule's limit moves up past the
+ceiling, there is no number left to move and the entry itself should go:
+
+```text
+$ fissile exception remove src/orders.rs --severity hard --rule source
+docs/file-size-human-exceptions.toml: removed src/orders.rs (accepted up to 800 lines)
+```
+
+It addresses the entry exactly as `retune` does, and it will not delete one that
+is still silencing a finding — the refusal names the file and the limit that
+would report it. It is also the way out of a registry a raised limit has made
+invalid, which every other command aborts on before it measures anything
+(§FS-009-exception-remove).
+
 The kind also decides what a hard entry silences. A `structural` one silences the
 soft warning for the overflow it accepts as well: splitting is illegal, so the
 warning names work nobody may do and no amount of work can clear it. One entry
@@ -340,6 +356,8 @@ with a worked sample at [`examples/fissile.toml`](examples/fissile.toml).
   (§FS-005-exception-add).
 - **`exception retune`** — move the ceiling an entry already records
   (§FS-008-exception-retune).
+- **`exception remove`** — delete an entry that accepts nothing
+  (§FS-009-exception-remove).
 
 This repo is grounded with [`grund`](https://github.com/vjovanov/grund): the
 `§ID` markers above point at the specs and goals that justify each behavior.

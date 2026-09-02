@@ -1,0 +1,16 @@
+# The rule's soft limit stands at 20 while the entry accepts 8, which
+# §FS-003-exceptions.4 rejects at load — so every command aborts before it
+# measures anything. `remove` is the one that still runs there.
+args = [
+  "exception", "remove", "docs/spec.md",
+  "--severity", "soft",
+  "--rule", "spec-docs",
+]
+exit = 0
+stdout_contains = [
+  "docs/file-size-agent-exceptions.toml: removed docs/spec.md (accepted up to 8 lines)",
+]
+[[files]]
+path = "docs/file-size-agent-exceptions.toml"
+contains = ["fissile_exceptions_version = 2"]
+excludes = ["[[exceptions]]", "docs/spec.md"]

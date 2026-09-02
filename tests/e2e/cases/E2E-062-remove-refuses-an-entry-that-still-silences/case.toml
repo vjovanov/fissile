@@ -1,0 +1,16 @@
+# The file measures 4 lines against a soft limit of 2 and an accepted ceiling of
+# 20: the entry is doing its job, so deleting it would report the file rather
+# than repair anything (§FS-009-exception-remove.3).
+args = [
+  "exception", "remove", "src/big.rs",
+  "--severity", "soft",
+  "--rule", "rust",
+]
+exit = 2
+stderr_contains = [
+  "src/big.rs still silences a finding: src/big.rs measures 4 lines, over rule rust soft limit 2",
+  "split the file first, or leave the entry where it is",
+]
+[[files]]
+path = "docs/file-size-agent-exceptions.toml"
+contains = ["path = \"src/big.rs\""]

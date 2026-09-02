@@ -11,6 +11,7 @@ use fissile::check::{self, CheckOptions};
 use fissile::cli::Format;
 use fissile::exception::{self, AddOptions, Rationale};
 use fissile::exceptions::{Kind, MatchKind};
+use fissile::remove::{self, RemoveOptions};
 use fissile::retune::{self, RetuneOptions};
 use fissile::{Severity, Unit};
 
@@ -1213,4 +1214,187 @@ fn the_retune_hard_route_carries_the_ceiling() {
         message.contains("--kind deferred --until '<what retires it>'"),
         "only deferred takes --until, so the route names both spellings: {message}"
     );
+}
+
+fn remove_options(root: &Path, path: &str, match_kind: MatchKind) -> RemoveOptions {
+    RemoveOptions {
+        root: root.to_path_buf(),
+        config_path: None,
+        path: path.to_owned(),
+        severity: Severity::Soft,
+        rules: vec!["rust".to_owned()],
+        match_kind,
+        dry_run: false,
+    }
+}
+
+fn write_soft_registry(root: &Path, entry: &str) {
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(
+        root.join("docs/file-size-agent-exceptions.toml"),
+        format!("fissile_exceptions_version = 2\n\n{entry}"),
+    )
+    .unwrap();
+}
+
+/// §FS-009-exception-remove.3: a glob entry is removable only when no member of
+/// its class is silenced by it. One member over the limit and under the ceiling
+/// is enough to refuse — the class is what the entry accepts, not one file.
+#[test]
+fn a_glob_entry_with_one_silenced_member_is_not_removed() {
+    let root = temp_repo();
+    fs::write(root.join("src/big.rs"), rust_lines(150)).unwrap();
+    write_soft_registry(
+        &root,
+        "[[exceptions]]\n\
+         path = \"src/*.rs\"\n\
+         match = \"glob\"\n\
+         rules = [\"rust\"]\n\
+         kind = \"deferred\"\n\
+         max_accepted = { value = 180, unit = \"lines\" }\n\
+         until = \"the module lands\"\n\
+         reason = \"Missing boundary.\"\n",
+    );
+
+    let error = remove::run(&remove_options(&root, "src/*.rs", MatchKind::Glob))
+        .expect_err("a silenced member refuses the removal");
+    let message = error.to_string();
+    assert!(message.contains("still silences a finding"), "{message}");
+    assert!(
+        message.contains("src/big.rs measures 150 lines"),
+        "{message}"
+    );
+
+    // Every member back under the limit, and the same call goes through.
+    fs::write(root.join("src/big.rs"), rust_lines(10)).unwrap();
+    let run = remove::run(&remove_options(&root, "src/*.rs", MatchKind::Glob))
+        .expect("nothing is silenced now");
+    assert!(run.output.contains("removed src/*.rs"), "{}", run.output);
+}
+
+/// §FS-009-exception-remove.3: a hard entry accepting a file over the hard
+/// limit is holding back the finding that fails a commit, so it is refused —
+/// and the soft twin for the same file is left where it is, because `remove`
+/// deletes exactly what it was addressed to delete.
+#[test]
+fn a_hard_entry_over_the_limit_is_refused_and_its_soft_twin_is_untouched() {
+    let root = temp_repo();
+    fs::write(root.join("src/big.rs"), rust_lines(250)).unwrap();
+    write_soft_registry(
+        &root,
+        "[[exceptions]]\n\
+         path = \"src/big.rs\"\n\
+         match = \"exact\"\n\
+         rules = [\"rust\"]\n\
+         kind = \"deferred\"\n\
+         max_accepted = { value = 300, unit = \"lines\" }\n\
+         until = \"the module lands\"\n\
+         reason = \"Missing boundary.\"\n",
+    );
+    fs::write(
+        root.join("docs/file-size-human-exceptions.toml"),
+        "fissile_exceptions_version = 2\n\n\
+         [[exceptions]]\n\
+         path = \"src/big.rs\"\n\
+         match = \"exact\"\n\
+         rules = [\"rust\"]\n\
+         kind = \"structural\"\n\
+         max_accepted = { value = 300, unit = \"lines\" }\n\
+         until = \"indefinite\"\n\
+         reason = \"The split is illegal.\"\n",
+    )
+    .unwrap();
+
+    let mut options = remove_options(&root, "src/big.rs", MatchKind::Exact);
+    options.severity = Severity::Hard;
+    let message = remove::run(&options)
+        .expect_err("the hard entry is holding back the hard finding")
+        .to_string();
+    assert!(message.contains("still silences a finding"), "{message}");
+    assert!(message.contains("rust hard limit 200"), "{message}");
+
+    // The soft entry is removable on its own: the hard entry is structural, so
+    // no soft finding is reported for this file either way (§FS-003-exceptions.3).
+    let run = remove::run(&remove_options(&root, "src/big.rs", MatchKind::Exact))
+        .expect("the soft entry silences nothing");
+    assert!(
+        run.output
+            .contains("docs/file-size-agent-exceptions.toml: removed src/big.rs"),
+        "{}",
+        run.output
+    );
+    // It names the twin the caller did not select (§FS-009-exception-remove.4).
+    assert!(
+        run.output.contains(
+            "note: docs/file-size-human-exceptions.toml still accepts src/big.rs up to 300 lines"
+        ),
+        "{}",
+        run.output
+    );
+}
+
+/// §FS-009-exception-remove.2: several entries below their rule's limit abort
+/// every command at load, and `remove` clears them one call at a time — the
+/// state a strict re-validation of the written document would have deadlocked.
+#[test]
+fn a_registry_with_several_invalid_entries_is_repaired_one_at_a_time() {
+    let root = temp_repo();
+    fs::write(root.join("src/big.rs"), rust_lines(10)).unwrap();
+    fs::write(root.join("src/ok.rs"), rust_lines(10)).unwrap();
+    let entry = |path: &str| {
+        format!(
+            "[[exceptions]]\npath = \"{path}\"\nmatch = \"exact\"\nrules = [\"rust\"]\n\
+             kind = \"deferred\"\nmax_accepted = {{ value = 20, unit = \"lines\" }}\n\
+             until = \"the module lands\"\nreason = \"Missing boundary.\"\n"
+        )
+    };
+    write_soft_registry(
+        &root,
+        &format!("{}\n{}", entry("src/big.rs"), entry("src/ok.rs")),
+    );
+
+    // Both ceilings sit under the soft limit of 100, so the registry aborts
+    // `check` before it measures anything (§FS-003-exceptions.4).
+    assert!(check::run(&check_options(&root)).is_err());
+
+    for path in ["src/big.rs", "src/ok.rs"] {
+        remove::run(&remove_options(&root, path, MatchKind::Exact))
+            .unwrap_or_else(|error| panic!("removing {path}: {error}"));
+    }
+    assert!(
+        !check::run(&check_options(&root))
+            .expect("the repaired registry loads")
+            .failed
+    );
+}
+
+/// §FS-009-exception-remove.4: `--dry-run` says what it would delete and leaves
+/// the registry byte-identical.
+#[test]
+fn a_dry_run_removal_writes_nothing() {
+    let root = temp_repo();
+    fs::write(root.join("src/big.rs"), rust_lines(10)).unwrap();
+    write_soft_registry(
+        &root,
+        "[[exceptions]]\n\
+         path = \"src/big.rs\"\n\
+         match = \"exact\"\n\
+         rules = [\"rust\"]\n\
+         kind = \"deferred\"\n\
+         max_accepted = { value = 180, unit = \"lines\" }\n\
+         until = \"the module lands\"\n\
+         reason = \"Missing boundary.\"\n",
+    );
+    let registry = root.join("docs/file-size-agent-exceptions.toml");
+    let before = fs::read_to_string(&registry).unwrap();
+
+    let mut options = remove_options(&root, "src/big.rs", MatchKind::Exact);
+    options.dry_run = true;
+    let run = remove::run(&options).expect("the dry run reports");
+    assert!(
+        run.output.contains("would remove src/big.rs"),
+        "{}",
+        run.output
+    );
+    assert_eq!(fs::read_to_string(&registry).unwrap(), before);
 }

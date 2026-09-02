@@ -1,0 +1,12 @@
+fissile_exceptions_version = 2
+
+[[exceptions]]
+path = "docs/spec.md"
+match = "exact"
+rules = ["spec-docs"]
+kind = "deferred"
+max_accepted = { value = 8, unit = "lines" }
+until = "the spec is split"
+reason = """
+Missing boundary: the child declaration does not exist yet.
+"""

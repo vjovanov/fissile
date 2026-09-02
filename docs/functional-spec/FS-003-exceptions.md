@@ -319,7 +319,10 @@ An entry is **loose** when all of the following hold:
 (§FS-004-check-audit.2), each named by its registry and `path` and carrying the
 ceiling `fissile exception retune` would write (§FS-008-exception-retune) — or,
 where the step would land a soft ceiling on the hard limit, the stated form
-`retune` accepts instead (§DF-010-stated-ceilings-are-exact.2).
+`retune` accepts instead (§DF-010-stated-ceilings-are-exact.2). An entry whose
+file has fallen under the limit altogether has no ceiling worth writing: it
+silences nothing, and the report names `fissile exception remove`, the command
+that deletes it (§FS-009-exception-remove).
 
 A loose entry is a report, never a failure. `[exceptions].stale` governs stale
 entries only: a stale entry accepts a file that is no longer there, while a loose

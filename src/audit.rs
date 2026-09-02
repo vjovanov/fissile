@@ -472,8 +472,10 @@ fn render_loose_text(item: &Loose) -> String {
         ..
     } = item;
     let advice = if item.silences_nothing {
+        // Lowering is not the remedy here, so the line names the command that is
+        // (§FS-003-exceptions.7, §FS-009-exception-remove).
         format!(
-            "silences nothing now; the {} limit is {}",
+            "silences nothing now; the {} limit is {} — remove it with `fissile exception remove`",
             item.severity, item.limit
         )
     } else {

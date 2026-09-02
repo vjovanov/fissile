@@ -14,127 +14,16 @@ use fissile::exception::{self, AddOptions, Rationale};
 use fissile::exceptions::{Kind, MatchKind};
 use fissile::init::{self, AgentTargets, HookMode, InitOptions};
 use fissile::measure::{self, MeasureOptions};
+use fissile::remove::{self, RemoveOptions};
 use fissile::retune::{self, RetuneOptions};
 use fissile::{Severity, Unit};
 
-const USAGE: &str = "\
-usage: fissile <command> [options]
+mod usage;
 
-fissile keeps files small so readers — human and agent — spend less to
-understand them, without letting a budget damage the design. Every rule has two
-limits: soft warns, hard fails the commit. Run `fissile check --staged` before
-calling work done, and split what it names along a seam the code already has.
-Its findings carry the rest: what to split, how, and how to record a file that
-cannot be split without making the design worse.
-
-commands:
-  init [<path>]        install config, registries, and agent instructions
-  check [<paths>...]   enforce file budgets on a file set or the scan scope
-  measure <paths>...   report what fissile counts, and the headroom left
-  audit                inventory the whole repo against its budgets
-  exception add        record a justified oversized-file exception
-  exception retune     move the ceiling an exception already records
-
-run `fissile <command> --help` for command options
-`--version`/`-V` prints the version";
-
-const INIT_USAGE: &str = "\
-usage: fissile init [<path>] [--name <name>] [--config <path>] [--exceptions]
-                    [--hook] [--no-hook] [--force] [--dry-run] [--agents-md]
-                    [--claude] [--gemini] [--copilot] [--cursor] [--windsurf] [--zed]
-
---dry-run reports the planned writes and prints the managed agent block, which
-is the one way to read what agents are told without writing a file.
-
-examples:
-  fissile init --exceptions
-  fissile init . --agents-md --claude";
-
-const CHECK_USAGE: &str = "\
-usage: fissile check [<paths>...] [--staged] [--config <path>]
-                     [--format text|json] [--no-color]
-
-examples:
-  fissile check --staged
-  fissile check src/lib.rs --format json";
-
-const MEASURE_USAGE: &str = "\
-usage: fissile measure <paths>... [--staged] [--config <path>]
-                       [--format text|json] [--no-color]
-
-Reports each file's measured size, the limits that apply, any accepted ceiling,
-and the distance to whichever of those binds first. Unlike `check` it answers
-for files that are passing, and it never fails a build.
-
-examples:
-  fissile measure src/lib.rs
-  fissile measure --staged --format json";
-
-const AUDIT_USAGE: &str = "\
-usage: fissile audit [--config <path>] [--format text|json] [--top <N>]
-                     [--stale-exceptions] [--rule-coverage] [--no-color]
-
-examples:
-  fissile audit --top 10
-  fissile audit --stale-exceptions --rule-coverage";
-
-const EXCEPTION_USAGE: &str = "\
-usage: fissile exception <add|retune> <path> [options]
-
-  add     record a justified oversized-file exception
-  retune  move the ceiling an entry already records, up or down
-
---kind says what an added entry's --reason has to establish. Describing the
-file does not:
-  structural  splitting is illegal — name the constraint. Never expires.
-  deferred    a boundary is missing — name it and what must exist first, and
-              give --until the condition that retires the entry.
-A soft entry whose rationale is already in the hard registry takes
---shadows-hard instead of all three.
-
-examples:
-  fissile exception add src/big.rs --severity hard --rule source --kind deferred --reason \"...\" --until \"the parser module lands\"
-  fissile exception retune src/big.rs --severity hard --rule source
-
-run `fissile exception <add|retune> --help` for the full options";
-
-const EXCEPTION_ADD_USAGE: &str = "\
-usage: fissile exception add <path> --severity soft|hard --rule <id>
-                 --kind structural|deferred --reason <text> [--until <text>]
-                 [--shadows-hard]
-                 [--config <path>] [--match exact|glob] [--title <text>]
-                 [--owner <text>] [--issue <text>] [--force] [--dry-run]
-                 [--max <N> --unit bytes|lines|tokens]
-
---kind says what --reason has to establish. Describing the file does not:
-  structural  splitting is illegal — name the constraint. Never expires.
-  deferred    a boundary is missing — name it and what must exist first, and
-              give --until the condition that retires the entry.
---shadows-hard is the soft twin of a hard entry: it takes that entry's kind,
-reason, and until instead of restating them, so it needs none of the three.
-Soft severity only, and the hard entry has to exist already.
---max states the ceiling and is written as given; without it the file's
-measurement is rounded up to the configured [exceptions.bump] step.
-
-examples:
-  fissile exception add src/big.rs --severity hard --rule source --kind deferred --reason \"...\" --until \"the parser module lands\"
-  fissile exception add src/big.rs --severity soft --rule source --shadows-hard
-  fissile exception add \"tests/fixtures/**\" --match glob --severity soft --rule fixtures --max 300000 --unit bytes --kind structural --reason \"...\"";
-
-const EXCEPTION_RETUNE_USAGE: &str = "\
-usage: fissile exception retune <path> --severity soft|hard --rule <id>
-                 [--max <N> --unit bytes|lines|tokens]
-                 [--config <path>] [--match exact|glob] [--dry-run]
-
-Moves an existing entry's ceiling, up or down, leaving its reason, kind, and
-until untouched. Without --max the new ceiling is the file's measurement rounded
-up to the configured [exceptions.bump] step, so it reads as a decision rather
-than as whatever the file happened to measure today. With --max the ceiling is
-exactly the number given.
-
-examples:
-  fissile exception retune src/big.rs --severity soft --rule source
-  fissile exception retune src/big.rs --severity hard --rule source --max 900 --unit lines";
+use usage::{
+    AUDIT_USAGE, CHECK_USAGE, EXCEPTION_ADD_USAGE, EXCEPTION_REMOVE_USAGE, EXCEPTION_RETUNE_USAGE,
+    EXCEPTION_USAGE, INIT_USAGE, MEASURE_USAGE, USAGE,
+};
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -429,6 +318,7 @@ fn run_exception(args: &[String]) -> ExitCode {
     match args.first().map(String::as_str) {
         Some("add") => run_exception_add(&args[1..]),
         Some("retune") => run_exception_retune(&args[1..]),
+        Some("remove") => run_exception_remove(&args[1..]),
         Some("--help" | "-h") | None => {
             println!("{EXCEPTION_USAGE}");
             ExitCode::SUCCESS
@@ -536,75 +426,132 @@ fn parse_max(raw: &str) -> Result<u64, String> {
         .map_err(|_| format!("--max `{raw}` is not an integer"))
 }
 
-/// `fissile exception retune` (§FS-008-exception-retune): the flags that address
-/// an entry, plus the value its ceiling should move to.
-fn run_exception_retune(args: &[String]) -> ExitCode {
-    let mut options = RetuneOptions {
-        root: PathBuf::from("."),
-        config_path: None,
-        path: String::new(),
-        severity: Severity::Soft,
-        rules: Vec::new(),
-        match_kind: MatchKind::Exact,
-        max: None,
-        unit: None,
-        dry_run: false,
-    };
-    let mut severity = None;
-    let mut path = None;
+/// The flags that address one existing entry — `<path>`, `--severity`,
+/// `--rule`, `--match`, `--config`, `--dry-run` — parsed once so `retune` and
+/// `remove` cannot drift on what names an entry (§DF-005-exception-identity).
+/// `--max`/`--unit` belong to the one command that states a ceiling.
+struct AddressArgs {
+    path: Option<String>,
+    severity: Option<Severity>,
+    rules: Vec<String>,
+    match_kind: MatchKind,
+    config_path: Option<PathBuf>,
+    dry_run: bool,
+    max: Option<u64>,
+    unit: Option<Unit>,
+}
+
+impl Default for AddressArgs {
+    fn default() -> Self {
+        Self {
+            path: None,
+            severity: None,
+            rules: Vec::new(),
+            // The same default `add` applies: a path with no metacharacter is
+            // one file (§FS-005-exception-add.1).
+            match_kind: MatchKind::Exact,
+            config_path: None,
+            dry_run: false,
+            max: None,
+            unit: None,
+        }
+    }
+}
+
+/// `Ok(None)` means `--help` was handled and the command is done. `sizing` says
+/// whether this subcommand takes `--max`/`--unit`; where it does not, they are
+/// unknown options rather than silently accepted ones.
+fn parse_address(
+    command: &str,
+    usage: &str,
+    args: &[String],
+    sizing: bool,
+) -> Result<Option<AddressArgs>, ExitCode> {
+    let mut parsed = AddressArgs::default();
     let mut iter = args.iter();
 
     while let Some(arg) = iter.next() {
-        let result = match arg.as_str() {
-            "--help" | "-h" => {
-                println!("{EXCEPTION_RETUNE_USAGE}");
-                return ExitCode::SUCCESS;
-            }
-            "--dry-run" => {
-                options.dry_run = true;
-                Ok(())
-            }
-            "--rule" => value(&mut iter, "--rule").map(|v| options.rules.push(v)),
-            "--severity" => value(&mut iter, "--severity")
-                .and_then(|v| parse_severity(&v).map(|v| severity = Some(v))),
-            "--match" => value(&mut iter, "--match")
-                .and_then(|v| parse_match(&v).map(|v| options.match_kind = v)),
-            "--unit" => value(&mut iter, "--unit")
-                .and_then(|v| parse_unit(&v).map(|v| options.unit = Some(v))),
-            "--max" => {
-                value(&mut iter, "--max").and_then(|v| parse_max(&v).map(|v| options.max = Some(v)))
-            }
-            "--config" => {
-                value(&mut iter, "--config").map(|v| options.config_path = Some(PathBuf::from(v)))
-            }
-            other if other.starts_with('-') => Err(format!("unknown option `{other}`")),
-            other if path.is_some() => Err(format!("only one <path> is allowed, got `{other}`")),
-            other => {
-                path = Some(other.to_owned());
-                Ok(())
-            }
-        };
+        let result =
+            match arg.as_str() {
+                "--help" | "-h" => {
+                    println!("{usage}");
+                    return Ok(None);
+                }
+                "--dry-run" => {
+                    parsed.dry_run = true;
+                    Ok(())
+                }
+                "--rule" => value(&mut iter, "--rule").map(|v| parsed.rules.push(v)),
+                "--severity" => value(&mut iter, "--severity")
+                    .and_then(|v| parse_severity(&v).map(|v| parsed.severity = Some(v))),
+                "--match" => value(&mut iter, "--match")
+                    .and_then(|v| parse_match(&v).map(|v| parsed.match_kind = v)),
+                "--unit" if sizing => value(&mut iter, "--unit")
+                    .and_then(|v| parse_unit(&v).map(|v| parsed.unit = Some(v))),
+                "--max" if sizing => value(&mut iter, "--max")
+                    .and_then(|v| parse_max(&v).map(|v| parsed.max = Some(v))),
+                "--config" => value(&mut iter, "--config")
+                    .map(|v| parsed.config_path = Some(PathBuf::from(v))),
+                other if other.starts_with('-') => Err(format!("unknown option `{other}`")),
+                other if parsed.path.is_some() => {
+                    Err(format!("only one <path> is allowed, got `{other}`"))
+                }
+                other => {
+                    parsed.path = Some(other.to_owned());
+                    Ok(())
+                }
+            };
         if let Err(message) = result {
-            return usage_fail("exception retune", &message, EXCEPTION_RETUNE_USAGE);
+            return Err(usage_fail(command, &message, usage));
         }
     }
+    Ok(Some(parsed))
+}
 
-    let Some(path) = path else {
-        return usage_fail(
-            "exception retune",
-            "a <path> is required",
-            EXCEPTION_RETUNE_USAGE,
-        );
+/// The two fields an address cannot default: which registry holds the entry, and
+/// which entry it is.
+fn require_address(
+    command: &str,
+    usage: &str,
+    parsed: &AddressArgs,
+) -> Result<(String, Severity), ExitCode> {
+    let Some(path) = parsed.path.clone() else {
+        return Err(usage_fail(command, "a <path> is required", usage));
     };
-    let Some(severity) = severity else {
-        return usage_fail(
-            "exception retune",
+    let Some(severity) = parsed.severity else {
+        return Err(usage_fail(
+            command,
             "--severity is required: it names the registry holding the entry",
-            EXCEPTION_RETUNE_USAGE,
-        );
+            usage,
+        ));
     };
-    options.path = path;
-    options.severity = severity;
+    Ok((path, severity))
+}
+
+/// `fissile exception retune` (§FS-008-exception-retune): the flags that address
+/// an entry, plus the value its ceiling should move to.
+fn run_exception_retune(args: &[String]) -> ExitCode {
+    let parsed = match parse_address("exception retune", EXCEPTION_RETUNE_USAGE, args, true) {
+        Ok(Some(parsed)) => parsed,
+        Ok(None) => return ExitCode::SUCCESS,
+        Err(code) => return code,
+    };
+    let (path, severity) =
+        match require_address("exception retune", EXCEPTION_RETUNE_USAGE, &parsed) {
+            Ok(address) => address,
+            Err(code) => return code,
+        };
+    let options = RetuneOptions {
+        root: PathBuf::from("."),
+        config_path: parsed.config_path,
+        path,
+        severity,
+        rules: parsed.rules,
+        match_kind: parsed.match_kind,
+        max: parsed.max,
+        unit: parsed.unit,
+        dry_run: parsed.dry_run,
+    };
 
     match retune::run(&options) {
         Ok(run) => {
@@ -613,6 +560,41 @@ fn run_exception_retune(args: &[String]) -> ExitCode {
         }
         Err(error) => {
             eprintln!("fissile exception retune: {error}");
+            ExitCode::from(2)
+        }
+    }
+}
+
+/// `fissile exception remove` (§FS-009-exception-remove): the same address, and
+/// no ceiling — the command states no number.
+fn run_exception_remove(args: &[String]) -> ExitCode {
+    let parsed = match parse_address("exception remove", EXCEPTION_REMOVE_USAGE, args, false) {
+        Ok(Some(parsed)) => parsed,
+        Ok(None) => return ExitCode::SUCCESS,
+        Err(code) => return code,
+    };
+    let (path, severity) =
+        match require_address("exception remove", EXCEPTION_REMOVE_USAGE, &parsed) {
+            Ok(address) => address,
+            Err(code) => return code,
+        };
+    let options = RemoveOptions {
+        root: PathBuf::from("."),
+        config_path: parsed.config_path,
+        path,
+        severity,
+        rules: parsed.rules,
+        match_kind: parsed.match_kind,
+        dry_run: parsed.dry_run,
+    };
+
+    match remove::run(&options) {
+        Ok(run) => {
+            println!("{}", run.output);
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("fissile exception remove: {error}");
             ExitCode::from(2)
         }
     }

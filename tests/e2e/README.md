@@ -81,3 +81,9 @@ The harness drives the real `fissile` binary, so every documented behavior under
 - `E2E-056-a-deferred-twin-lifts-a-soft-ceiling-over-the-hard-limit` — shadowing a deferred entry accepts a ceiling above the limit.
 - `E2E-057-a-structural-twin-leaves-the-soft-ceiling-dead` — the same call is refused when the entry shadowed is structural.
 - `E2E-058-an-orphan-shadow-names-a-registry-that-is-not-there` — a missing hard registry is named by its configured path.
+- `E2E-059-remove-repairs-a-registry-that-blocks-every-command` — the entry that aborts every run can still be deleted.
+- `E2E-060-audit-passes-after-a-removal` — the repaired registry loads again.
+- `E2E-061-remove-deletes-a-stale-entry` — the entry whose file is gone is the one removal is for.
+- `E2E-062-remove-refuses-an-entry-that-still-silences` — a working exception is not deleted.
+- `E2E-063-remove-dry-run-writes-nothing` — a dry run says what it would delete.
+- `E2E-064-audit-names-remove-for-an-entry-that-silences-nothing` — the report names the command, not just the state.

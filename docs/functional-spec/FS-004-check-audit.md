@@ -130,8 +130,8 @@ has outlived its file, in a block of its own:
 
 ```text
 stale: 1 exception accepts a file that is not there [registry: docs/file-size-agent-exceptions.toml]
-  The file moved or was deleted, so the entry silences nothing. Remove it, or
-  point it at the path the file moved to.
+  The file moved or was deleted, so the entry silences nothing. Remove it with
+  `fissile exception remove`, or point it at the path the file moved to.
     src/domain/order.rs [soft, rule: rust-source]
 ```
 

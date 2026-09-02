@@ -69,9 +69,10 @@ accepted at 500 by it.
 Lowering stops at the rule's limit, and a file that has fallen under that limit
 cannot be followed any further: an entry accepting less than the limit silences
 nothing. That is the same state `audit --stale-exceptions` reports as "silences
-nothing now" (§FS-003-exceptions.7), so the refusal names the same remedy —
-remove the entry — and it reports the measurement it read, never a `--max` the
-caller did not pass.
+nothing now" (§FS-003-exceptions.7), so the refusal names the same remedy — and
+names the command that performs it, `fissile exception remove`
+(§FS-009-exception-remove). It reports the measurement it read, never a `--max`
+the caller did not pass.
 
 ## 3. Result
 

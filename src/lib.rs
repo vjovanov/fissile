@@ -23,9 +23,11 @@ pub mod json;
 mod managed;
 pub mod measure;
 mod model;
+pub mod remove;
 pub mod report;
 pub mod retune;
 pub mod scan;
+mod toml_lines;
 
 pub use glob::Glob;
 pub use model::{
