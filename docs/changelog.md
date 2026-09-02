@@ -56,7 +56,7 @@ and at 0.x semver puts the minor number in charge of it.
   `measure` and the hook before they measured anything, is now removable without
   hand-editing TOML. `retune`'s min-limit refusal, `check`'s stale-entry
   guidance and `audit`'s "silences nothing" line all name the new command.
-  (PR #52)
+  (PR #53)
 
 ### Changed
 
