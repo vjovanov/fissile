@@ -57,10 +57,16 @@ Required fields:
 - `reason`: non-empty rationale, establishing what §2.1 requires of the entry's
   kind.
 
+A soft entry that declares `shadows = "hard"` states neither `until` nor
+`reason`: it inherits both from the hard entry it shadows, and stating either
+here is an error (§2.3).
+
 Optional fields:
 
 - `kind`: `structural` or `deferred` (§2.1); an entry without one reads as
   `deferred`;
+- `shadows`: `"hard"` on a soft entry, whose `until` and `reason` then come from
+  the hard registry (§2.3);
 - `title`: short human-readable label;
 - `owner`: team, person, or component responsible for retiring the exception;
 - `issue`: tracker URL or ID.
@@ -120,6 +126,61 @@ one that names the whole fix.
 `fissile exception add` writes version-2 registries and never writes either key
 (§FS-005-exception-add.3).
 
+### 2.3 A Soft Twin May Point At The Hard Entry Instead Of Restating It
+
+A `deferred` hard entry silences the hard finding and leaves the soft one
+standing (§3), so every deferred hard acceptance needs a soft entry beside it
+before the file goes quiet. That soft entry owns no judgment. Whether to accept
+the file, why it may be accepted, and what retires the acceptance were all
+decided in the hard registry. Requiring the twin to state a `reason` and an
+`until` of its own therefore stores one argument twice, in two files, with
+nothing checking that the copies still agree.
+
+`shadows = "hard"` says where the argument lives instead of repeating it:
+
+```toml
+[[exceptions]]
+path = "crates/grund-core/src/api.rs"
+match = "exact"
+rules = ["core-source"]
+kind = "deferred"
+shadows = "hard"
+max_accepted = { value = 1592, unit = "lines" }
+```
+
+The entry resolves to the hard entry at the same address and takes that entry's
+`reason` and `until` as its own, so `audit`, verbose output, and stale reporting
+read a shadowing entry exactly like any other (§5).
+
+- `shadows` is legal only in the soft registry, and `"hard"` is its only value.
+  A hard entry that declares it is a schema error: the hard registry is where
+  the rationale lives, so there is nothing above it to point at.
+- `shadows` excludes `reason` and `until`. An entry with a rationale of its own
+  is not shadowing one, and allowing both would restore the second copy the
+  field exists to remove. Declaring either alongside `shadows` is a schema error
+  naming both edits.
+- The **address** is the hard entry with the same `path` spelling, the same
+  `match`, and the same `max_accepted.unit`, whose `rules` cover every rule the
+  shadowing entry lists. Exactly one hard entry must answer it: none is a schema
+  error and more than one is an ambiguity error, each naming the shadowing
+  entry's site (§4). Deleting the hard entry therefore fails the load until the
+  twin goes too, which is what makes "retires with its twin" a fact rather than
+  a convention.
+- `kind` stays the shadowing entry's own field, and the §2.1 agreement is
+  checked against the **inherited** `until`. So a `deferred` twin of a
+  structural hard entry inherits `indefinite` and fails to load — the forced
+  revisit when the original's kind flips.
+- `max_accepted` stays required and stays local. It is the one thing a twin
+  legitimately owns, and the pair is allowed to differ: accepting hard debt up
+  to 620 lines while warning again above 400 is a working pair, not a mismatch.
+
+`shadows` is opt-in. A soft entry that carries its own ceiling and its own
+argument for the same path stays legal, and is the right shape whenever the soft
+acceptance is a separate decision rather than the shadow of the hard one.
+
+`fissile exception add --shadows-hard` writes the shape above
+(§FS-005-exception-add.1.1).
+
 ## 3. Matching
 
 `match = "exact"` compares `path` to the repo-relative normalized path.
@@ -174,7 +235,12 @@ multiple rules only when all listed rules use the same unit.
 - `max_accepted.value` is at least the corresponding soft or hard rule limit;
 - `reason` is not empty after trimming whitespace;
 - a declared `kind` agrees with `until` (§2.1): `structural` requires
-  `indefinite`, `deferred` forbids it;
+  `indefinite`, `deferred` forbids it — for a shadowing entry, against the
+  `until` it inherited (§2.3);
+- `shadows` appears only in the soft registry, holds only `"hard"`, and never
+  stands beside `reason` or `until` (§2.3);
+- every `shadows = "hard"` entry resolves to exactly one hard entry at its
+  address, whose `reason` and `until` it then carries (§2.3);
 - every matched path is inside the scan scope unless stale handling is disabled;
 - every stale entry follows `[exceptions].stale`: `warn`, `error`, or `ignore`.
 

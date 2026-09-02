@@ -9,7 +9,8 @@ common case of accepting a current overflow.
 ```text
 fissile exception add <path> --severity soft|hard --rule <id>
                       --kind structural|deferred --reason <text>
-                      [--until <text>] [--config <path>] [--match exact|glob]
+                      [--until <text>] [--shadows-hard] [--config <path>]
+                      [--match exact|glob]
                       [--title <text>] [--owner <text>] [--issue <text>]
                       [--max <N> --unit bytes|lines|tokens]
                       [--force] [--dry-run]
@@ -48,6 +49,34 @@ honest claim would teach callers to pad it.
 `--match` defaults to `exact`. `glob` is allowed only when `<path>` contains a
 glob metacharacter. The command never creates `[scan].exclude` entries; accepted
 oversized files remain under `fissile` measurement.
+
+### 1.1 --shadows-hard Writes The Soft Twin Of A Hard Entry
+
+A deferred hard entry leaves the soft finding standing (§FS-003-exceptions.3),
+so silencing the file takes a second entry in the soft registry — one whose
+rationale was already written, in the hard registry. `--shadows-hard` records
+that relationship instead of restating it (§FS-003-exceptions.2.3):
+
+```console
+$ fissile exception add src/big.rs --severity soft --rule rust --shadows-hard
+appended src/big.rs to docs/file-size-agent-exceptions.toml (accepted up to 100 lines)
+```
+
+The flag requires `--severity soft` and takes none of `--kind`, `--reason`, or
+`--until`: all three belong to the hard entry at the same address, and passing
+one is a usage error that names the flag to drop. Everything about the ceiling
+is unchanged — the command still measures the file, still honors `--max`, and
+still writes a `max_accepted` that is the twin's own to move
+(§FS-003-exceptions.2.3).
+
+The hard entry has to exist already. When no hard entry answers the address, or
+more than one does, the command refuses without writing and names the registry
+it looked in (§4): the shadow of a decision nobody recorded is not a shadow, and
+guessing which of two entries it points at would decide the thing the flag
+exists to state.
+
+The restatement check (§4) does not apply to a shadowing entry. There is no
+reason of its own to judge, which is the point of writing it this way.
 
 ## 2. Accepted Size
 
@@ -101,6 +130,21 @@ split loses the incident-to-case mapping the fixture exists to preserve.
 the `indefinite` default, so a registry entry never depends on a reader knowing
 the command's defaults (§DF-002-explicit-config).
 
+A `--shadows-hard` entry writes `shadows = "hard"` in place of `until` and
+`reason`, and copies `kind` from the hard entry it shadows — the twin still
+states its kind outright rather than making a reader follow the pointer for it
+(§FS-003-exceptions.2.3):
+
+```toml
+[[exceptions]]
+path = "src/big.rs"
+match = "exact"
+rules = ["rust"]
+kind = "deferred"
+shadows = "hard"
+max_accepted = { value = 600, unit = "lines" }
+```
+
 The entry gets no name of its own: it is identified by the registry it is written
 to and what it accepts (§FS-003-exceptions.2.2, §DF-005-exception-identity), and
 the command never writes the removed `id` or `replaces` keys. The entry records
@@ -125,6 +169,16 @@ modifying files when:
 - the selected rule does not exist;
 - selected rules use different units;
 - `--kind` is absent, or `--until` disagrees with it (§1);
+- `--shadows-hard` was passed with `--severity hard`, or alongside `--kind`,
+  `--reason`, or `--until` (§1.1). The refusal names the flag to drop: a
+  shadowing entry that also carried one of them would be the second copy the
+  field exists to remove (§FS-003-exceptions.2.3);
+- `--shadows-hard` was passed and the hard registry holds no entry — or holds
+  more than one — at the same `path` and `match`, in the same unit, covering
+  every `--rule` given (§FS-003-exceptions.2.3). The refusal names the hard
+  registry and the address it looked for, and both ways forward: record the
+  hard acceptance first, or state this entry's own `--kind`, `--reason`, and
+  `--until`;
 - another exception in the same severity registry already answers to the same
   `(path, rule, unit)` address — the rejection names that registry and the
   entry's `path`, reports the ceiling it records against the file's current
