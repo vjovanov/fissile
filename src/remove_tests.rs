@@ -82,3 +82,103 @@ fn a_crlf_registry_keeps_its_line_endings() {
 fn an_absent_block_is_refused() {
     assert!(delete_block(REGISTRY, 2, Path::new("r"), "x").is_err());
 }
+
+/// §FS-009-exception-remove.4: a comment belongs to the entry it is written
+/// directly above — so the note over the *next* entry stays with that entry,
+/// and the note over the removed one goes with it rather than being left behind
+/// to mislabel the entry that survives.
+#[test]
+fn each_entrys_own_comment_goes_with_it() {
+    let registry = "fissile_exceptions_version = 2\n\
+        \n\
+        # why a.rs is here\n\
+        [[exceptions]]\n\
+        path = \"a.rs\"\n\
+        max_accepted = { value = 400, unit = \"lines\" }\n\
+        \n\
+        # why b.rs is here - the reviewer of record is Ada\n\
+        [[exceptions]]\n\
+        path = \"b.rs\"\n\
+        max_accepted = { value = 500, unit = \"lines\" }\n";
+    assert_eq!(
+        remove(registry, 0),
+        "fissile_exceptions_version = 2\n\
+         \n\
+         # why b.rs is here - the reviewer of record is Ada\n\
+         [[exceptions]]\n\
+         path = \"b.rs\"\n\
+         max_accepted = { value = 500, unit = \"lines\" }\n"
+    );
+}
+
+/// §FS-009-exception-remove.4: a note a blank line separates from every header
+/// is about the registry, not about one entry, so removing the block it trails
+/// leaves it exactly where it is.
+#[test]
+fn a_note_trailing_the_last_entry_survives_its_removal() {
+    let registry = "fissile_exceptions_version = 2\n\
+        \n\
+        [[exceptions]]\n\
+        path = \"a.rs\"\n\
+        max_accepted = { value = 400, unit = \"lines\" }\n\
+        \n\
+        # Registry policy: every entry here is reviewed quarterly.\n\
+        # Do not add entries without an owner.\n";
+    assert_eq!(
+        remove(registry, 0),
+        "fissile_exceptions_version = 2\n\
+         \n\
+         # Registry policy: every entry here is reviewed quarterly.\n\
+         # Do not add entries without an owner.\n"
+    );
+}
+
+/// The same rule between two blocks: a detached note belongs to neither, and
+/// the entries that remain keep the spacing they had.
+#[test]
+fn a_detached_note_between_two_blocks_stays_put() {
+    let registry = "fissile_exceptions_version = 2\n\
+        \n\
+        [[exceptions]]\n\
+        path = \"a.rs\"\n\
+        \n\
+        # a note about the repository, not about either entry\n\
+        \n\
+        [[exceptions]]\n\
+        path = \"b.rs\"\n";
+    assert_eq!(
+        remove(registry, 0),
+        "fissile_exceptions_version = 2\n\
+         \n\
+         # a note about the repository, not about either entry\n\
+         \n\
+         [[exceptions]]\n\
+         path = \"b.rs\"\n"
+    );
+}
+
+/// A `#` line inside a `reason` is prose, so it neither documents the entry
+/// below it nor ends the block above it (§FS-008-exception-retune.3).
+#[test]
+fn a_comment_in_a_reason_is_prose() {
+    let registry = "fissile_exceptions_version = 2\n\
+        \n\
+        [[exceptions]]\n\
+        path = \"a.rs\"\n\
+        reason = \"\"\"\n\
+        # not a comment\n\
+        \"\"\"\n\
+        \n\
+        [[exceptions]]\n\
+        path = \"b.rs\"\n";
+    assert_eq!(
+        remove(registry, 1),
+        "fissile_exceptions_version = 2\n\
+         \n\
+         [[exceptions]]\n\
+         path = \"a.rs\"\n\
+         reason = \"\"\"\n\
+         # not a comment\n\
+         \"\"\"\n"
+    );
+}

@@ -28,8 +28,13 @@ identified by the registry it lives in and the `(path matcher, rules, unit)`
 condition it accepts (§DF-005-exception-identity). `--rule` may be repeated, and
 the address matches an entry that covers any of the named rules at the selected
 unit. When no entry answers to that address the command fails without writing,
-and the error says there is nothing to remove and names
-`fissile audit --stale-exceptions`, which lists the entries that are there.
+and the error says there is nothing to remove and then lists the entries the
+addressed registry does hold — path, matcher, rules and ceiling, one per line,
+cut off with a count of the rest when the registry is long. It lists them itself
+rather than sending the caller to `audit --stale-exceptions`: `remove` is the
+one command that reads a registry the rule check rejects (§2), so in the state
+this command exists for it is the only one that can answer the question it just
+raised (§DF-007-instructions-at-the-error-site).
 
 The matcher is part of the address, so an address that merely *overlaps* an entry
 is refused in both directions, each for its own reason. An exact path covered by
@@ -64,6 +69,17 @@ What `remove` still requires is a document it can read. A registry that does not
 parse, that declares an unsupported version, or that holds an entry missing a
 `reason` or a `path` cannot be addressed by index either, and those failures are
 reported exactly as they are for every other command.
+
+Two of the rule-check failures stay out of reach for a different reason: the
+address takes its rule ids and its unit from the command line, and the unit from
+a *configured* rule (§1). So an entry whose only rule ids are ones the config no
+longer configures, and an entry whose `max_accepted.unit` no configured rule it
+names shares, answer to no address this command can be given — a retired id is
+refused before the registry is read, and a live id addresses a different
+condition. Those two are edited by hand, as every entry was before this command.
+Widening the address to reach them would mean an entry addressed by something
+other than the condition it accepts, which is the identity `add` and `retune`
+are built on (§DF-005-exception-identity).
 
 No other command loosens. `check` and the hook keep failing on an invalid
 registry, because a gate that measured against entries it could not validate
@@ -113,14 +129,22 @@ measured reports nothing under any registry, so it blocks nothing
 ## 4. Result
 
 The command deletes the addressed `[[exceptions]]` block together with the blank
-line that separated it from the next entry. Every other byte — the version line,
-comments, entry order, the fields of the other entries, and the line endings the
-file is stored with — is preserved, so the diff is one entry and nothing else.
+line that separated it from what follows. Every other byte — the version line,
+the comments that belong to another entry or to no entry, entry order, the
+fields of the other entries, and the line endings the file is stored with — is
+preserved, so the diff is one entry and nothing else.
 
-The block is the `[[exceptions]]` header and the lines under it, so a comment
-written *above* the header is not part of it and stays where it is. Reattaching
-or deleting one would be a guess about what the comment is for, and a registry's
-comments are as often about the file as about one entry.
+A comment belongs to the entry it is written directly above. The block is
+therefore the `[[exceptions]]` header, the lines under it, and the run of
+comment lines immediately above the header with no blank line between: the note
+that records why *this* entry is there goes with it, and the note above the
+*next* entry stays with that entry rather than being cut away with this one. A
+comment a blank line separates from any header belongs to no entry — a note
+between two blocks, or one trailing the last block — and is left exactly where
+it is, including when the block it trails is the one being removed. Reattaching
+a detached comment would be a guess about what it is for, and a registry's notes
+are as often about the file, or about the registry as a whole, as about one
+entry.
 
 Which block that is comes from reading the registry as TOML, not from matching
 text. A `[[exceptions]]` header written inside a `reason` — in either multi-line
