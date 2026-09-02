@@ -20,7 +20,7 @@ was named, it is now located: a diagnostic leads with the registry file and the
 entry's `path`, because that pair is the line the reader has to edit.
 
 ```text
-docs/file-size-human-exceptions.toml: src/orders.rs has an empty reason
+docs/file-size-human-exceptions.toml: src/orders.rs states no reason
 ```
 
 The registry file is part of the identifier, not decoration: the same path in the
@@ -30,7 +30,7 @@ and a message naming only the path would be ambiguous between them.
 The pair is an address, not a primary key — within one registry a path may still
 appear twice, for rules of different units. That is enough. Every diagnostic that
 depends on a rule already names the rule; the rest name a condition an eye can
-check (`has an empty reason`) once the address has taken the reader to the entry.
+check (`states no reason`) once the address has taken the reader to the entry.
 
 Silenced attribution keeps the path and the ceiling and drops the name:
 
