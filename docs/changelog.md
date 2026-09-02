@@ -32,6 +32,13 @@ and at 0.x semver puts the minor number in charge of it.
 
 ## Unreleased
 
+### Changed
+
+- §AR-001-ci.8.2: after a release, main opens the next patch as `X.Y.Z-dev`
+  instead of keeping the version it just published. A build from main previously
+  reported the tag it was already ahead of, so a merged-but-uninstalled fix was
+  indistinguishable from an installed one. (PR #50)
+
 ### Fixed
 
 - §FS-004-check-audit.2: `audit` now reports exception entry totals alongside

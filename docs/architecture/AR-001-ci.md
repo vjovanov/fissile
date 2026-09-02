@@ -129,3 +129,16 @@ The scheduled bump derives the next version from the latest `v*.*.*` tag, so a
 repository with no tag yet cannot bootstrap itself: the first release is cut by
 pushing `v<version>` (or dispatching `release.yml` with the version). Every
 release after that is automatic.
+
+### 8.2 Between releases, main carries a dev version
+
+A release leaves main holding the version it just published, so every build from
+main until the next release reports the tag it is already ahead of. Nothing then
+distinguishes a binary built from main from the released one, and a fix that is
+merged but not installed looks exactly like one that is installed.
+
+The release therefore advances main as its last act: after publishing `X.Y.Z` it
+commits `X.Y.(Z+1)-dev`. The suffix is what makes `fissile --version` say which
+side of the tag a build came from. A `-dev` manifest is never publishable — the
+release path sets and verifies the clean version on its candidate branch — so
+the guarantee that a released version has a tag is unchanged.
