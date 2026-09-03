@@ -89,7 +89,10 @@ fn exhaustive_configs_spell_empty_rule_exclusions() {
     for (name, source) in [("generated", DEFAULT_CONFIG), ("example", &example)] {
         let rule_count = Config::parse(source).unwrap().rules.len();
         assert_eq!(
-            source.matches("\nexclude = []\n").count(),
+            source
+                .lines()
+                .filter(|line| *line == "exclude = []")
+                .count(),
             rule_count,
             "{name} config must spell the default on every rule"
         );
