@@ -315,21 +315,39 @@ fn non_utf8_line_details_name_physical_lines() {
     ));
 }
 
-/// §FS-004-check-audit.1: non-line units retain their historical detail shape.
+/// §FS-004-check-audit.1: non-line units lead with their historical detail
+/// shape, and the ceiling opens a parenthesis of its own after it. Where the
+/// ceiling is withheld there is no budget clause to keep the parenthesis open,
+/// so the detail is the bare measurement — the one shape that prints none.
 #[test]
 fn byte_and_token_details_keep_their_unit_shape() {
-    for (unit, ceiling, file) in [
-        (Unit::Bytes, 4096, FileMeasurement::new("src/data.bin", 3)),
+    for (unit, hard, file, detail) in [
+        (
+            Unit::Bytes,
+            None,
+            FileMeasurement::new("src/data.bin", 3),
+            "src/data.bin: 3 bytes (an exception here would accept 4096)",
+        ),
         (
             Unit::Tokens,
-            1000,
+            None,
             FileMeasurement::new("src/data.txt", 3).with_tokens(3),
+            "src/data.txt: 3 tokens (an exception here would accept 1000)",
+        ),
+        // A soft ceiling landing on the rule's hard limit while the file is
+        // still under it is refused, so nothing is named and nothing is opened
+        // (§DF-010-stated-ceilings-are-exact.2).
+        (
+            Unit::Bytes,
+            Some(4096),
+            FileMeasurement::new("src/data.bin", 3),
+            "src/data.bin: 3 bytes",
         ),
     ] {
         let rule = Rule::new(
             "size",
             Selector::All,
-            Budget::new(unit, Some(2), None),
+            Budget::new(unit, Some(2), hard),
             MessageTemplate::new("m", "Split it."),
         );
         let checker = Checker::new(vec![rule]).expect("valid checker");
@@ -339,13 +357,8 @@ fn byte_and_token_details_keep_their_unit_shape() {
         let contexts = contexts_for_file(&file, &hits, true, &Bump::default());
         let block = finding_blocks_with_context(&outcomes, false, &contexts).remove(0);
 
-        // No budget clause to extend, so the ceiling opens its own parenthesis
-        // on the unit's own step (§FS-004-check-audit.1).
         assert!(
-            block.ends_with(&format!(
-                "    {}: 3 {unit} (an exception here would accept {ceiling})",
-                file.path.display()
-            )),
+            block.ends_with(&format!("    {detail}")),
             "wrong {unit} detail: {block}"
         );
     }
