@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/vjovanov/fissile/schema/limits.schema.json",
+  "title": "fissile limits output",
+  "description": "`fissile limits --format json` (FS-010-limits.4): the tree's configured rule inventory, read from the config alone. An object rather than a bare array, so the inventory can gain a sibling section without breaking a consumer.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["rules"],
+  "properties": {
+    "rules": {
+      "type": "array",
+      "description": "Every rule of the effective rule set, in the order the config declares them, unfiltered by what any file matched (FS-010-limits.2). Empty when the config declares no rules.",
+      "items": { "$ref": "#/$defs/rule" }
+    }
+  },
+  "$defs": {
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "include", "unit", "priority"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "The rule id, as the config spells it (FS-001-config.3)."
+        },
+        "include": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" },
+          "description": "The rule's include patterns, in declaration order (FS-010-limits.3)."
+        },
+        "unit": {
+          "type": "string",
+          "enum": ["bytes", "lines", "tokens"],
+          "description": "The unit this rule measures in."
+        },
+        "soft": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The soft limit, which warns; omitted when the rule declares none (FS-010-limits.4)."
+        },
+        "hard": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The hard limit, which fails the commit; omitted when the rule declares none (FS-010-limits.4)."
+        },
+        "priority": {
+          "type": "integer",
+          "description": "What settles an overlap between two rules, `0` when the config omits it (FS-001-config.3.2). Always present, so two lines are comparable."
+        },
+        "soft_message": {
+          "type": "string",
+          "description": "The message id rendered on a soft overflow. Present only where the rule declares a soft limit: an undeclared severity borrows the other's template internally and that id is never rendered (FS-010-limits.4)."
+        },
+        "hard_message": {
+          "type": "string",
+          "description": "The message id rendered on a hard overflow, present only where the rule declares a hard limit (FS-010-limits.4)."
+        },
+        "count_blank_lines": {
+          "type": "boolean",
+          "description": "Whether blank lines count toward the budget (FS-001-config.3.1). Present only when `unit` is `lines`."
+        },
+        "count_comment_lines": {
+          "type": "boolean",
+          "description": "Whether whole-line comments count toward the budget (FS-001-config.3.1). Present only when `unit` is `lines`."
+        }
+      }
+    }
+  }
+}

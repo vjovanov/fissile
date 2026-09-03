@@ -26,7 +26,7 @@ fn top_level_help_fits_one_screen() {
 
 #[test]
 fn subcommand_help_fits_one_screen_and_shows_examples() {
-    for command in ["init", "check", "measure", "audit", "exception"] {
+    for command in ["init", "check", "measure", "audit", "limits", "exception"] {
         let text = help(&[command, "--help"]);
         let lines = text.lines().count();
         assert!(
