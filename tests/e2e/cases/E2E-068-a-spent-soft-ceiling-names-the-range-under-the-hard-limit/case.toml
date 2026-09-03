@@ -1,0 +1,10 @@
+# A soft entry accepting 9 lines of a 9-line file, under a rule whose hard limit
+# is 12. The step's next multiple above the ceiling is 12 — the hard limit,
+# where a soft ceiling never fires — so the line names the stated form and the
+# range that grants headroom while staying under it (§FS-004-check-audit.2).
+args = ["audit", "--stale-exceptions", "--no-color"]
+exit = 0
+stdout_contains = [
+  "loose ceilings:",
+  "docs/file-size-agent-exceptions.toml: src/big.rs accepts 9 lines, now 9 — no headroom; retune with --max <N> --unit lines, 10 <= N < 12",
+]

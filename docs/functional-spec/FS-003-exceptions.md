@@ -315,15 +315,38 @@ An entry is **loose** when all of the following hold:
 - `max_accepted.value` minus that measurement is greater than the unit's bump
   step.
 
-`audit --stale-exceptions` reports loose entries alongside stale ones
-(§FS-004-check-audit.2), each named by its registry and `path` and carrying the
-ceiling `fissile exception retune` would write (§FS-008-exception-retune) — or,
-where the step would land a soft ceiling on the hard limit, the stated form
-`retune` accepts instead (§DF-010-stated-ceilings-are-exact.2). An entry whose
-file has fallen under the limit altogether has no ceiling worth writing: it
-silences nothing, and the report names `fissile exception remove`, the command
-that deletes it (§FS-009-exception-remove).
+Slack that has run out is the same subject from the other side. An entry has
+**no headroom** when it clears the first two conditions above and
+`max_accepted.value` *equals* the measurement: the ceiling sits exactly on the
+file it accepts, so nothing at all stands between the entry and the finding it
+silences. It passes today and fails on the next unrelated commit — the cost
+§FS-005-exception-add.2 already names for a ceiling pinned to the day's
+measurement, arrived at here by the file growing up to the ceiling rather than
+by a caller stating it. `fissile measure` has always shown the condition as
+`0 to soft-accepted` (§FS-007-measure.2). `audit` alone was silent, because the
+one-step test that excuses a fresh quantized entry excused a spent one too.
 
-A loose entry is a report, never a failure. `[exceptions].stale` governs stale
-entries only: a stale entry accepts a file that is no longer there, while a loose
-one accepts everything it accepted yesterday and breaks nothing today.
+The two conditions are exclusive — slack cannot be both wider than a step and
+zero — so an entry is loose, or without headroom, or neither. A glob is out of
+both, for the reason the first condition gives. A ceiling *below* its file is
+neither: that entry has stopped silencing, and `check` reports the overflow
+itself (§3).
+
+`audit --stale-exceptions` reports both alongside stale ones
+(§FS-004-check-audit.2), each named by its registry and `path`. A loose entry
+carries the ceiling `fissile exception retune` would write
+(§FS-008-exception-retune) — or, where the step would land a soft ceiling on the
+hard limit, the stated form `retune` accepts instead
+(§DF-010-stated-ceilings-are-exact.2). An entry without headroom carries the
+step's next multiple *strictly above* the ceiling, the smallest round number
+that grants any headroom at all; where the measured form of `retune` would write
+the number already recorded, or would land on the hard limit, the report names
+the stated form for the same reason. An entry whose file has fallen under the
+limit altogether has no ceiling worth writing: it silences nothing, and the
+report names `fissile exception remove`, the command that deletes it
+(§FS-009-exception-remove).
+
+Neither is a failure. `[exceptions].stale` governs stale entries only: a stale
+entry accepts a file that is no longer there, while a loose entry — and one
+without headroom — accepts everything it accepted yesterday and breaks nothing
+today.

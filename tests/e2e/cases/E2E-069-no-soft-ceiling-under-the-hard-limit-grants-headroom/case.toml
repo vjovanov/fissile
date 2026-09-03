@@ -1,0 +1,10 @@
+# The file measures 9 lines one under a hard limit of 10, and the soft entry
+# accepts 9. Every ceiling above the measurement is at or above the hard limit,
+# where a soft ceiling never fires, so the range is empty and no soft retune
+# helps: the line names the hard registry instead (§FS-004-check-audit.2).
+args = ["audit", "--stale-exceptions", "--no-color"]
+exit = 0
+stdout_contains = [
+  "loose ceilings:",
+  "docs/file-size-agent-exceptions.toml: src/big.rs accepts 9 lines, now 9 — no headroom; no soft ceiling under the 10-line hard limit grants any — accept the file in the hard registry with `fissile exception add --severity hard`",
+]
