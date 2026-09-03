@@ -1,4 +1,4 @@
-# E2E-067-a-ceiling-on-the-step-multiple-names-the-stated-form: the advice is a call the command performs
+# E2E-071-a-ceiling-on-the-step-multiple-names-the-stated-form: the advice is a call the command performs
 
 `audit` never names a remedy the command would decline (§FS-004-check-audit.2).
 A ceiling with no headroom is normally moved by the measured form of

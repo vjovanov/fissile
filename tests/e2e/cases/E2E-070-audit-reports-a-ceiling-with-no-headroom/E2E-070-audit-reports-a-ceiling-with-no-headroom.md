@@ -1,4 +1,4 @@
-# E2E-066-audit-reports-a-ceiling-with-no-headroom: a ceiling sitting exactly on its file is a finding
+# E2E-070-audit-reports-a-ceiling-with-no-headroom: a ceiling sitting exactly on its file is a finding
 
 An exact-path entry accepting precisely what its file measures grants no
 headroom: it silences the finding today and stops on the first unrelated commit
