@@ -31,13 +31,13 @@ to do once and then lists what it applies to (§GOAL-003-friendly-output).
 hard: 2 files over the 550-line budget [rule: rust-source, message: split-rust-hard]
   Must split before more code lands here: move cohesive groups of items into
   sibling modules. If you cannot see a safe split, stop and ask a human.
-    src/domain/order.rs: 612 non-blank lines (budget 550)
-    src/domain/invoice.rs: 588 non-blank lines (budget 550)
+    src/domain/order.rs: 612 non-blank lines (budget 550; an exception here would accept 700)
+    src/domain/invoice.rs: 588 non-blank lines (budget 550; an exception here would accept 600)
 
 soft: 1 file over the 350-line budget [rule: rust-source, message: split-rust-soft]
   Should split the next time you touch it. If no split leaves the architecture
   cleaner, record it with `fissile exception add --severity soft`.
-    src/domain/tax.rs: 402 non-blank lines (budget 350)
+    src/domain/tax.rs: 402 non-blank lines (budget 350; an exception here would accept 500)
 ```
 
 Blocks are ordered hard before soft, then by rule ID; files within a block are
