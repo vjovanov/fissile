@@ -228,27 +228,30 @@ fn is_catch_all(selector: &Selector) -> bool {
 /// Rules matching no file, files reachable only through catch-all rules, and
 /// messages no rule uses (§FS-004-check-audit.2).
 fn coverage(loaded: &Loaded, measured_files: &[scan::MeasuredFile]) -> Coverage {
-    let rules = loaded.checker.rules();
+    let rules: Vec<_> = loaded.checker.scoped_rules().collect();
 
     let unmatched_rules = rules
         .iter()
-        .filter(|rule| {
+        .filter(|scope| {
             !measured_files
                 .iter()
-                .any(|file| rule.selector.matches(&file.measurement.path))
+                .any(|file| scope.applies_to(&file.measurement.path))
         })
-        .map(|rule| rule.id.clone())
+        .map(|scope| scope.rule.id.clone())
         .collect();
 
     let catch_all_only = measured_files
         .iter()
         .filter(|file| {
             let measurement = &file.measurement;
-            let matching: Vec<&_> = rules
+            let matching: Vec<_> = rules
                 .iter()
-                .filter(|rule| rule.selector.matches(&measurement.path))
+                .filter(|scope| scope.applies_to(&measurement.path))
                 .collect();
-            !matching.is_empty() && matching.iter().all(|rule| is_catch_all(&rule.selector))
+            !matching.is_empty()
+                && matching
+                    .iter()
+                    .all(|scope| is_catch_all(&scope.rule.selector))
         })
         .map(|file| file.measurement.path.to_string_lossy().replace('\\', "/"))
         .collect();

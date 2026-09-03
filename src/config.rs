@@ -178,6 +178,10 @@ pub struct Message {
 pub struct RuleSpec {
     pub id: String,
     pub include: Vec<String>,
+    /// Globs removed from this rule's scope without removing the path from any
+    /// other rule (§FS-001-config.3.4).
+    #[serde(default)]
+    pub exclude: Vec<String>,
     pub unit: UnitSpec,
     #[serde(default)]
     pub soft: Option<u64>,
@@ -435,6 +439,7 @@ impl Config {
             .collect();
 
         let mut rules = Vec::with_capacity(self.rules.len());
+        let mut exclusions = Vec::with_capacity(self.rules.len());
         for spec in &self.rules {
             if spec.include.is_empty() {
                 return Err(ConfigError::EmptyInclude {
@@ -446,6 +451,7 @@ impl Config {
             let hard_template = resolve_message(spec, Severity::Hard, &messages)?;
 
             let selector = Selector::Glob(spec.include.iter().map(Glob::new).collect());
+            exclusions.push(spec.exclude.iter().map(Glob::new).collect());
             let budget = Budget::new(spec.unit.into(), spec.soft, spec.hard);
 
             rules.push(
@@ -456,7 +462,7 @@ impl Config {
             );
         }
 
-        Checker::new(rules).map_err(ConfigError::Engine)
+        Checker::with_exclusions(rules, exclusions).map_err(ConfigError::Engine)
     }
 }
 

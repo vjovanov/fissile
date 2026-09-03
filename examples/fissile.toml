@@ -117,6 +117,7 @@ Large file for its type. Exclude it in [scan].exclude if it is generated, vendor
 [[rules]]
 id = "large-file-default"
 include = ["**/*"]
+exclude = []
 unit = "bytes"
 soft = 524288
 hard = 1048576
@@ -125,6 +126,7 @@ message = "large-file-default"
 [[rules]]
 id = "rust-source"
 include = ["src/**/*.rs", "benches/**/*.rs"]
+exclude = []
 unit = "lines"
 soft = 350
 hard = 550
@@ -136,6 +138,7 @@ hard_message = "split-rust-hard"
 [[rules]]
 id = "generated-rust"
 include = ["src/**/*.gen.rs"]
+exclude = []
 unit = "lines"
 soft = 1200
 hard = 2000
@@ -149,6 +152,7 @@ hard_message = "split-rust-hard"
 [[rules]]
 id = "rust-tests"
 include = ["tests/**/*.rs"]
+exclude = []
 unit = "lines"
 soft = 450
 hard = 700
@@ -161,9 +165,13 @@ hard_message = "split-rust-hard"
 # needs it and — with stable section IDs — read one section at a time, so its
 # total length is not charged to a reader who wanted one declaration. That earns
 # it several times the source budget. An entrypoint below is the other mode.
+# Add a path to this rule's `exclude` only when it should leave this line budget
+# while remaining eligible for the byte catch-all. `[scan].exclude` instead
+# removes it from every budget; an exception accepts an overflow of this rule.
 [[rules]]
 id = "citable-spec"
 include = ["docs/**/*.md"]
+exclude = []
 unit = "lines"
 soft = 750
 hard = 2000
@@ -178,6 +186,7 @@ hard_message = "split-doc-hard"
 [[rules]]
 id = "entrypoint"
 include = ["README.md", "AGENTS.md", "CLAUDE.md", "skills/**/*.md"]
+exclude = []
 unit = "lines"
 soft = 250
 hard = 500
@@ -188,6 +197,7 @@ message = "trim-entrypoint"
 [[rules]]
 id = "fixtures"
 include = ["tests/fixtures/**", "e2e/cases/**"]
+exclude = []
 unit = "bytes"
 soft = 65536
 hard = 262144

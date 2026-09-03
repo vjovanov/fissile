@@ -250,19 +250,41 @@ impl Rule {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Checker {
     rules: Vec<Rule>,
+    exclusions: Vec<Vec<Glob>>,
 }
 
 impl Checker {
     pub fn new(rules: Vec<Rule>) -> Result<Self, FissileError> {
+        let exclusions = vec![Vec::new(); rules.len()];
+        Self::with_exclusions(rules, exclusions)
+    }
+
+    /// Build the config-backed checker whose scopes may subtract rule-local
+    /// exclusion globs (§FS-001-config.3.4).
+    pub(crate) fn with_exclusions(
+        rules: Vec<Rule>,
+        exclusions: Vec<Vec<Glob>>,
+    ) -> Result<Self, FissileError> {
+        debug_assert_eq!(rules.len(), exclusions.len());
         for rule in &rules {
             rule.validate()?;
         }
 
-        Ok(Self { rules })
+        Ok(Self { rules, exclusions })
     }
 
     pub fn rules(&self) -> &[Rule] {
         &self.rules
+    }
+
+    /// Every configured rule together with its negative scope. Keeping the
+    /// applicability decision on this view makes checking, measuring, audit,
+    /// and inventory consume the same compiled rule (§FS-001-config.3.4).
+    pub(crate) fn scoped_rules(&self) -> impl Iterator<Item = ScopedRule<'_>> {
+        self.rules
+            .iter()
+            .zip(&self.exclusions)
+            .map(|(rule, exclusions)| ScopedRule { rule, exclusions })
     }
 
     /// Evaluate a file and return the effective rule plus its measured value for
@@ -325,9 +347,9 @@ impl Checker {
         let mut selected: Vec<EffectiveRule<'a>> = Vec::new();
 
         for rule in self
-            .rules
-            .iter()
-            .filter(|rule| rule.selector.matches(&file.path))
+            .scoped_rules()
+            .filter(|scope| scope.applies_to(&file.path))
+            .map(|scope| scope.rule)
         {
             match selected
                 .iter()
@@ -369,6 +391,24 @@ impl Checker {
             .into_iter()
             .map(|candidate| candidate.rule)
             .collect())
+    }
+}
+
+/// One compiled rule scope. Exclusions are tested against the same normalized
+/// repository-relative path and glob engine as includes (§FS-001-config.3.4).
+#[derive(Clone, Copy)]
+pub(crate) struct ScopedRule<'a> {
+    pub rule: &'a Rule,
+    pub exclusions: &'a [Glob],
+}
+
+impl ScopedRule<'_> {
+    pub fn applies_to(&self, path: &Path) -> bool {
+        if !self.rule.selector.matches(path) {
+            return false;
+        }
+        let path = path.to_string_lossy();
+        !self.exclusions.iter().any(|glob| glob.matches(&path))
     }
 }
 

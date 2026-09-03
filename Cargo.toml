@@ -57,6 +57,10 @@ name = "config_fixtures"
 path = "tests/integration/config_fixtures.rs"
 
 [[test]]
+name = "rule_exclusions"
+path = "tests/integration/rule_exclusions.rs"
+
+[[test]]
 name = "help"
 path = "tests/integration/help.rs"
 
