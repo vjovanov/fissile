@@ -19,6 +19,7 @@ commands:
   check [<paths>...]   enforce file budgets on a file set or the scan scope
   measure <paths>...   report what fissile counts, and the headroom left
   audit                inventory the whole repo against its budgets
+  limits               print every rule this tree configures
   exception add        record a justified oversized-file exception
   exception retune     move the ceiling an exception already records
   exception remove     delete an entry that accepts nothing
@@ -65,6 +66,19 @@ usage: fissile audit [--config <path>] [--format text|json] [--top <N>]
 examples:
   fissile audit --top 10
   fissile audit --stale-exceptions --rule-coverage";
+
+pub const LIMITS_USAGE: &str = "\
+usage: fissile limits [--config <path>] [--format text|json] [--no-color]
+
+Prints every configured rule — id, include patterns, unit, and the soft and
+hard limits it declares — in the order the config declares them, whether or not
+any file matches. It measures nothing and never fails a build, so it answers
+even where a broken exception registry stops `check` and `audit`. Use the JSON
+form to generate or verify a documented limit instead of copying it by hand.
+
+examples:
+  fissile limits
+  fissile limits --format json";
 
 pub const EXCEPTION_USAGE: &str = "\
 usage: fissile exception <add|retune|remove> <path> [options]

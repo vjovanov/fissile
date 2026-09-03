@@ -10,12 +10,13 @@ use fissile::audit::{self, AuditOptions};
 use fissile::check::{self, CheckOptions};
 use fissile::cli::Format;
 use fissile::init::{self, AgentTargets, HookMode, InitOptions};
+use fissile::limits::{self, LimitsOptions};
 use fissile::measure::{self, MeasureOptions};
 
 mod exception_cli;
 mod usage;
 
-use usage::{AUDIT_USAGE, CHECK_USAGE, INIT_USAGE, MEASURE_USAGE, USAGE};
+use usage::{AUDIT_USAGE, CHECK_USAGE, INIT_USAGE, LIMITS_USAGE, MEASURE_USAGE, USAGE};
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -24,6 +25,7 @@ fn main() -> ExitCode {
         Some("check") => run_check(&args[1..]),
         Some("measure") => run_measure(&args[1..]),
         Some("audit") => run_audit(&args[1..]),
+        Some("limits") => run_limits(&args[1..]),
         Some("exception") => exception_cli::run_exception(&args[1..]),
         Some("--help" | "-h") | None => {
             println!("{USAGE}");
@@ -296,6 +298,58 @@ fn run_audit(args: &[String]) -> ExitCode {
         Ok(run) => finish_run("audit", &run.output, run.failed, &run.errors),
         Err(error) => {
             eprintln!("fissile audit: {error}");
+            ExitCode::from(2)
+        }
+    }
+}
+
+/// `fissile limits` (§FS-010-limits.1): no positional argument and no
+/// `--staged` — the answer does not depend on a file set, so an argument is a
+/// usage error rather than a filter.
+fn run_limits(args: &[String]) -> ExitCode {
+    let mut options = LimitsOptions {
+        root: PathBuf::from("."),
+        ..LimitsOptions::default()
+    };
+    let mut iter = args.iter();
+
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--help" | "-h" => {
+                println!("{LIMITS_USAGE}");
+                return ExitCode::SUCCESS;
+            }
+            "--no-color" => options.no_color = true,
+            "--config" => match value(&mut iter, "--config") {
+                Ok(path) => options.config_path = Some(PathBuf::from(path)),
+                Err(message) => return usage_fail("limits", &message, LIMITS_USAGE),
+            },
+            "--format" => match value(&mut iter, "--format").and_then(|raw| parse_format(&raw)) {
+                Ok(format) => options.format = Some(format),
+                Err(message) => return usage_fail("limits", &message, LIMITS_USAGE),
+            },
+            other if other.starts_with('-') => {
+                return usage_fail("limits", &format!("unknown option `{other}`"), LIMITS_USAGE);
+            }
+            other => {
+                return usage_fail(
+                    "limits",
+                    &format!("unexpected argument `{other}`"),
+                    LIMITS_USAGE,
+                );
+            }
+        }
+    }
+
+    match limits::run(&options) {
+        // Never a gate: the inventory is an answer, and the config loading is
+        // the whole of what can go wrong (§FS-010-limits.1).
+        Ok(run) => {
+            println!("{}", run.output);
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("fissile limits: {error}");
             ExitCode::from(2)
         }
     }

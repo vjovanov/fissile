@@ -11,6 +11,9 @@ pub enum Json {
     /// left versus distance past a threshold (§FS-007-measure.2).
     Int(i64),
     Str(String),
+    /// A true/false field, for a policy flag a consumer reads as a boolean —
+    /// the line-counting policy `limits` publishes (§FS-010-limits.4).
+    Bool(bool),
     Array(Vec<Json>),
     Object(Vec<(&'static str, Json)>),
 }
@@ -33,6 +36,7 @@ impl Json {
             Json::UInt(value) => out.push_str(&value.to_string()),
             Json::Int(value) => out.push_str(&value.to_string()),
             Json::Str(value) => write_string(value, out),
+            Json::Bool(value) => out.push_str(if *value { "true" } else { "false" }),
             Json::Array(items) => {
                 out.push('[');
                 for (index, item) in items.iter().enumerate() {
@@ -84,11 +88,12 @@ mod tests {
         let value = Json::Array(vec![Json::Object(vec![
             ("path", Json::str("src/lib.rs")),
             ("actual", Json::UInt(612)),
+            ("counted", Json::Bool(true)),
             ("note", Json::Null),
         ])]);
         assert_eq!(
             value.render(),
-            r#"[{"path":"src/lib.rs","actual":612,"note":null}]"#
+            r#"[{"path":"src/lib.rs","actual":612,"counted":true,"note":null}]"#
         );
     }
 

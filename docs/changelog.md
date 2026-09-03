@@ -34,6 +34,18 @@ and at 0.x semver puts the minor number in charge of it.
 
 ### Added
 
+- §FS-010-limits: new `fissile limits` prints every rule the tree configures —
+  id, include patterns, unit, and the soft and hard limits each declares — in
+  config declaration order, with `--config`, `--format text|json` and
+  `--no-color` as `audit` takes them. Nothing printed a repository's rule
+  inventory before: `check` and `audit` report findings, so a passing tree said
+  nothing, and `measure` answers only for paths a caller already named, so the
+  numbers were copied into prose that nothing checks. The JSON form is an object
+  keyed `rules` and carries each rule's `priority`, message ids and line-counting
+  policy, published as `schema/limits.schema.json`, so a documented limit can be
+  generated or verified rather than maintained by hand. It loads the config and
+  not the exception registries, so it answers with exit `0` in a tree whose
+  registries `check` and `audit` refuse. Resolves #46. (PR #N)
 - §FS-003-exceptions.2.3, §FS-005-exception-add.1.1: a soft entry may declare
   `shadows = "hard"` and inherit its `reason` and `until` from the hard entry at
   the same address, and `fissile exception add --shadows-hard` writes one. A

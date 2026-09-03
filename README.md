@@ -205,6 +205,30 @@ the first one that fails the commit, because a limit fires above the limit. That
 is the number you need *before* deciding whether the
 new test goes in this file or a new one.
 
+## What does this repo enforce?
+
+`check` and `audit` speak in findings, so a passing tree tells you nothing about
+its budgets. `limits` prints the rules themselves — every one the config
+declares, in the order it declares them, with no file in hand:
+
+```text
+$ fissile limits
+source [src/**/*.rs] lines soft 350 hard 550
+config-toml [**/*.toml] lines soft 180 hard 300
+```
+
+`--format json` carries the rest of each rule — its priority, its message ids,
+and how it counts a line — so a documented limit can be generated from the
+config or compared against it in CI instead of copied into prose that nothing
+checks:
+
+```json
+{"rules":[{"id":"source","include":["src/**/*.rs"],"unit":"lines","soft":350,"hard":550,"priority":0,"soft_message":"split-source-soft","hard_message":"split-source-hard","count_blank_lines":false,"count_comment_lines":true}]}
+```
+
+It reads the config and not the exception registries, so it still answers in a
+tree whose registry `check` and `audit` refuse to load (§FS-010-limits).
+
 ## Justified exceptions
 
 A file you have decided to keep large gets a written reason in a registry — not

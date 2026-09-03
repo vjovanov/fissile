@@ -13,6 +13,7 @@ use fissile::check::{self, CheckOptions};
 use fissile::cli::Format;
 use fissile::exception::{self, AddOptions, Rationale};
 use fissile::exceptions::{Kind, MatchKind};
+use fissile::limits::{self, LimitsOptions};
 use fissile::measure::{self, MeasureOptions};
 
 /// Required keys on every finding record (§FS-004-check-audit.1).
@@ -258,6 +259,62 @@ fn measure_records_match_the_published_schema() {
         assert!(
             schema.contains(&format!("\"{key}\"")),
             "schema/measure.schema.json is missing `{key}`"
+        );
+    }
+}
+
+/// §FS-010-limits.4: every field of the rule inventory is declared, and the
+/// envelope is an object keyed `rules` rather than a bare array.
+#[test]
+fn limits_records_match_the_published_schema() {
+    let root = temp_repo();
+    let run = limits::run(&LimitsOptions {
+        root,
+        config_path: None,
+        format: Some(Format::Json),
+        no_color: false,
+    })
+    .expect("limits runs");
+
+    let rules = extract_array(&run.output, "rules");
+    let records = array_objects(&rules);
+    assert_eq!(records.len(), 1, "one record for the fixture's one rule");
+    let keys = object_keys(&records[0]);
+    let expected: Vec<String> = [
+        "count_blank_lines",
+        "count_comment_lines",
+        "hard",
+        "hard_message",
+        "id",
+        "include",
+        "priority",
+        "soft",
+        "soft_message",
+        "unit",
+    ]
+    .iter()
+    .map(|key| (*key).to_owned())
+    .collect();
+    assert_eq!(sorted(&keys), sorted(&expected));
+
+    // The config's values, not the tree's: no file was measured (§FS-010-limits.5).
+    assert!(
+        run.output
+            .starts_with(r#"{"rules":[{"id":"rust","include":["src/**/*.rs"]"#),
+        "{}",
+        run.output
+    );
+    assert!(
+        run.output.contains(r#""soft":100,"hard":200"#),
+        "{}",
+        run.output
+    );
+
+    let schema = fs::read_to_string(schema_dir().join("limits.schema.json")).unwrap();
+    for key in keys.iter().chain([&"rules".to_owned()]) {
+        assert!(
+            schema.contains(&format!("\"{key}\"")),
+            "schema/limits.schema.json is missing `{key}`"
         );
     }
 }
