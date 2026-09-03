@@ -84,7 +84,7 @@ and at 0.x semver puts the minor number in charge of it.
   that multiple. Every `loose` JSON record gains `no_headroom`, `0` or `1`, and
   `stated_range` may now carry `min` alone, so `max_excluded` leaves its
   `required` list in `schema/audit.schema.json`. Loose entries, the section
-  heading, and the exit codes are unchanged. Resolves #48. (PR #N)
+  heading, and the exit codes are unchanged. Resolves #48. (PR #57)
 
 ### Changed
 
