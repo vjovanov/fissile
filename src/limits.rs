@@ -116,10 +116,9 @@ fn rule_json(rule: &Rule) -> Json {
     // Always present: every rule has one, and it is what settles an overlap
     // between two of them (§FS-001-config.3.2).
     fields.push(("priority", Json::Int(i64::from(rule.priority))));
-    // A severity the rule declares no threshold for borrows the other's template
-    // internally (§FS-001-config.3); emitting that id would attach guidance to a
-    // limit that does not exist, so each id appears only beside its own
-    // threshold (§FS-010-limits.4).
+    // An undeclared severity borrows the other's message template (§FS-001-config.3);
+    // emitting that id would misattach guidance, so each id appears only beside its
+    // own declared threshold (§FS-010-limits.4).
     for (key, declared, severity) in [
         ("soft_message", rule.budget.soft, Severity::Soft),
         ("hard_message", rule.budget.hard, Severity::Hard),
