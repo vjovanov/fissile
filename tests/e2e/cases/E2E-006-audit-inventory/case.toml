@@ -2,7 +2,7 @@ args = ["audit", "--no-color", "--top", "3", "--stale-exceptions", "--rule-cover
 exit = 1
 stdout_contains = [
   "hard: 1 file over the 4-line budget [rule: rust, message: m]",
-  "    src/big.rs: 5 non-blank lines (budget 4)",
+  "    src/big.rs: 5 non-blank lines (budget 4; an exception here would accept 100)",
   "top lines:",
   "  5 src/big.rs",
   "stale exceptions:",

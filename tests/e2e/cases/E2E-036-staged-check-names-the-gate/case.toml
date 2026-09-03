@@ -4,7 +4,7 @@ git = true
 stdout_equals = """
 hard: 1 file over the 4-line budget [rule: rust, message: m]
   Split the file.
-    src/big.rs: 5 non-blank lines (budget 4)
+    src/big.rs: 5 non-blank lines (budget 4; an exception here would accept 100)
 
 hint: fissile measure <path>... reports size and headroom for the files you split into.
 

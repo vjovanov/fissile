@@ -4,7 +4,7 @@ stdout_equals = """
 hard: 1 file over the 6-line budget [rule: rust, message: must-split]
   Must split before more code lands here. If you cannot see a split that leaves
   the architecture intact, stop and ask a human.
-    src/big.rs: 8 non-blank lines (budget 6)
+    src/big.rs: 8 non-blank lines (budget 6; an exception here would accept 100)
 
 soft: 2 files over the 2-line budget [rule: rust, message: should-split]
   Should split, next time you are in one of these files: move a cohesive group

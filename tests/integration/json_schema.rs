@@ -30,6 +30,11 @@ const REQUIRED: &[&str] = &[
 /// Extra keys only silenced `audit` records carry (§FS-003-exceptions.5). The
 /// accepting entry is not named: it has no name (§DF-005-exception-identity).
 const SILENCED_EXTRA: &[&str] = &["exception_max"];
+/// The extra key a standing finding carries: the ceiling a plain `fissile
+/// exception add` would write for the file (§FS-004-check-audit.1). Silenced
+/// records do not carry it — the entry that already accepts the file reports
+/// its own ceiling as `exception_max` instead.
+const STANDING_EXTRA: &[&str] = &["exception_would_accept"];
 
 // Values in the fixture are free of `,` and `:` so a flat object splits cleanly.
 const CONFIG: &str = r#"
@@ -100,7 +105,7 @@ fn array_objects(array: &str) -> Vec<String> {
 #[test]
 fn schema_declares_every_finding_field() {
     let finding = fs::read_to_string(schema_dir().join("finding.schema.json")).unwrap();
-    for field in REQUIRED.iter().chain(SILENCED_EXTRA) {
+    for field in REQUIRED.iter().chain(SILENCED_EXTRA).chain(STANDING_EXTRA) {
         assert!(
             finding.contains(&format!("\"{field}\"")),
             "schema/finding.schema.json is missing field `{field}`"
@@ -129,10 +134,21 @@ fn check_json_records_match_the_schema() {
     let records = array_objects(&run.output);
     assert_eq!(records.len(), 1, "one hard record for the 250-line file");
     let keys = object_keys(&records[0]);
+    let expected: Vec<String> = REQUIRED
+        .iter()
+        .chain(STANDING_EXTRA)
+        .map(|field| (*field).to_owned())
+        .collect();
     assert_eq!(
         sorted(&keys),
-        sorted(&REQUIRED.iter().map(|s| s.to_string()).collect::<Vec<_>>()),
-        "check record keys must be exactly the required finding fields"
+        sorted(&expected),
+        "check record keys must be the required finding fields plus the ceiling"
+    );
+    // 250 lines against a 200-line hard limit, under the default 100-line step.
+    assert!(
+        run.output.contains("\"exception_would_accept\":300"),
+        "{}",
+        run.output
     );
     assert_schema_known(&keys);
 }
@@ -210,6 +226,14 @@ fn audit_silenced_records_carry_documented_exception_fields() {
         assert!(
             keys.iter().any(|k| k == field),
             "silenced record missing `{field}`"
+        );
+    }
+    // An entry already accepts this file, so there is no plain `add` to name a
+    // ceiling for (§FS-004-check-audit.1).
+    for field in STANDING_EXTRA {
+        assert!(
+            !keys.iter().any(|k| k == field),
+            "silenced record carries `{field}`"
         );
     }
     assert_schema_known(&keys);

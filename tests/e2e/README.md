@@ -92,3 +92,6 @@ The harness drives the real `fissile` binary, so every documented behavior under
 - `E2E-071-a-ceiling-on-the-step-multiple-names-the-stated-form` — the advice is a call the command performs.
 - `E2E-072-a-spent-soft-ceiling-names-the-range-under-the-hard-limit` — the range starts above the measurement.
 - `E2E-073-no-soft-ceiling-under-the-hard-limit-grants-headroom` — the report says so rather than naming an empty range.
+- `E2E-074-a-finding-names-what-an-exception-would-accept` — the finding names the ceiling a plain exception writes.
+- `E2E-075-a-ceiling-on-the-hard-limit-is-not-named` — a number the command would refuse is withheld instead.
+- `E2E-076-a-byte-finding-names-what-an-exception-would-accept` — a detail with no budget clause carries it too.

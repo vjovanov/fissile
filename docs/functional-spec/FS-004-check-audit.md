@@ -53,6 +53,54 @@ when only comment lines are excluded, and `non-blank, non-comment lines` when
 both are excluded. A non-UTF-8 raw-line measurement names `physical lines`.
 Byte and token findings retain `<path>: <actual> <unit>`.
 
+Each detail also names the ceiling a `fissile exception add` with no `--max`
+would write for that file: the measurement quantized up to the unit's
+`[exceptions.bump]` step (§DF-006-quantized-ceilings.1, §FS-005-exception-add.2).
+It is the number that command already computes, said at the moment the caller is
+choosing between the plain form and `--max`, so a line rule reads
+
+```text
+    src/domain/order.rs: 612 non-blank lines (budget 550; an exception here would accept 700)
+```
+
+and a byte or token rule, which carries no budget clause, opens a parenthesis of
+its own:
+
+```text
+    assets/atlas.bin: 5200 bytes (an exception here would accept 8192)
+```
+
+The number is what makes the plain form the obvious one to reach for. A ceiling
+stated with `--max` is written exactly as stated
+(§DF-010-stated-ceilings-are-exact.1), so a caller who copies the measurement
+off this line into `--max` records a ceiling with no headroom and fails the gate
+on the next unrelated edit; the ceiling named beside it is the entry they would
+get by asking for nothing. Where an entry already stands at the address, `add`
+refuses and names `fissile exception retune` (§FS-005-exception-add.4), which
+writes this same number — the line says what the file would be accepted at, not
+which of the two commands writes it. It is not the `next <step>-<unit> step: N`
+that `add` and `retune` print on a result (§FS-005-exception-add.2): that one is
+a round number a *stated* ceiling passed up and never applied, and this one is
+the ceiling that would actually be recorded.
+
+The ceiling is named only where that plain call would be accepted. For a soft
+finding on a rule that also sets a hard limit, a ceiling at or above that limit
+is refused while the file is still under it, because the hard finding fires
+there and the soft entry would never match (§DF-010-stated-ceilings-are-exact.2);
+the detail then names no ceiling at all rather than a number the command would
+decline. A file already past the hard limit keeps its number, on the same terms
+that accept the entry — it is the record of the debt (§FS-005-exception-add.4).
+A hard finding never withholds it: nothing binds a hard ceiling, and the
+quantized value is at or above a measurement already over the limit.
+
+One case deliberately says less than it could. `add` also accepts a soft ceiling
+above the hard limit when the hard registry holds a *deferred* entry at the same
+address (§FS-005-exception-add.4), and a finding does not read the registries to
+find out — it withholds there too. Withholding is the direction that cannot
+mislead. The caller runs the plain form and gets the entry the command would
+have written anyway; a number printed here that ended in a refusal would have
+sent them somewhere with nothing to do.
+
 Guidance is wrapped at a fixed 78 columns, and newlines written into the message
 are kept, so a project that configures a paragraph gets a readable block. The
 width is fixed rather than read from the terminal: the same finding must be
@@ -176,7 +224,14 @@ JSON output emits one record per overflow with at least:
 - `rule_id`
 - `message_id`
 - `message`
+- `exception_would_accept`, when the finding names a ceiling
 - `exception_max`, when applicable in audit's silenced output
+
+`exception_would_accept` carries the same number the text detail names and is
+omitted wherever the text withholds it, so a consumer of `--format json` chooses
+between the plain and the stated form on the same facts a reader of the text
+does. It is absent from a silenced `audit` record, which carries `exception_max`
+— the ceiling the entry that already accepts the file records — instead.
 
 When no findings are emitted, text output prints exactly `ok`; JSON output emits
 no success envelope.
