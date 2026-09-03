@@ -407,6 +407,9 @@ impl ScopedRule<'_> {
         if !self.rule.selector.matches(path) {
             return false;
         }
+        if self.exclusions.is_empty() {
+            return true;
+        }
         let path = path.to_string_lossy();
         !self.exclusions.iter().any(|glob| glob.matches(&path))
     }
