@@ -47,7 +47,7 @@ and at 0.x semver puts the minor number in charge of it.
   between the two forms. It is withheld where that plain call would be refused —
   a soft ceiling reaching the rule's hard limit for a file still under it — and
   a finding does not read the exception registries, so it withholds from the
-  deferred-hard-twin case `add` would accept. Resolves #49. (PR #N)
+  deferred-hard-twin case `add` would accept. Resolves #49. (PR #58)
 - §FS-010-limits: new `fissile limits` prints every rule the tree configures —
   id, include patterns, unit, and the soft and hard limits each declares — in
   config declaration order, with `--config`, `--format text|json` and
