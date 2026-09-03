@@ -174,13 +174,15 @@ ever split and thirty-two waiting on work are different facts about a codebase.
 
 `check` already names an exact-path entry whose file the commit removes, so a
 leftover entry surfaces in the diff that killed it. Add `--stale-exceptions` for
-the rest of the inventory — globs matching nothing, and
-ceilings that have drifted far above the file they still accept, which is the
-ratchet slipping back:
+the rest of the inventory — globs matching nothing, ceilings that have drifted
+far above the file they still accept, which is the ratchet slipping back, and
+ceilings the file has grown up to exactly, which pass today and fail on the next
+unrelated commit:
 
 ```text
 loose ceilings:
   docs/file-size-agent-exceptions.toml: src/orders.rs accepts 700 lines, now 421 — retune to 500
+  docs/file-size-agent-exceptions.toml: src/router.rs accepts 519 lines, now 519 — no headroom; retune to 600
 ```
 
 Add `--rule-coverage` to find rules and messages that match nothing.

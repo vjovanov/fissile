@@ -2,15 +2,14 @@
 //! migration surface. Beyond current overflows it can report the largest files
 //! per unit, stale exceptions, and rule coverage gaps.
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 
 use crate::cli::{self, CommandError, Format, Loaded};
-use crate::entry;
-use crate::exceptions::{EntrySite, Exception, KindCounts, KindPathCounts, MatchKind};
+use crate::exceptions::{EntrySite, Exception, KindCounts, KindPathCounts};
 use crate::json::Json;
+use crate::loose::{self, Loose};
 use crate::report::{self, EvalError, Outcome};
-use crate::{FileMeasurement, RuleHit, Selector, Severity, Unit, scan};
+use crate::{FileMeasurement, RuleHit, Selector, Unit, scan};
 
 /// Inputs to an `audit` run.
 #[derive(Clone, Debug, Default)]
@@ -44,42 +43,13 @@ type TopFiles = Vec<(Unit, Vec<(u64, String)>)>;
 struct Inventory {
     top: Option<TopFiles>,
     stale: Option<Vec<EntrySite>>,
-    /// Ceilings standing more than one bump step above the file they accept
-    /// (§FS-003-exceptions.7). Requested by the same flag as `stale`: both answer
-    /// "which entries no longer say something true?".
+    /// Ceilings standing more than one bump step above the file they accept, or
+    /// sitting exactly on it (§FS-003-exceptions.7). Requested by the same flag
+    /// as `stale`: both answer "which entries no longer say something true?".
     loose: Option<Vec<Loose>>,
     coverage: Option<Coverage>,
     kinds: KindCounts,
     kind_paths: KindPathCounts,
-}
-
-/// One entry accepting far more of a file that is still there. Stale is the
-/// other half: an entry accepting a file that is gone (§FS-003-exceptions.7).
-struct Loose {
-    site: EntrySite,
-    severity: Severity,
-    unit: Unit,
-    accepted: u64,
-    actual: u64,
-    limit: u64,
-    /// What to do about the slack, which is one thing or the other and never
-    /// neither (§DF-010-stated-ceilings-are-exact.2).
-    remedy: Remedy,
-    /// The file no longer crosses that limit at all, so the entry silences
-    /// nothing and lowering it is not the remedy — removing it is.
-    silences_nothing: bool,
-}
-
-/// What closes the gap between an entry's ceiling and the file under it.
-#[derive(Clone, Copy, Debug)]
-enum Remedy {
-    /// The ceiling `exception retune` would write from the measurement, never
-    /// below the limit the entry exists to accept.
-    RetuneTo(u64),
-    /// The step lands a soft ceiling on the hard limit, which `retune` refuses
-    /// (§DF-010-stated-ceilings-are-exact.2), so the remedy is the stated form:
-    /// the file's size up to, excluding, that limit.
-    StateWithin { floor: u64, hard: u64 },
 }
 
 pub fn run(options: &AuditOptions) -> Result<Run, CommandError> {
@@ -164,7 +134,7 @@ pub fn run(options: &AuditOptions) -> Result<Run, CommandError> {
         // nothing today (§FS-003-exceptions.7).
         loose: options
             .stale_exceptions
-            .then(|| loose_entries(&loaded, &files)),
+            .then(|| loose::entries(&loaded, &files)),
         coverage: options
             .rule_coverage
             .then(|| coverage(&loaded, &measured_files)),
@@ -209,10 +179,10 @@ fn top_files(files: &[Measured<'_>], n: usize) -> TopFiles {
 /// One scanned file with its repo-relative path and its rule hits, paired once
 /// so the sections that read them do not each re-derive the path or re-scan the
 /// list (§GOAL-001-fast-feedback).
-struct Measured<'a> {
-    path: String,
+pub(crate) struct Measured<'a> {
+    pub path: String,
     measurement: &'a FileMeasurement,
-    hits: &'a [RuleHit<'a>],
+    pub hits: &'a [RuleHit<'a>],
 }
 
 impl Measured<'_> {
@@ -236,76 +206,6 @@ impl Measured<'_> {
 
 fn repo_path(measurement: &FileMeasurement) -> String {
     measurement.path.to_string_lossy().replace('\\', "/")
-}
-
-/// Entries whose ceiling has drifted more than one bump step above their file
-/// (§FS-003-exceptions.7). Exact paths only: a glob's ceiling is a policy for a
-/// class of files, so lowering it to today's largest member breaks the next one.
-fn loose_entries(loaded: &Loaded, files: &[Measured<'_>]) -> Vec<Loose> {
-    // Indexed once: a linear scan per entry is a full pass over the repository
-    // for every exception, which is the shape §GOAL-001-fast-feedback rules out.
-    let by_path: HashMap<&str, &Measured<'_>> = files
-        .iter()
-        .map(|file| (file.path.as_str(), file))
-        .collect();
-    let mut loose = Vec::new();
-    for exception in loaded.registries.all() {
-        if exception.match_kind != MatchKind::Exact {
-            continue;
-        }
-        let Some(file) = by_path.get(exception.path.as_str()) else {
-            continue;
-        };
-        // The measurement to compare is the one this entry can silence: the
-        // effective rule for its unit, among the rules it lists.
-        let Some(hit) = file.hits.iter().find(|hit| {
-            hit.rule.budget.unit == exception.max_unit && exception.applies_to_rule(&hit.rule.id)
-        }) else {
-            continue;
-        };
-
-        let step = loaded.config.exceptions.bump.step(exception.max_unit);
-        if exception.max_value.saturating_sub(hit.actual) <= step {
-            continue;
-        }
-        let limit = match exception.severity {
-            Severity::Soft => hit.rule.budget.soft,
-            Severity::Hard => hit.rule.budget.hard,
-        }
-        .unwrap_or(0);
-        let quantized = entry::quantize(hit.actual, step).max(limit);
-        // The value `retune` would write from a measurement — unless it is one
-        // `retune` refuses (§DF-010-stated-ceilings-are-exact.2).
-        let refused = hit.rule.budget.hard.filter(|hard| {
-            exception.severity == Severity::Soft
-                && hit.actual < *hard
-                && quantized >= *hard
-                && !entry::has_deferred_hard_twin(
-                    &loaded.registries,
-                    &exception.path,
-                    exception.match_kind,
-                    std::slice::from_ref(&hit.rule.id),
-                    exception.max_unit,
-                )
-        });
-        loose.push(Loose {
-            site: exception.site(),
-            severity: exception.severity,
-            unit: exception.max_unit,
-            accepted: exception.max_value,
-            actual: hit.actual,
-            limit,
-            remedy: match refused {
-                Some(hard) => Remedy::StateWithin {
-                    floor: hit.actual.max(limit),
-                    hard,
-                },
-                None => Remedy::RetuneTo(quantized),
-            },
-            silences_nothing: hit.actual < limit,
-        });
-    }
-    loose
 }
 
 struct Coverage {
@@ -451,7 +351,7 @@ fn render_text(
             lines.push("  none".to_owned());
         }
         for item in loose {
-            lines.push(format!("  {}", render_loose_text(item)));
+            lines.push(format!("  {}", loose::text_line(item)));
         }
         sections.push(lines.join("\n"));
     }
@@ -461,35 +361,6 @@ fn render_text(
     }
 
     sections.join("\n\n")
-}
-
-fn render_loose_text(item: &Loose) -> String {
-    let Loose {
-        site,
-        unit,
-        accepted,
-        actual,
-        ..
-    } = item;
-    let advice = if item.silences_nothing {
-        // Lowering is not the remedy here, so the line names the command that is
-        // (§FS-003-exceptions.7, §FS-009-exception-remove).
-        format!(
-            "silences nothing now; the {} limit is {} — remove it with `fissile exception remove`",
-            item.severity, item.limit
-        )
-    } else {
-        // `retune` refuses the measured form on the hard limit, so the line names
-        // the one it accepts and the range that keeps it under
-        // (§DF-010-stated-ceilings-are-exact.2).
-        match item.remedy {
-            Remedy::RetuneTo(to) => format!("retune to {to}"),
-            Remedy::StateWithin { floor, hard } => {
-                format!("retune with --max <N> --unit {unit}, {floor} <= N < {hard}")
-            }
-        }
-    };
-    format!("{site} accepts {accepted} {unit}, now {actual} — {advice}")
 }
 
 fn render_coverage_text(coverage: &Coverage) -> String {
@@ -587,49 +458,8 @@ fn render_json(outcomes: &[Outcome], inventory: &Inventory) -> String {
         fields.push(("stale", Json::Array(entries)));
     }
 
-    if let Some(loose) = &inventory.loose {
-        let entries = loose
-            .iter()
-            .map(|item| {
-                // `severity` and `limit` travel with the record: the text line
-                // states both, and a consumer must not have to re-derive them by
-                // matching the registry filename against the config.
-                Json::Object(vec![
-                    ("registry", Json::str(item.site.registry.clone())),
-                    ("path", Json::str(item.site.path.clone())),
-                    ("severity", Json::str(item.severity.to_string())),
-                    ("unit", Json::str(item.unit.to_string())),
-                    ("accepted", Json::UInt(item.accepted)),
-                    ("actual", Json::UInt(item.actual)),
-                    ("limit", Json::UInt(item.limit)),
-                    (
-                        "retune_to",
-                        match item.remedy {
-                            Remedy::RetuneTo(to) => Json::UInt(to),
-                            Remedy::StateWithin { .. } => Json::Null,
-                        },
-                    ),
-                    // The remedy a `null` `retune_to` stands for, so a consumer
-                    // reading JSON has the range the text line prints rather
-                    // than an absence (§FS-004-check-audit.2).
-                    (
-                        "stated_range",
-                        match item.remedy {
-                            Remedy::RetuneTo(_) => Json::Null,
-                            Remedy::StateWithin { floor, hard } => Json::Object(vec![
-                                ("min", Json::UInt(floor)),
-                                ("max_excluded", Json::UInt(hard)),
-                            ]),
-                        },
-                    ),
-                    (
-                        "silences_nothing",
-                        Json::UInt(u64::from(item.silences_nothing)),
-                    ),
-                ])
-            })
-            .collect();
-        fields.push(("loose", Json::Array(entries)));
+    if let Some(items) = &inventory.loose {
+        fields.push(("loose", loose::json(items)));
     }
 
     if let Some(coverage) = &inventory.coverage {
