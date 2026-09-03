@@ -1,0 +1,7 @@
+# Non-empty negative scope is visible after the include list; an empty or
+# omitted list adds no text (§FS-010-limits.3).
+args = ["limits", "--no-color"]
+exit = 0
+stdout_equals = """
+bytes-catch-all [**/*] bytes soft 1
+citable-spec [docs/**/*.md] exclude [docs/changelog/0.2.0.md] lines soft 1"""

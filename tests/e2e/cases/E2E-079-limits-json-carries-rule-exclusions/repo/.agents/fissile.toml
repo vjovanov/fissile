@@ -1,0 +1,25 @@
+fissile_config_version = 1
+
+[scan]
+include = ["docs"]
+exclude = []
+respect_gitignore = false
+
+[[messages]]
+id = "too-large"
+text = "too large"
+
+[[rules]]
+id = "bytes-catch-all"
+include = ["**/*"]
+unit = "bytes"
+soft = 1
+message = "too-large"
+
+[[rules]]
+id = "citable-spec"
+include = ["docs/**/*.md"]
+exclude = ["docs/changelog/0.2.0.md"]
+unit = "lines"
+soft = 1
+message = "too-large"

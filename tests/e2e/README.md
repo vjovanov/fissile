@@ -95,3 +95,6 @@ The harness drives the real `fissile` binary, so every documented behavior under
 - `E2E-074-a-finding-names-what-an-exception-would-accept` — the finding names the ceiling a plain exception writes.
 - `E2E-075-a-ceiling-on-the-hard-limit-is-not-named` — a number the command would refuse is withheld instead.
 - `E2E-076-a-byte-finding-names-what-an-exception-would-accept` — a detail with no budget clause carries it too.
+- `E2E-077-a-rule-exclusion-keeps-other-budgets` — a changelog leaves its line rule but stays under the byte catch-all.
+- `E2E-078-limits-prints-rule-exclusions` — text inventory prints a non-empty rule exclusion after its includes.
+- `E2E-079-limits-json-carries-rule-exclusions` — JSON inventory carries a non-empty exclusion and omits an empty one.
