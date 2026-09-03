@@ -371,6 +371,26 @@ surface. Budgets are set per extension, per glob, and per unit (`bytes`,
 [`docs/functional-spec/FS-001-config.md`](docs/functional-spec/FS-001-config.md),
 with a worked sample at [`examples/fissile.toml`](examples/fissile.toml).
 
+A rule can subtract paths from only its own scope while every other applicable
+unit and rule remains active (§FS-001-config.3.4):
+
+```toml
+[[rules]]
+id = "citable-spec"
+include = ["docs/**/*.md"]
+exclude = ["docs/changelog/*.md"]
+unit = "lines"
+soft = 750
+hard = 2000
+message = "split-doc"
+```
+
+Use `[[rules]].exclude` when a path should leave one budget, `[scan].exclude`
+when fissile should not scan or budget the path at all, and an exception when
+the rule still applies but an overflow is accepted with a written reason and
+ceiling. Omitting a rule exclusion, or writing `exclude = []`, is unchanged
+from earlier version-1 configs.
+
 ## How it fits together
 
 - **`init`** — config, exception registries, the managed `AGENTS.md` block, and

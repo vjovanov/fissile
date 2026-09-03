@@ -34,6 +34,14 @@ and at 0.x semver puts the minor number in charge of it.
 
 ### Added
 
+- §FS-001-config.3.4, §FS-010-limits.3, §FS-010-limits.4: a `[[rules]]` entry
+  may declare `exclude` globs that remove a path from that rule before overlap
+  resolution while leaving every other unit and rule eligible. This is distinct
+  from `[scan].exclude`, which removes a path from the whole scan, and from an
+  exception, which accepts an overflow of a rule that still applies. `limits`
+  prints non-empty exclusions after `include` in text and JSON and omits empty
+  lists, so the addition stays compatible with existing version-1 configs and
+  output. Generated exhaustive configs spell the empty default. (PR #TODO)
 - §FS-004-check-audit.1: each file detail of a `check` or `audit` finding names
   the ceiling a `fissile exception add` with no `--max` would record for that
   file — `(budget 550; an exception here would accept 700)` for a line rule, a
@@ -102,6 +110,11 @@ and at 0.x semver puts the minor number in charge of it.
 
 ### Changed
 
+- §FS-001-config.3.4: `fissile::config::RuleSpec` gains a public
+  `exclude: Vec<String>` field. A library caller constructing the public struct
+  directly must initialize it, normally with `Vec::new()`; parsed configs
+  default it automatically. A 0.x source break, so the minor number moves.
+  (PR #TODO)
 - §FS-005-exception-add.1.1: `fissile::exception::AddOptions` replaces its public
   `kind`, `reason`, and `until` fields with one `rationale: Rationale`, so a
   shadowing call is a value the type admits rather than three fields left blank.

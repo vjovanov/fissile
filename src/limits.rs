@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use crate::cli::{CommandError, Format};
 use crate::config::Config;
 use crate::json::Json;
-use crate::{Rule, Selector, Severity, Unit};
+use crate::{Glob, ScopedRule, Selector, Severity, Unit};
 
 /// Inputs to a `limits` run.
 #[derive(Clone, Debug, Default)]
@@ -44,13 +44,18 @@ pub fn run(options: &LimitsOptions) -> Result<Run, CommandError> {
 
     // Declaration order, unfiltered by what matched: the rule matching no file
     // is the one a reader is most likely to be wrong about (§FS-010-limits.2).
-    let rules = checker.rules();
+    let rules: Vec<_> = checker.scoped_rules().collect();
     let output = match format {
         Format::Text if rules.is_empty() => NO_RULES.to_owned(),
-        Format::Text => rules.iter().map(text_line).collect::<Vec<_>>().join("\n"),
+        Format::Text => rules
+            .iter()
+            .copied()
+            .map(text_line)
+            .collect::<Vec<_>>()
+            .join("\n"),
         Format::Json => Json::Object(vec![(
             "rules",
-            Json::Array(rules.iter().map(rule_json).collect()),
+            Json::Array(rules.iter().copied().map(rule_json).collect()),
         )])
         .render(),
     };
@@ -60,13 +65,25 @@ pub fn run(options: &LimitsOptions) -> Result<Run, CommandError> {
 /// `<id> [<include>, …] <unit> soft <N> hard <M>`, with only the thresholds the
 /// rule declares — a placeholder for the other would state a limit the config
 /// does not set (§FS-010-limits.3).
-fn text_line(rule: &Rule) -> String {
+fn text_line(scope: ScopedRule<'_>) -> String {
+    let rule = scope.rule;
     let mut line = format!(
-        "{} [{}] {}",
+        "{} [{}]",
         rule.id,
-        include_patterns(&rule.selector).join(", "),
-        rule.budget.unit
+        include_patterns(&rule.selector).join(", ")
     );
+    if !scope.exclusions.is_empty() {
+        line.push_str(&format!(
+            " exclude [{}]",
+            scope
+                .exclusions
+                .iter()
+                .map(Glob::pattern)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    line.push_str(&format!(" {}", rule.budget.unit));
     for (label, value) in [("soft", rule.budget.soft), ("hard", rule.budget.hard)] {
         if let Some(value) = value {
             line.push_str(&format!(" {label} {value}"));
@@ -94,7 +111,8 @@ fn include_patterns(selector: &Selector) -> Vec<String> {
 /// One rule as the machine surface (§FS-010-limits.4): the text form's fields,
 /// plus what a generator needs and a terminal reader does not. A field that
 /// would describe nothing is omitted, never nulled.
-fn rule_json(rule: &Rule) -> Json {
+fn rule_json(scope: ScopedRule<'_>) -> Json {
+    let rule = scope.rule;
     let mut fields = vec![
         ("id", Json::str(rule.id.clone())),
         (
@@ -106,8 +124,20 @@ fn rule_json(rule: &Rule) -> Json {
                     .collect(),
             ),
         ),
-        ("unit", Json::str(rule.budget.unit.to_string())),
     ];
+    if !scope.exclusions.is_empty() {
+        fields.push((
+            "exclude",
+            Json::Array(
+                scope
+                    .exclusions
+                    .iter()
+                    .map(|glob| Json::str(glob.pattern()))
+                    .collect(),
+            ),
+        ));
+    }
+    fields.push(("unit", Json::str(rule.budget.unit.to_string())));
     for (key, value) in [("soft", rule.budget.soft), ("hard", rule.budget.hard)] {
         if let Some(value) = value {
             fields.push((key, Json::UInt(value)));
