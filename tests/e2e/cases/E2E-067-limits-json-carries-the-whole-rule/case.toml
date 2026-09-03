@@ -1,0 +1,7 @@
+# The machine surface: an object keyed `rules`, and per rule everything the text
+# form drops (§FS-010-limits.4). A field that would describe nothing is omitted,
+# not nulled: no `soft` on the byte rule, no `hard_message` on the notes rule,
+# and no line policy on a rule measured in bytes.
+args = ["limits", "--format", "json"]
+exit = 0
+stdout_equals = '{"rules":[{"id":"rust","include":["src/**/*.rs","tests/**/*.rs"],"unit":"lines","soft":2,"hard":8,"priority":0,"soft_message":"split","hard_message":"split","count_blank_lines":true,"count_comment_lines":true},{"id":"assets","include":["assets/**/*.png"],"unit":"bytes","hard":4096,"priority":3,"hard_message":"shrink"},{"id":"notes","include":["notes/*.md"],"unit":"lines","soft":40,"priority":0,"soft_message":"split","count_blank_lines":false,"count_comment_lines":true}]}'
