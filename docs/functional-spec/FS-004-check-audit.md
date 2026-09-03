@@ -282,9 +282,12 @@ state. It is for adoption and maintenance, not just pass/fail.
   line. The advice keeps the two fields the record already has: `retune_to` for
   case 4, and `stated_range` for cases 2 and 3 — `{"min": N, "max_excluded": M}`
   for a range, `{"min": N}` alone for a stated value with nothing above it to
-  exclude. Exactly one of the two is set on every record, except case 2's empty
-  range, where neither is: there is no ceiling to name, and `no_headroom` with
-  both fields null is that case.
+  exclude. Exactly one of the two is set on every record, except where no
+  ceiling under the hard limit grants headroom and there is none to name: then
+  both are null. Case 2's empty range is that form — the file measures one unit
+  under the hard limit — and so is a rule whose soft and hard limits coincide,
+  which reaches it from the loose half, where the entry silences nothing and the
+  line is the removal line of case 1.
 - `--rule-coverage` reports which rules matched zero files, which files matched
   only built-in catch-all rules, and which rule/message pairs are unused.
 

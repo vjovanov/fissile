@@ -198,12 +198,12 @@
             "required": [
               "min"
             ],
-            "description": "The ceiling a stated `--max` should take when `retune_to` is null: `min` alone where the measured form would write the number already recorded, and `min` with `max_excluded` where a range keeps the ceiling under the hard limit. Null whenever `retune_to` holds a value — exactly one of the two is set, except where a soft ceiling sits one unit under the hard limit and no ceiling grants headroom, where both are null.",
+            "description": "The ceiling a stated `--max` should take when `retune_to` is null: `min` alone where the measured form would write the number already recorded, and `min` with `max_excluded` where a range keeps the ceiling under the hard limit. Null whenever `retune_to` holds a value — exactly one of the two is set, except where no ceiling under the hard limit grants headroom and there is none to name, where both are null.",
             "properties": {
               "min": {
                 "type": "integer",
                 "minimum": 0,
-                "description": "The lowest ceiling that still silences the finding, and for an entry without headroom the lowest that grants any."
+                "description": "The floor of the range, where `max_excluded` is present: the lowest ceiling that still silences the finding, and for an entry without headroom the lowest that grants any. Where `max_excluded` is absent, `min` is the value to state, as the enclosing description says."
               },
               "max_excluded": {
                 "type": "integer",
