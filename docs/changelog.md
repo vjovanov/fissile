@@ -45,7 +45,7 @@ and at 0.x semver puts the minor number in charge of it.
   policy, published as `schema/limits.schema.json`, so a documented limit can be
   generated or verified rather than maintained by hand. It loads the config and
   not the exception registries, so it answers with exit `0` in a tree whose
-  registries `check` and `audit` refuse. Resolves #46. (PR #N)
+  registries `check` and `audit` refuse. Resolves #46. (PR #56)
 - §FS-003-exceptions.2.3, §FS-005-exception-add.1.1: a soft entry may declare
   `shadows = "hard"` and inherit its `reason` and `until` from the hard entry at
   the same address, and `fissile exception add --shadows-hard` writes one. A
@@ -97,7 +97,7 @@ and at 0.x semver puts the minor number in charge of it.
 - §FS-010-limits.4: `fissile::json::Json` gains a `Bool` variant, for the two
   line-counting flags `limits --format json` emits. The enum is not
   `#[non_exhaustive]`, so an exhaustive external `match` on it stops compiling:
-  add the new arm, or a wildcard. Same minor bump. (PR #N)
+  add the new arm, or a wildcard. Same minor bump. (PR #56)
 
 - §AR-001-ci: every declaration is listed in its folder's index. `grund check`
   warned that thirteen declarations were absent from their index README and that
