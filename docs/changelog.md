@@ -34,6 +34,20 @@ and at 0.x semver puts the minor number in charge of it.
 
 ### Added
 
+- §FS-004-check-audit.1: each file detail of a `check` or `audit` finding names
+  the ceiling a `fissile exception add` with no `--max` would record for that
+  file — `(budget 550; an exception here would accept 700)` for a line rule, a
+  parenthesis of its own where the unit carries no budget clause — and the JSON
+  record carries the same number as `exception_would_accept`. The measurement
+  was the only number on screen, so a caller reaching for an exception copied it
+  into `--max`, which is written exactly as stated
+  (§DF-010-stated-ceilings-are-exact.1); the entry then had no headroom and the
+  next unrelated edit failed the gate. The number is the one the command already
+  computes (§DF-006-quantized-ceilings.1), said at the moment the caller chooses
+  between the two forms. It is withheld where that plain call would be refused —
+  a soft ceiling reaching the rule's hard limit for a file still under it — and
+  a finding does not read the exception registries, so it withholds from the
+  deferred-hard-twin case `add` would accept. Resolves #49. (PR #N)
 - §FS-010-limits: new `fissile limits` prints every rule the tree configures —
   id, include patterns, unit, and the soft and hard limits each declares — in
   config declaration order, with `--config`, `--format text|json` and

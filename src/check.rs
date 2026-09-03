@@ -67,6 +67,7 @@ pub fn run(options: &CheckOptions) -> Result<Run, CommandError> {
             measurement,
             &hits,
             measured_file.utf8,
+            &loaded.config.exceptions.bump,
         ));
         outcomes.extend(report::evaluate_hits(
             &loaded.registries,
@@ -105,7 +106,10 @@ pub fn run(options: &CheckOptions) -> Result<Run, CommandError> {
         // stdout keeps the stable findings shape, so the block about a registry
         // goes to stderr — where it is still the run's own account of why it
         // failed, rather than an unexplained exit code (§FS-004-check-audit.5).
-        Format::Json => (render_json(&outcomes), report::stale_blocks(&stale, false)),
+        Format::Json => (
+            render_json(&outcomes, &contexts),
+            report::stale_blocks(&stale, false),
+        ),
     };
     Ok(Run {
         output,
@@ -219,11 +223,11 @@ fn render_text(text: &Text<'_>) -> String {
     blocks.join("\n\n")
 }
 
-fn render_json(outcomes: &[Outcome]) -> String {
+fn render_json(outcomes: &[Outcome], contexts: &[report::FindingContext]) -> String {
     let records: Vec<Json> = outcomes
         .iter()
         .filter(|outcome| outcome.is_reported())
-        .map(report::overflow_json)
+        .map(|outcome| report::overflow_json_with_context(outcome, contexts))
         .collect();
     Json::Array(records).render()
 }

@@ -3,7 +3,7 @@
 //! `report.rs` stays well under its own line budget.
 
 use super::*;
-use crate::config::Config;
+use crate::config::{Bump, Config};
 use crate::exceptions::RegistrySource;
 use crate::{Budget, MessageTemplate, RenderedMessage, Rule, Selector, Unit};
 
@@ -122,13 +122,22 @@ fn reported(path: &str, rule: &str, severity: Severity, actual: u64, text: &str)
     })
 }
 
-fn context(outcome: &Outcome, basis: &'static str) -> FindingContext {
+/// Context as `contexts_for_file` would build it for the rule [`reported`]
+/// describes — a 350/550-line budget under the default 100-line step.
+fn context(outcome: &Outcome) -> FindingContext {
+    context_with(outcome, Bump::default().step(Unit::Lines), Some(550))
+}
+
+/// The same, for a case that is about the step or the hard limit itself.
+fn context_with(outcome: &Outcome, bump_step: u64, hard_limit: Option<u64>) -> FindingContext {
     let overflow = outcome.overflow();
     FindingContext {
         path: overflow.path.clone(),
         rule_id: overflow.rule_id.clone(),
         unit: overflow.unit,
-        line_basis: Some(basis),
+        line_basis: Some("non-blank lines"),
+        bump_step,
+        hard_limit,
     }
 }
 
@@ -146,10 +155,7 @@ fn files_sharing_guidance_are_listed_under_one_copy_of_it() {
         reported("src/tax.rs", "source", Severity::Soft, 502, "Should split."),
     ];
 
-    let contexts: Vec<_> = outcomes
-        .iter()
-        .map(|outcome| context(outcome, "non-blank lines"))
-        .collect();
+    let contexts: Vec<_> = outcomes.iter().map(context).collect();
     let blocks = finding_blocks_with_context(&outcomes, false, &contexts);
 
     // Hard first, and the soft guidance is written once for both its files.
@@ -157,10 +163,12 @@ fn files_sharing_guidance_are_listed_under_one_copy_of_it() {
         blocks,
         vec![
             "hard: 1 file over the 550-line budget [rule: source, message: hard-guidance]\n  \
-             Must split.\n    src/big.rs: 620 non-blank lines (budget 550)"
+             Must split.\n    src/big.rs: 620 non-blank lines (budget 550; an exception here would accept 700)"
                 .to_owned(),
+            // src/tax.rs rounds to 600, on the 550-line hard limit, so its
+            // ceiling is withheld (§FS-004-check-audit.1).
             "soft: 2 files over the 350-line budget [rule: source, message: soft-guidance]\n  \
-             Should split.\n    src/tax.rs: 502 non-blank lines (budget 350)\n    src/util.rs: 410 non-blank lines (budget 350)"
+             Should split.\n    src/tax.rs: 502 non-blank lines (budget 350)\n    src/util.rs: 410 non-blank lines (budget 350; an exception here would accept 500)"
                 .to_owned(),
         ]
     );
@@ -194,15 +202,16 @@ fn per_file_guidance_does_not_collapse() {
         reported("src/b.rs", "source", Severity::Soft, 380, "Split src/b.rs."),
     ];
 
-    let contexts: Vec<_> = outcomes
-        .iter()
-        .map(|outcome| context(outcome, "non-blank lines"))
-        .collect();
+    let contexts: Vec<_> = outcomes.iter().map(context).collect();
     let blocks = finding_blocks_with_context(&outcomes, false, &contexts);
 
     assert_eq!(blocks.len(), 2);
-    assert!(blocks[0].ends_with("Split src/a.rs.\n    src/a.rs: 400 non-blank lines (budget 350)"));
-    assert!(blocks[1].ends_with("Split src/b.rs.\n    src/b.rs: 380 non-blank lines (budget 350)"));
+    assert!(blocks[0].ends_with(
+        "Split src/a.rs.\n    src/a.rs: 400 non-blank lines (budget 350; an exception here would accept 400)"
+    ));
+    assert!(blocks[1].ends_with(
+        "Split src/b.rs.\n    src/b.rs: 380 non-blank lines (budget 350; an exception here would accept 400)"
+    ));
 }
 
 #[test]
@@ -211,10 +220,7 @@ fn guidance_wraps_at_a_fixed_width() {
                 that already exists, rather than cutting the file at the line count.";
     let outcomes = [reported("src/a.rs", "source", Severity::Soft, 400, long)];
 
-    let contexts: Vec<_> = outcomes
-        .iter()
-        .map(|outcome| context(outcome, "non-blank lines"))
-        .collect();
+    let contexts: Vec<_> = outcomes.iter().map(context).collect();
     let block = finding_blocks_with_context(&outcomes, false, &contexts).remove(0);
     let guidance: Vec<&str> = block
         .lines()
@@ -244,10 +250,7 @@ fn newlines_in_a_message_are_kept() {
         "Should split.\nfissile exception add <path> --severity soft --rule source",
     )];
 
-    let contexts: Vec<_> = outcomes
-        .iter()
-        .map(|outcome| context(outcome, "non-blank lines"))
-        .collect();
+    let contexts: Vec<_> = outcomes.iter().map(context).collect();
     let block = finding_blocks_with_context(&outcomes, false, &contexts).remove(0);
 
     assert!(block.contains(
@@ -277,11 +280,13 @@ fn line_details_name_each_counting_policy() {
         let hits = checker.evaluate(&file).expect("evaluation succeeds");
         let outcomes =
             evaluate_hits(&Registries::default(), &file, &hits).expect("reporting succeeds");
-        let contexts = contexts_for_file(&file, &hits, true);
+        let contexts = contexts_for_file(&file, &hits, true, &Bump::default());
         let block = finding_blocks_with_context(&outcomes, false, &contexts).remove(0);
 
         assert!(
-            block.contains(&format!("src/policy.rs: {actual} {expected} (budget 1)")),
+            block.contains(&format!(
+                "src/policy.rs: {actual} {expected} (budget 1; an exception here would accept 100)"
+            )),
             "wrong detail for ({count_blank}, {count_comment}): {block}"
         );
     }
@@ -302,19 +307,22 @@ fn non_utf8_line_details_name_physical_lines() {
     let file = FileMeasurement::new("src/binary.rs", 4).with_lines(3);
     let hits = checker.evaluate(&file).expect("evaluation succeeds");
     let outcomes = evaluate_hits(&Registries::default(), &file, &hits).expect("reporting succeeds");
-    let contexts = contexts_for_file(&file, &hits, false);
+    let contexts = contexts_for_file(&file, &hits, false, &Bump::default());
     let block = finding_blocks_with_context(&outcomes, false, &contexts).remove(0);
 
-    assert!(block.contains("src/binary.rs: 3 physical lines (budget 2)"));
+    assert!(block.contains(
+        "src/binary.rs: 3 physical lines (budget 2; an exception here would accept 100)"
+    ));
 }
 
 /// §FS-004-check-audit.1: non-line units retain their historical detail shape.
 #[test]
 fn byte_and_token_details_keep_their_unit_shape() {
-    for (unit, file) in [
-        (Unit::Bytes, FileMeasurement::new("src/data.bin", 3)),
+    for (unit, ceiling, file) in [
+        (Unit::Bytes, 4096, FileMeasurement::new("src/data.bin", 3)),
         (
             Unit::Tokens,
+            1000,
             FileMeasurement::new("src/data.txt", 3).with_tokens(3),
         ),
     ] {
@@ -328,12 +336,94 @@ fn byte_and_token_details_keep_their_unit_shape() {
         let hits = checker.evaluate(&file).expect("evaluation succeeds");
         let outcomes =
             evaluate_hits(&Registries::default(), &file, &hits).expect("reporting succeeds");
-        let contexts = contexts_for_file(&file, &hits, true);
+        let contexts = contexts_for_file(&file, &hits, true, &Bump::default());
         let block = finding_blocks_with_context(&outcomes, false, &contexts).remove(0);
 
+        // No budget clause to extend, so the ceiling opens its own parenthesis
+        // on the unit's own step (§FS-004-check-audit.1).
         assert!(
-            block.ends_with(&format!("    {}: 3 {}", file.path.display(), unit)),
+            block.ends_with(&format!(
+                "    {}: 3 {unit} (an exception here would accept {ceiling})",
+                file.path.display()
+            )),
             "wrong {unit} detail: {block}"
         );
+    }
+}
+
+/// §FS-004-check-audit.1: the ceiling named is the measurement quantized to the
+/// unit's step, and it is named exactly where a plain `fissile exception add`
+/// would accept it. The end-to-end cases pin the two ends of that predicate;
+/// every clause of it is here, including the steps that quantize nothing.
+#[test]
+fn a_ceiling_is_named_where_a_plain_exception_would_be_accepted() {
+    for (severity, actual, step, hard_limit, expected) in [
+        // Nothing binds a hard ceiling (§DF-010-stated-ceilings-are-exact.2).
+        (Severity::Hard, 620, 100, Some(550), Some(700)),
+        // A soft ceiling under the hard limit is written as it stands.
+        (Severity::Soft, 410, 100, Some(550), Some(500)),
+        // On that limit, for a file still under it, `add` refuses it.
+        (Severity::Soft, 502, 100, Some(550), None),
+        // Past the limit the soft entry is the record of the debt and stands.
+        (Severity::Soft, 620, 100, Some(550), Some(700)),
+        // A rule setting no hard limit binds nothing at either severity.
+        (Severity::Soft, 502, 100, None, Some(600)),
+        // A step of 0 or 1 quantizes nothing: the ceiling is the measurement,
+        // which is still what a plain `add` writes (§FS-001-config.5).
+        (Severity::Soft, 502, 1, None, Some(502)),
+        (Severity::Soft, 502, 0, None, Some(502)),
+    ] {
+        let outcome = reported("src/a.rs", "source", severity, actual, "Split it.");
+        let context = context_with(&outcome, step, hard_limit);
+
+        assert_eq!(
+            context.would_accept(outcome.overflow()),
+            expected,
+            "{severity} {actual} against step {step} and hard limit {hard_limit:?}"
+        );
+    }
+}
+
+/// §FS-001-config.5, §DF-006-quantized-ceilings.1: the step is the tree's own
+/// `[exceptions.bump]` and each unit takes its own, so a line detail extends the
+/// budget clause it already has and a byte or token detail opens one.
+#[test]
+fn the_ceiling_reads_the_configured_step_for_each_unit() {
+    let bump = Bump {
+        lines: 10,
+        bytes: 100,
+        tokens: 250,
+    };
+    for (unit, file, detail) in [
+        (
+            Unit::Lines,
+            crate::measure_text("src/big.rs", "a\nb\nc\n"),
+            "src/big.rs: 3 non-blank lines (budget 2; an exception here would accept 10)",
+        ),
+        (
+            Unit::Bytes,
+            FileMeasurement::new("src/data.bin", 3),
+            "src/data.bin: 3 bytes (an exception here would accept 100)",
+        ),
+        (
+            Unit::Tokens,
+            FileMeasurement::new("src/data.txt", 3).with_tokens(3),
+            "src/data.txt: 3 tokens (an exception here would accept 250)",
+        ),
+    ] {
+        let rule = Rule::new(
+            "size",
+            Selector::All,
+            Budget::new(unit, Some(2), None),
+            MessageTemplate::new("m", "Split it."),
+        );
+        let checker = Checker::new(vec![rule]).expect("valid checker");
+        let hits = checker.evaluate(&file).expect("evaluation succeeds");
+        let outcomes =
+            evaluate_hits(&Registries::default(), &file, &hits).expect("reporting succeeds");
+        let contexts = contexts_for_file(&file, &hits, true, &bump);
+        let block = finding_blocks_with_context(&outcomes, false, &contexts).remove(0);
+
+        assert!(block.ends_with(&format!("    {detail}")), "{block}");
     }
 }
