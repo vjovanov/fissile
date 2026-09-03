@@ -88,7 +88,7 @@ The harness drives the real `fissile` binary, so every documented behavior under
 - `E2E-063-remove-dry-run-writes-nothing` — a dry run says what it would delete.
 - `E2E-064-audit-names-remove-for-an-entry-that-silences-nothing` — the report names the command, not just the state.
 - `E2E-065-a-stated-add-names-the-step-it-did-not-take` — a pinned `add --max` learns the round number one step up.
-- `E2E-066-audit-reports-a-ceiling-with-no-headroom` — a ceiling sitting exactly on its file is a finding.
-- `E2E-067-a-ceiling-on-the-step-multiple-names-the-stated-form` — the advice is a call the command performs.
-- `E2E-068-a-spent-soft-ceiling-names-the-range-under-the-hard-limit` — the range starts above the measurement.
-- `E2E-069-no-soft-ceiling-under-the-hard-limit-grants-headroom` — the report says so rather than naming an empty range.
+- `E2E-070-audit-reports-a-ceiling-with-no-headroom` — a ceiling sitting exactly on its file is a finding.
+- `E2E-071-a-ceiling-on-the-step-multiple-names-the-stated-form` — the advice is a call the command performs.
+- `E2E-072-a-spent-soft-ceiling-names-the-range-under-the-hard-limit` — the range starts above the measurement.
+- `E2E-073-no-soft-ceiling-under-the-hard-limit-grants-headroom` — the report says so rather than naming an empty range.

@@ -1,4 +1,4 @@
-# E2E-068-a-spent-soft-ceiling-names-the-range-under-the-hard-limit: the range starts above the measurement
+# E2E-072-a-spent-soft-ceiling-names-the-range-under-the-hard-limit: the range starts above the measurement
 
 A soft ceiling at or above the rule's hard limit never fires for a file still
 under that limit, so `fissile exception retune` refuses it and names the stated

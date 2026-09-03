@@ -1,4 +1,4 @@
-# E2E-069-no-soft-ceiling-under-the-hard-limit-grants-headroom: the report says so rather than naming an empty range
+# E2E-073-no-soft-ceiling-under-the-hard-limit-grants-headroom: the report says so rather than naming an empty range
 
 `audit` names the stated form and a range when a soft entry's next step would
 land on the hard limit (§FS-004-check-audit.2). For an entry with no headroom
