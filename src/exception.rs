@@ -135,6 +135,15 @@ pub fn run(options: &AddOptions) -> Result<Run, CommandError> {
         },
     )?;
 
+    // A stated ceiling may be the day's measurement with no headroom, so the
+    // result names the round number one step up — the one the measured form
+    // would have written — and applies none of it (§FS-005-exception-add.2).
+    let step_note = entry::step_note(
+        step,
+        unit,
+        entry::suggested_step(&base, step, binding.map(|binding| binding.hard)),
+    );
+
     let rendered = render_entry(options, &path, kind, until.as_deref(), unit, max);
     let registry_rel = entry::registry_path(&loaded, options.severity);
     let registry_path = loaded.root.join(&registry_rel);
@@ -151,8 +160,9 @@ pub fn run(options: &AddOptions) -> Result<Run, CommandError> {
         .collect();
 
     if options.dry_run {
+        let note = step_note.map_or_else(String::new, |note| format!(" ({note})"));
         return Ok(Run {
-            output: format!("{rendered}\nwould update {}", registry_rel.display()),
+            output: format!("{rendered}\nwould update {}{note}", registry_rel.display()),
             warnings,
         });
     }
@@ -161,9 +171,10 @@ pub fn run(options: &AddOptions) -> Result<Run, CommandError> {
         fs::create_dir_all(parent)?;
     }
     fs::write(&registry_path, &new_text)?;
+    let note = step_note.map_or_else(String::new, |note| format!("; {note}"));
     Ok(Run {
         output: format!(
-            "appended {path} to {} (accepted up to {max} {unit})",
+            "appended {path} to {} (accepted up to {max} {unit}{note})",
             registry_rel.display()
         ),
         warnings,

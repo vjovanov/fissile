@@ -201,8 +201,8 @@ fn ceiling_detail(
             unit.singular()
         ),
         entry::BaseSource::Measured(_) => String::new(),
-        entry::BaseSource::Max => suggested
-            .map(|next| format!(" (next {step}-{} step: {next})", unit.singular()))
+        entry::BaseSource::Max => entry::step_note(step, unit, suggested)
+            .map(|note| format!(" ({note})"))
             .unwrap_or_default(),
     }
 }

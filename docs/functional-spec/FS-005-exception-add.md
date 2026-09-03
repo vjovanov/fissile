@@ -105,6 +105,26 @@ stated: the caller has already made that decision, and rounding it would replace
 their number with one nobody chose (§DF-010-stated-ceilings-are-exact.1).
 `fissile exception retune` moves either afterwards (§FS-008-exception-retune).
 
+A stated ceiling names the step it did not take. When `--max` is not a multiple
+of the step, the result names the next multiple — the round number the measured
+form would have chosen — as a suggestion, never applied, and omitted when that
+number is one §4 would refuse:
+
+```console
+$ fissile exception add README.md --severity hard --rule entrypoints \
+    --kind deferred --max 519 --unit lines --until 'the docs site exists' \
+    --reason '...' --force
+appended README.md to docs/file-size-human-exceptions.toml (accepted up to 519 lines; next 100-line step: 600)
+```
+
+A ceiling pinned to the day's measurement grants no headroom, so the first
+unrelated growth fails the gate. Naming the round number one step away is what
+makes that the caller's informed choice rather than a silent one
+(§DF-010-stated-ceilings-are-exact.3). `exception retune` names it in the same
+words (§FS-008-exception-retune.3), so a caller who has seen one command's
+result can read the other's. The measured form names nothing: the step already
+chose its number.
+
 For `--match glob`, `--max` and `--unit` are required because there is no single
 file measurement to infer — so a glob ceiling is always the number stated.
 
@@ -241,4 +261,11 @@ from it (§DF-004-exception-kind), which is a reason to say so, not to block a
 commit on a word count.
 
 `--dry-run` prints the TOML entry that would be appended and the registry path it
-would update. It does not modify the filesystem.
+would update — with the same next-step suggestion §2 names, when `--max` supplied
+a ceiling off the step:
+
+```text
+would update docs/file-size-human-exceptions.toml (next 100-line step: 600)
+```
+
+It does not modify the filesystem.
