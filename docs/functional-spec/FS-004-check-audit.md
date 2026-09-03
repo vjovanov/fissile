@@ -235,24 +235,56 @@ state. It is for adoption and maintenance, not just pass/fail.
   stands more than one bump step above the file it accepts
   (§FS-003-exceptions.7), with the ceiling `fissile exception retune` would write
   in its place. Stale means the entry accepts a file that is gone; loose means it
-  accepts far more of a file that is still there. Where the step would land a
-  soft ceiling on the hard limit, `retune` refuses the measured form
-  (§DF-010-stated-ceilings-are-exact.2), so the line names the stated one: the
-  JSON record's `retune_to` is `null` and its `stated_range`
-  (`{"min": N, "max_excluded": M}`) carries the range that line prints. Exactly
-  one of the two is set on every record. The twin that exempts a ceiling here is
-  resolved the same way `retune` resolves it, so `audit` never names a remedy
-  the command would decline.
+  accepts far more of a file that is still there. An exact-path entry whose
+  ceiling sits *exactly* on its file is reported in the same section, in the same
+  line shape, with the advice prefixed `no headroom` (§FS-003-exceptions.7): it
+  accepts precisely what the file measures, so it silences the finding today and
+  stops on the next unrelated commit.
+
+  The advice on a line is the first of these that applies, and each one is a call
+  the named command performs — `audit` never names a remedy the command would
+  decline:
+
+  1. **The file no longer crosses the limit at all.** The entry silences
+     nothing, so removing it is the remedy rather than moving it, and the line
+     names `fissile exception remove` (§FS-009-exception-remove). There is no
+     `no headroom` prefix here: an entry the file has fallen below is finished,
+     not short of room.
+  2. **A soft ceiling would land on the hard limit.** `retune` refuses the
+     measured form there (§DF-010-stated-ceilings-are-exact.2), so the line names
+     the stated one and the range that keeps the ceiling under the limit. The
+     twin that exempts a ceiling here is resolved the same way `retune` resolves
+     it. For an entry without headroom the range starts one unit above the
+     measurement, since a ceiling at the measurement is what it already has; when
+     that leaves the range empty — the file measures one under the hard limit —
+     no soft ceiling grants headroom at all, and the line says so and names the
+     hard registry instead.
+  3. **The measurement is already a multiple of the step.** The measured form of
+     `retune` would write the number already recorded and report that it changed
+     nothing, so the line names the stated form with the step's next multiple
+     filled in. This can only arise for an entry without headroom.
+  4. **Otherwise** the line names a `retune to` value: for a loose entry the
+     ceiling the step writes from the measurement, for one without headroom the
+     step's next multiple strictly above it.
 
   ```text
   loose ceilings:
     docs/file-size-agent-exceptions.toml: src/domain/order.rs accepts 650 lines, now 421 — retune to 500
     docs/file-size-agent-exceptions.toml: src/domain/model.rs accepts 700 lines, now 472 — retune with --max <N> --unit lines, 472 <= N < 500
+    docs/file-size-human-exceptions.toml: README.md accepts 519 lines, now 519 — no headroom; retune to 600
+    docs/file-size-human-exceptions.toml: src/domain/tax.rs accepts 500 lines, now 500 — no headroom; retune with --max 600 --unit lines
+    docs/file-size-agent-exceptions.toml: src/domain/vat.rs accepts 460 lines, now 460 — no headroom; retune with --max <N> --unit lines, 461 <= N < 500
+    docs/file-size-agent-exceptions.toml: src/domain/fee.rs accepts 499 lines, now 499 — no headroom; no soft ceiling under the 500-line hard limit grants any — accept the file in the hard registry with `fissile exception add --severity hard`
   ```
 
-  An entry whose file no longer crosses the limit at all silences nothing, so
-  the line says that instead of naming a lower ceiling: removing the entry, not
-  retuning it, is the remedy.
+  Every `loose` JSON record carries `no_headroom` as `0` or `1`, so a consumer
+  reads which half of §FS-003-exceptions.7 it is looking at without parsing the
+  line. The advice keeps the two fields the record already has: `retune_to` for
+  case 4, and `stated_range` for cases 2 and 3 — `{"min": N, "max_excluded": M}`
+  for a range, `{"min": N}` alone for a stated value with nothing above it to
+  exclude. Exactly one of the two is set on every record, except case 2's empty
+  range, where neither is: there is no ceiling to name, and `no_headroom` with
+  both fields null is that case.
 - `--rule-coverage` reports which rules matched zero files, which files matched
   only built-in catch-all rules, and which rule/message pairs are unused.
 

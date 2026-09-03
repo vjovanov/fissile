@@ -1,0 +1,10 @@
+# The file measures 12 lines, an exact multiple of the 4-line step, and the
+# entry accepts 12. `retune` without `--max` would quantize 12 to 12, write
+# nothing, and answer `already accepts 12` — so the line names the stated form
+# with the next multiple above the ceiling instead (§FS-004-check-audit.2).
+args = ["audit", "--stale-exceptions", "--no-color"]
+exit = 0
+stdout_contains = [
+  "loose ceilings:",
+  "docs/file-size-agent-exceptions.toml: src/big.rs accepts 12 lines, now 12 — no headroom; retune with --max 16 --unit lines",
+]

@@ -1,0 +1,10 @@
+# The entry accepts 9 lines of a 9-line file: the ceiling sits exactly on what
+# it silences, so it passes today and fails on the next unrelated commit
+# (§FS-003-exceptions.7). The 4-line step's next multiple strictly above the
+# ceiling is 12, which is what `retune` writes from this measurement.
+args = ["audit", "--stale-exceptions", "--no-color"]
+exit = 0
+stdout_contains = [
+  "loose ceilings:",
+  "docs/file-size-agent-exceptions.toml: src/big.rs accepts 9 lines, now 9 — no headroom; retune to 12",
+]

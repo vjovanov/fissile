@@ -378,6 +378,74 @@ fn audit_reports_a_loose_ceiling_with_the_value_to_retune_to() {
     // registry's limit was missed, and what that limit is.
     assert!(loose.contains("\"severity\":\"hard\""), "{loose}");
     assert!(loose.contains("\"limit\":200"), "{loose}");
+    // Slack wider than a step, so this is the loose half of the section and not
+    // the spent one (§FS-003-exceptions.7).
+    assert!(loose.contains("\"no_headroom\":0"), "{loose}");
+}
+
+/// §FS-003-exceptions.7: a ceiling sitting exactly on the file it accepts has
+/// no headroom, and the record says which half of the section it belongs to
+/// without a consumer parsing the text line (§FS-004-check-audit.2).
+#[test]
+fn audit_flags_a_ceiling_with_no_headroom() {
+    let root = temp_repo();
+    exception::run(&AddOptions {
+        root: root.clone(),
+        config_path: None,
+        path: "src/big.rs".to_owned(),
+        severity: Severity::Hard,
+        rules: vec!["rust".to_owned()],
+        rationale: Rationale::Stated {
+            kind: Kind::Deferred,
+            reason: "no module owns the staged-blob reader yet".to_owned(),
+            until: Some("the reader module lands".to_owned()),
+        },
+        match_kind: MatchKind::Exact,
+        title: None,
+        owner: None,
+        issue: None,
+        // The pinned ceiling §FS-005-exception-add.2 warns about: exactly what
+        // the file measures today, so the next unrelated line fails the gate.
+        max: Some(250),
+        unit: Some(Unit::Lines),
+        interactive: true,
+        force: false,
+        dry_run: false,
+    })
+    .expect("exception add runs");
+
+    let run = audit::run(&AuditOptions {
+        root,
+        config_path: None,
+        format: Some(Format::Json),
+        no_color: false,
+        top: None,
+        stale_exceptions: true,
+        rule_coverage: false,
+    })
+    .expect("audit runs");
+
+    let loose = extract_array(&run.output, "loose");
+    let records = array_objects(&loose);
+    assert_eq!(records.len(), 1, "the 250-line ceiling on a 250-line file");
+    let keys = object_keys(&records[0]);
+    let schema = fs::read_to_string(schema_dir().join("audit.schema.json")).unwrap();
+    for key in &keys {
+        assert!(
+            schema.contains(&format!("\"{key}\"")),
+            "schema/audit.schema.json is missing `{key}`"
+        );
+    }
+    assert!(loose.contains("\"no_headroom\":1"), "{loose}");
+    // The step's next multiple strictly above the recorded ceiling: the smallest
+    // round number that grants any headroom at all.
+    assert!(loose.contains("\"retune_to\":300"), "{loose}");
+    // A hard entry, so the hard-limit refusal never applies and the range form
+    // stays unused (§DF-010-stated-ceilings-are-exact.2).
+    assert!(loose.contains("\"stated_range\":null"), "{loose}");
+    assert!(loose.contains("\"silences_nothing\":0"), "{loose}");
+    assert!(loose.contains("\"accepted\":250"), "{loose}");
+    assert!(loose.contains("\"actual\":250"), "{loose}");
 }
 
 /// Every emitted key must be a property the schema declares.
