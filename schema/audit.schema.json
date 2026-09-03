@@ -118,7 +118,7 @@
     },
     "loose": {
       "type": "array",
-      "description": "Exact-path exceptions whose ceiling stands more than one [exceptions.bump] step above the file they accept (audit --stale-exceptions, FS-003-exceptions.7). Stale is the other half: an entry accepting a file that is gone.",
+      "description": "Exact-path exceptions whose ceiling stands more than one [exceptions.bump] step above the file they accept, or sits exactly on it (audit --stale-exceptions, FS-003-exceptions.7). Stale is the other half: an entry accepting a file that is gone.",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -130,6 +130,7 @@
           "accepted",
           "actual",
           "limit",
+          "no_headroom",
           "retune_to",
           "stated_range",
           "silences_nothing"
@@ -172,13 +173,21 @@
             "minimum": 0,
             "description": "The rule limit at that severity — what the entry exists to accept, and the floor `retune_to` never drops below."
           },
+          "no_headroom": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ],
+            "description": "1 when the ceiling equals the measurement, so the entry silences the finding today and stops on the next unrelated commit; 0 when it stands more than a bump step above the file (FS-003-exceptions.7)."
+          },
           "retune_to": {
             "type": [
               "integer",
               "null"
             ],
             "minimum": 0,
-            "description": "The ceiling `fissile exception retune` would write, never below the limit the entry accepts. Null where the step would land a soft ceiling on the hard limit and `retune` refuses it (DF-010-stated-ceilings-are-exact.2); `stated_range` carries the remedy instead."
+            "description": "The ceiling `fissile exception retune` would write, never below the limit the entry accepts, and for an entry without headroom the step's next multiple strictly above the one recorded. Null where `retune` would refuse or write nothing (DF-010-stated-ceilings-are-exact.2); `stated_range` carries the remedy instead."
           },
           "stated_range": {
             "type": [
@@ -187,18 +196,19 @@
             ],
             "additionalProperties": false,
             "required": [
-              "min",
-              "max_excluded"
+              "min"
             ],
-            "description": "The range a stated ceiling may take when `retune_to` is null: the file's current size up to, excluding, the hard limit. Null whenever `retune_to` holds a value — exactly one of the two is ever set.",
+            "description": "The ceiling a stated `--max` should take when `retune_to` is null: `min` alone where the measured form would write the number already recorded, and `min` with `max_excluded` where a range keeps the ceiling under the hard limit. Null whenever `retune_to` holds a value — exactly one of the two is set, except where a soft ceiling sits one unit under the hard limit and no ceiling grants headroom, where both are null.",
             "properties": {
               "min": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 0,
+                "description": "The lowest ceiling that still silences the finding, and for an entry without headroom the lowest that grants any."
               },
               "max_excluded": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 0,
+                "description": "The hard limit the ceiling has to stay under. Absent where `min` is the value to state rather than the floor of a range."
               }
             }
           },

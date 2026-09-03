@@ -70,6 +70,22 @@ and at 0.x semver puts the minor number in charge of it.
   guidance and `audit`'s "silences nothing" line all name the new command.
   (PR #53)
 
+- §FS-003-exceptions.7, §FS-004-check-audit.2: `fissile audit
+  --stale-exceptions` now reports an exact-path entry whose ceiling sits exactly
+  on the file it accepts, in the `loose ceilings:` section, with its advice
+  prefixed `no headroom`. Such an entry silences the finding today and stops on
+  the next unrelated commit, and nothing named it: the one-step test that
+  excuses a freshly quantized ceiling excused a spent one too. The advice is the
+  first of four cases that applies, and each is a call the named command
+  performs — removal where the file no longer crosses the limit; the stated form
+  and a range where the step would land a soft ceiling on the hard limit, or the
+  hard registry where that range is empty; the stated form carrying the step's
+  next multiple where the measurement is already one; and otherwise `retune to`
+  that multiple. Every `loose` JSON record gains `no_headroom`, `0` or `1`, and
+  `stated_range` may now carry `min` alone, so `max_excluded` leaves its
+  `required` list in `schema/audit.schema.json`. Loose entries, the section
+  heading, and the exit codes are unchanged. Resolves #48. (PR #N)
+
 ### Changed
 
 - §FS-005-exception-add.1.1: `fissile::exception::AddOptions` replaces its public
