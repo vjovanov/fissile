@@ -94,6 +94,11 @@ and at 0.x semver puts the minor number in charge of it.
   absent field and a blank one one defect; the old wording was true of only one
   of them. (PR #52)
 
+- §FS-010-limits.4: `fissile::json::Json` gains a `Bool` variant, for the two
+  line-counting flags `limits --format json` emits. The enum is not
+  `#[non_exhaustive]`, so an exhaustive external `match` on it stops compiling:
+  add the new arm, or a wildcard. Same minor bump. (PR #N)
+
 - §AR-001-ci: every declaration is listed in its folder's index. `grund check`
   warned that thirteen declarations were absent from their index README and that
   the warning becomes an error in grund 0.13.0; the two decision folders that had
