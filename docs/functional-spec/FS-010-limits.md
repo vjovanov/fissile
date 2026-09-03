@@ -65,12 +65,15 @@ One line per rule, no header and no banner (§GOAL-004-token-thrift.1):
 
 ```text
 rust-library [src/**/*.rs] lines soft 700 hard 900
-entrypoints [README.md, AGENTS.md] lines soft 250 hard 500
+entrypoints [README.md, AGENTS.md] exclude [docs/changelog/*.md] lines soft 250 hard 500
 config-toml [**/*.toml] bytes hard 262144
 ```
 
 The fields are the rule id, its `include` patterns in declaration order inside
-brackets, the unit it measures in, and the thresholds it declares, each named.
+brackets, a non-empty `exclude` list in declaration order when the rule has one,
+the unit it measures in, and the thresholds it declares, each named. The
+exclusion is spelled `exclude [<patterns>]` immediately after the include list;
+an omitted or empty list prints nothing, preserving the existing line exactly.
 The threshold spelling is `measure`'s — `soft <N>` then `hard <M>`, the same
 words in the same order — so a limit reads the same wherever fissile prints one
 (§FS-007-measure.2). A rule declaring only one of the two prints only that one:
@@ -92,7 +95,8 @@ every consumer that already reads it; `audit` is an object for that reason
 (§FS-004-check-audit.2).
 
 Each element carries, in this order: `id`, `include` (an array of strings),
-`unit`, `soft`, `hard`, `priority`, `soft_message`, `hard_message`,
+`exclude` (an array of strings) when non-empty, `unit`, `soft`, `hard`,
+`priority`, `soft_message`, `hard_message`,
 `count_blank_lines`, `count_comment_lines`. It carries more than the text form
 because this is the agent surface (§GOAL-004-token-thrift.1): a generator
 rendering a documentation table wants the message ids and the counting policy,
@@ -102,6 +106,8 @@ A field that would describe nothing is omitted, never nulled, exactly as a
 `measure` record omits a threshold that does not exist (§FS-007-measure.2):
 
 - `soft` and `hard` appear only where the rule declares them.
+- `exclude` appears only when the rule declares at least one pattern. An omitted
+  list and `exclude = []` therefore preserve the existing JSON shape.
 - `soft_message` and `hard_message` are message ids, and each appears only where
   the rule declares the threshold it belongs to. A severity a rule declares no
   threshold for borrows the other's template internally, so that a

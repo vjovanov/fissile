@@ -69,7 +69,8 @@ grounding work made their documents cheap to read.
 
 An append-only record — a changelog — is a third mode and fits neither tier;
 splitting one is meaningless. The defaults do not guess at it, and a repository
-that keeps one is better off excluding it than measuring it.
+that keeps one can exclude it from the citable-spec line rule while retaining
+the byte catch-all (§3.4).
 
 ## 1. Top-level version
 
@@ -115,6 +116,7 @@ Rules are declared as `[[rules]]` entries. Each rule has:
 
 - `id`: stable machine-readable rule name;
 - `include`: one or more globs;
+- `exclude`: optional globs removed from this rule's scope, default `[]`;
 - `unit`: `bytes`, `lines`, or `tokens`;
 - `soft`: optional warning threshold;
 - `hard`: optional blocking threshold;
@@ -156,10 +158,11 @@ actually protects against binary blobs (§FS-004-check-audit.3).
 
 ### 3.2 Overlapping Rules
 
-A file may match more than one rule. Overlap is resolved independently for each
-measurement unit (`bytes`, `lines`, `tokens`), because a project may reasonably
-check one file by both line count and byte count. For a given `(file, unit)`,
-`fissile` selects one effective rule:
+A file may match more than one applicable rule. Rule-local exclusions are
+applied first (§3.4); overlap is then resolved independently for each measurement
+unit (`bytes`, `lines`, `tokens`), because a project may reasonably check one
+file by both line count and byte count. For a given `(file, unit)`, `fissile`
+selects one effective rule:
 
 1. Higher `priority` wins.
 2. If priority ties, the most-specific selector wins:
@@ -238,6 +241,33 @@ checked in for bootstrap reasons, or architectural seams that cannot yet be
 split. Exclusions need no rationale because the tool does not apply. Exceptions
 require rationale because the tool does apply and the repo is choosing to accept
 the cost.
+
+Use a rule's `exclude` for a file that should remain in the budget system but
+should not be measured by that one rule. An append-only changelog can therefore
+leave a line rule without leaving a byte catch-all. This is narrower than
+`[scan].exclude`, which removes the file before any rule can apply, and unlike an
+exception it does not assert that an overflow is temporarily or structurally
+acceptable.
+
+### 3.4 Rule-local Exclusions
+
+A rule applies to a file exactly when at least one of its `include` globs matches
+and none of its `exclude` globs matches. Both lists use the same glob semantics
+and the same normalized, repository-relative path; an exclusion is not matched
+against an absolute, platform-native, or unnormalized spelling of that path.
+Omitting `exclude` and writing `exclude = []` are equivalent, so existing version
+1 configurations retain their behavior.
+
+Applicability is decided before same-unit priority and specificity resolution
+(§3.2). A rule excluded for a path cannot win that path or make its remaining
+candidates ambiguous. Only that rule becomes inapplicable: every other rule,
+including rules for other measurement units, remains eligible. Checking,
+measurement, audit rule coverage, and catch-all-only classification all use this
+same applicability decision rather than interpreting rule scope independently.
+
+Every rule still declares at least one threshold. Rule-local negative scope is
+expressed directly instead of by a thresholdless, more-specific rule that wins
+an overlap and means "do not measure" (§DF-011-rule-local-exclusions).
 
 ## 4. Messages
 

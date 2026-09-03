@@ -1,0 +1,10 @@
+# The line rule is inapplicable to this changelog, while the byte catch-all
+# remains eligible and produces the only finding (§FS-001-config.3.4).
+args = ["check", "--no-color"]
+exit = 0
+stdout_equals = """
+soft: 1 file over the 1-byte budget [rule: bytes-catch-all, message: too-large]
+  too large
+    docs/changelog/0.2.0.md: 53 bytes (an exception here would accept 4096)
+
+hint: fissile measure <path>... reports size and headroom for the files you split into."""
