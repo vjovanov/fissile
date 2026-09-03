@@ -4,6 +4,6 @@ exit = 1
 stdout_equals = """
 hard: 1 file over the 4-token budget [rule: prose, message: token-budget]
   Trim src/big.txt to fit the token budget.
-    src/big.txt: 6 tokens
+    src/big.txt: 6 tokens (an exception here would accept 1000)
 
 hint: fissile measure <path>... reports size and headroom for the files you split into."""

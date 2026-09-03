@@ -1553,3 +1553,185 @@ fn a_missed_address_on_an_empty_registry_says_it_holds_nothing() {
         .to_string();
     assert!(message.contains("it holds no entries"), "{message}");
 }
+
+/// A repository whose config the scenario writes itself, for the rules
+/// `temp_repo`'s single fixture config cannot express.
+fn repo_with_config(config: &str) -> PathBuf {
+    static COUNTER: AtomicUsize = AtomicUsize::new(0);
+    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let dir = std::env::temp_dir().join(format!("fissile-cfg-{}-{n}", std::process::id()));
+    fs::create_dir_all(dir.join(".agents")).unwrap();
+    fs::create_dir_all(dir.join("src")).unwrap();
+    fs::write(dir.join(".agents/fissile.toml"), config).unwrap();
+    dir
+}
+
+/// The ceiling a finding names for one path, read back off its detail line.
+/// Parsed rather than matched whole, so the assertion is about the number and
+/// not about the rest of the sentence around it.
+fn ceiling_named_for(output: &str, path: &str) -> Option<u64> {
+    let detail = output
+        .lines()
+        .find(|line| line.trim_start().starts_with(&format!("{path}: ")))
+        .unwrap_or_else(|| panic!("no detail line for {path} in:\n{output}"));
+    let tail = detail.split_once("would accept ")?.1;
+    Some(
+        tail.trim_end_matches(')')
+            .trim()
+            .parse()
+            .unwrap_or_else(|_| panic!("unreadable ceiling on `{detail}`")),
+    )
+}
+
+/// The `max_accepted` value a registry now records.
+fn written_ceiling(registry: &str) -> u64 {
+    let line = registry
+        .lines()
+        .find(|line| line.trim_start().starts_with("max_accepted"))
+        .unwrap_or_else(|| panic!("no max_accepted in:\n{registry}"));
+    let value = line
+        .split_once("value = ")
+        .unwrap_or_else(|| panic!("unreadable ceiling on `{line}`"))
+        .1;
+    value
+        .split(|ch: char| !ch.is_ascii_digit())
+        .next()
+        .and_then(|digits| digits.parse().ok())
+        .unwrap_or_else(|| panic!("unreadable ceiling on `{line}`"))
+}
+
+/// §FS-004-check-audit.1: the number the finding names is the number the command
+/// writes. The two are asserted against each other rather than against a
+/// literal — a printed ceiling free to drift from `exception add`'s is worse
+/// than no ceiling at all, and only running both catches that.
+///
+/// The scenario is the reported one: a 518-line file under the default 100-line
+/// step, whose plain entry is written at 600 (§DF-006-quantized-ceilings.1).
+#[test]
+fn the_finding_names_the_ceiling_a_plain_exception_writes() {
+    let root = temp_repo();
+    fs::write(root.join("src/big.rs"), rust_lines(518)).unwrap();
+
+    let run = check::run(&check_options(&root)).expect("check runs");
+    let named = ceiling_named_for(&run.output, "src/big.rs")
+        .unwrap_or_else(|| panic!("the finding named no ceiling:\n{}", run.output));
+
+    // The plain form: no `--max`, so the step chooses the number
+    // (§FS-005-exception-add.2).
+    exception::run(&AddOptions {
+        root: root.clone(),
+        config_path: None,
+        path: "src/big.rs".to_owned(),
+        severity: Severity::Hard,
+        rules: vec!["rust".to_owned()],
+        rationale: Rationale::Stated {
+            kind: Kind::Deferred,
+            reason: "no module owns the generated cases yet".to_owned(),
+            until: Some("the case-builder module lands".to_owned()),
+        },
+        match_kind: MatchKind::Exact,
+        title: None,
+        owner: None,
+        issue: None,
+        max: None,
+        unit: None,
+        interactive: true,
+        force: false,
+        dry_run: false,
+    })
+    .expect("exception add runs");
+
+    let registry = fs::read_to_string(root.join("docs/file-size-human-exceptions.toml")).unwrap();
+    let written = written_ceiling(&registry);
+    assert_eq!(
+        named, written,
+        "the finding named {named}; the registry records {written}"
+    );
+    assert_eq!(
+        written, 600,
+        "the reported scenario's own number: {registry}"
+    );
+}
+
+const SOFT_ON_THE_LIMIT: &str = r#"
+fissile_config_version = 1
+[scan]
+include = ["src"]
+exclude = []
+respect_gitignore = false
+[[messages]]
+id = "m"
+text = "Split it."
+[[rules]]
+id = "rust"
+include = ["src/**/*.rs"]
+unit = "lines"
+soft = 350
+hard = 550
+message = "m"
+"#;
+
+/// §FS-004-check-audit.1: a ceiling the command would refuse is withheld rather
+/// than printed. A 505-line file rounds to 600 under the default step, which is
+/// at or above this rule's 550-line hard limit, so a soft entry there would
+/// never fire and `exception add` declines to write one
+/// (§DF-010-stated-ceilings-are-exact.2).
+///
+/// Both surfaces are asserted: JSON that carried the number the text withheld
+/// would recreate the whole problem for the consumer that parses it.
+#[test]
+fn a_ceiling_on_the_hard_limit_is_named_in_neither_surface() {
+    let root = repo_with_config(SOFT_ON_THE_LIMIT);
+    fs::write(root.join("src/big.rs"), rust_lines(505)).unwrap();
+
+    let text = check::run(&check_options(&root)).expect("check runs");
+    assert!(
+        text.output
+            .contains("soft: 1 file over the 350-line budget"),
+        "{}",
+        text.output
+    );
+    assert_eq!(
+        ceiling_named_for(&text.output, "src/big.rs"),
+        None,
+        "the detail named a ceiling `exception add` would refuse:\n{}",
+        text.output
+    );
+
+    let mut options = check_options(&root);
+    options.format = Some(Format::Json);
+    let json = check::run(&options).expect("check runs");
+    assert!(
+        !json.output.contains("exception_would_accept"),
+        "{}",
+        json.output
+    );
+
+    // The refusal the withholding is about, quoted from the command itself.
+    let refusal = exception::run(&AddOptions {
+        root: root.clone(),
+        config_path: None,
+        path: "src/big.rs".to_owned(),
+        severity: Severity::Soft,
+        rules: vec!["rust".to_owned()],
+        rationale: Rationale::Stated {
+            kind: Kind::Deferred,
+            reason: "the reporting module has no seam yet".to_owned(),
+            until: Some("the reporting module lands".to_owned()),
+        },
+        match_kind: MatchKind::Exact,
+        title: None,
+        owner: None,
+        issue: None,
+        max: None,
+        unit: None,
+        interactive: true,
+        force: false,
+        dry_run: false,
+    })
+    .expect_err("a soft ceiling on the hard limit is refused");
+    assert!(
+        refusal.to_string().contains("that lands on 600"),
+        "{refusal}"
+    );
+}

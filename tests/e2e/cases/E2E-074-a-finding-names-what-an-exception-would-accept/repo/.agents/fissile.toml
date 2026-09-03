@@ -1,0 +1,23 @@
+fissile_config_version = 1
+
+[scan]
+include = ["src"]
+exclude = []
+respect_gitignore = false
+
+# A step of the project's own choosing, so the reported ceiling can only come
+# from the config (§FS-001-config.5).
+[exceptions.bump]
+lines = 10
+
+[[messages]]
+id = "m"
+text = "Split the file."
+
+[[rules]]
+id = "rust"
+include = ["src/**/*.rs"]
+unit = "lines"
+soft = 20
+hard = 40
+message = "m"

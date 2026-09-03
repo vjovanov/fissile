@@ -105,6 +105,11 @@ stated: the caller has already made that decision, and rounding it would replace
 their number with one nobody chose (§DF-010-stated-ceilings-are-exact.1).
 `fissile exception retune` moves either afterwards (§FS-008-exception-retune).
 
+A `check` or `audit` finding names the ceiling the measured form would write
+for the file it reports, before either form is run (§FS-004-check-audit.1), so
+the choice between them is made with both numbers on screen rather than with the
+measurement alone.
+
 A stated ceiling names the step it did not take. When `--max` is not a multiple
 of the step, the result names the next multiple — the round number the measured
 form would have chosen — as a suggestion, never applied, and omitted when that
