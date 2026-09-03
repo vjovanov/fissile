@@ -23,8 +23,8 @@ pub(crate) struct Loose {
     pub accepted: u64,
     pub actual: u64,
     pub limit: u64,
-    /// What to do about the gap, which is one thing or the other and never
-    /// neither (§DF-010-stated-ceilings-are-exact.2).
+    /// What to do about the gap: the first of the cases §FS-004-check-audit.2
+    /// lists that applies (§DF-010-stated-ceilings-are-exact.2).
     pub remedy: Remedy,
     /// The file no longer crosses that limit, so the entry silences nothing and
     /// lowering it is not the remedy — removing it is.
