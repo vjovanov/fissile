@@ -52,6 +52,11 @@
       "type": "string",
       "description": "The rendered remediation guidance (GOAL-008-remediation-messages)."
     },
+    "exception_would_accept": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "The ceiling a `fissile exception add` with no `--max` would record for this file: the measurement quantized up to the unit's `[exceptions.bump]` step (FS-004-check-audit.1, DF-006-quantized-ceilings.1). Omitted where that call would be refused, and absent from silenced `audit` records."
+    },
     "exception_max": {
       "type": "integer",
       "minimum": 0,

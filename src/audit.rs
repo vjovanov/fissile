@@ -83,6 +83,7 @@ pub fn run(options: &AuditOptions) -> Result<Run, CommandError> {
             measurement,
             &file_hits,
             measured_file.utf8,
+            &loaded.config.exceptions.bump,
         ));
         hits.push(file_hits);
     }
@@ -149,7 +150,7 @@ pub fn run(options: &AuditOptions) -> Result<Run, CommandError> {
             let color = cli::use_color(loaded.config.output.color, options.no_color, format);
             render_text(&loaded, &outcomes, &contexts, &inventory, color, &errors)
         }
-        Format::Json => render_json(&outcomes, &inventory),
+        Format::Json => render_json(&outcomes, &contexts, &inventory),
     };
     Ok(Run {
         output,
@@ -388,11 +389,15 @@ fn join_or_none(items: &[String]) -> String {
     }
 }
 
-fn render_json(outcomes: &[Outcome], inventory: &Inventory) -> String {
+fn render_json(
+    outcomes: &[Outcome],
+    contexts: &[report::FindingContext],
+    inventory: &Inventory,
+) -> String {
     let findings: Vec<Json> = outcomes
         .iter()
         .filter(|outcome| outcome.is_reported())
-        .map(report::overflow_json)
+        .map(|outcome| report::overflow_json_with_context(outcome, contexts))
         .collect();
     let silenced: Vec<Json> = outcomes
         .iter()

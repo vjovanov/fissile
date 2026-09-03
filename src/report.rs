@@ -5,6 +5,8 @@
 use std::error::Error;
 use std::fmt;
 
+use crate::config::Bump;
+use crate::entry;
 use crate::exceptions::{Exception, ExceptionError, Kind, Registries, Verdict};
 use crate::json::Json;
 use crate::{
@@ -170,14 +172,49 @@ pub fn finding_blocks(outcomes: &[Outcome], color: bool) -> Vec<String> {
     finding_blocks_with_context(outcomes, color, &[])
 }
 
-/// The command-only context needed to explain a line measurement without
-/// adding fields to the public [`Overflow`] or changing the public renderer's
+/// The command-only context needed to explain a line measurement and to name
+/// the ceiling a plain `fissile exception add` would write, without adding
+/// fields to the public [`Overflow`] or changing the public renderer's
 /// signature.
 pub(crate) struct FindingContext {
     path: std::path::PathBuf,
     rule_id: String,
     unit: Unit,
     line_basis: Option<&'static str>,
+    /// The unit's `[exceptions.bump]` step, which quantizes that ceiling.
+    bump_step: u64,
+    /// The hard limit of the rule this finding names, which is the rule a
+    /// caller would pass to `exception add --rule` and so the one that binds
+    /// their soft ceiling (§DF-010-stated-ceilings-are-exact.2).
+    hard_limit: Option<u64>,
+}
+
+impl FindingContext {
+    /// The ceiling a `fissile exception add` with no `--max` would record for
+    /// this file: the measurement quantized up to the unit's `[exceptions.bump]`
+    /// step (§FS-004-check-audit.1, §DF-006-quantized-ceilings.1). It is the
+    /// number that command computes, so it is computed the same way here.
+    ///
+    /// `None` where that call would be refused, since a number ending in a
+    /// refusal sends the caller somewhere with nothing to do. A soft ceiling at
+    /// or above the rule's hard limit silences nothing while the file is still
+    /// under that limit (§DF-010-stated-ceilings-are-exact.2); past the limit
+    /// the soft entry is the record of the debt and `add` accepts it, and
+    /// nothing binds a hard ceiling at all.
+    ///
+    /// `add` spares one more soft ceiling than this does: the one whose address
+    /// carries a deferred hard twin (§FS-005-exception-add.4). Not reproducing
+    /// that is a decision, not an oversight — it would mean reading the
+    /// exception registries to render a finding, and withholding is the
+    /// direction that cannot mislead (§FS-004-check-audit.1).
+    fn would_accept(&self, overflow: &Overflow) -> Option<u64> {
+        let ceiling = entry::quantize(overflow.actual, self.bump_step);
+        let refused = overflow.severity == Severity::Soft
+            && self
+                .hard_limit
+                .is_some_and(|hard| ceiling >= hard && overflow.actual < hard);
+        (!refused).then_some(ceiling)
+    }
 }
 
 /// Build rendering context from the effective rule hits for one measured file.
@@ -186,6 +223,7 @@ pub(crate) fn contexts_for_file(
     file: &FileMeasurement,
     hits: &[RuleHit<'_>],
     utf8: bool,
+    bump: &Bump,
 ) -> Vec<FindingContext> {
     hits.iter()
         .map(|hit| FindingContext {
@@ -199,8 +237,22 @@ pub(crate) fn contexts_for_file(
                     "physical lines"
                 }
             }),
+            bump_step: bump.step(hit.rule.budget.unit),
+            hard_limit: hit.rule.budget.hard,
         })
         .collect()
+}
+
+/// The context built for the `(file, rule, unit)` this overflow came from.
+fn context_for<'a>(
+    contexts: &'a [FindingContext],
+    overflow: &Overflow,
+) -> Option<&'a FindingContext> {
+    contexts.iter().find(|context| {
+        context.path == overflow.path
+            && context.rule_id == overflow.rule_id
+            && context.unit == overflow.unit
+    })
 }
 
 /// Render command findings with the line-counting context carried alongside
@@ -218,12 +270,10 @@ pub(crate) fn finding_blocks_with_context(
         .filter(|outcome| outcome.is_reported())
         .map(Outcome::overflow)
     {
-        let context = contexts.iter().find(|context| {
-            context.path == overflow.path
-                && context.rule_id == overflow.rule_id
-                && context.unit == overflow.unit
-        });
-        let finding = Finding { overflow, context };
+        let finding = Finding {
+            overflow,
+            context: context_for(contexts, overflow),
+        };
         match groups.iter_mut().find(|group| group.accepts(&finding)) {
             Some(group) => group.overflows.push(finding),
             None => groups.push(Group {
@@ -399,20 +449,28 @@ impl<'a> Group<'a> {
 
         for finding in &self.overflows {
             let overflow = finding.overflow;
-            let detail = match finding.context.and_then(|context| context.line_basis) {
-                Some(basis) => format!(
-                    "{}: {} {} (budget {})",
-                    overflow.path.display(),
-                    overflow.actual,
-                    basis,
-                    overflow.limit
-                ),
-                None => format!(
-                    "{}: {} {}",
-                    overflow.path.display(),
-                    overflow.actual,
-                    overflow.unit
-                ),
+            let basis = finding.context.and_then(|context| context.line_basis);
+            let measurement = match basis {
+                Some(basis) => format!("{} {basis}", overflow.actual),
+                None => format!("{} {}", overflow.actual, overflow.unit),
+            };
+            // A byte or token detail carries no budget clause, so the ceiling
+            // opens a parenthesis of its own (§FS-004-check-audit.1).
+            let clauses: Vec<String> = basis
+                .map(|_| format!("budget {}", overflow.limit))
+                .into_iter()
+                .chain(
+                    finding
+                        .context
+                        .and_then(|context| context.would_accept(overflow))
+                        .map(|ceiling| format!("an exception here would accept {ceiling}")),
+                )
+                .collect();
+            let path = overflow.path.display();
+            let detail = if clauses.is_empty() {
+                format!("{path}: {measurement}")
+            } else {
+                format!("{path}: {measurement} ({})", clauses.join("; "))
             };
             block.push_str(&format!("\n    {detail}"));
         }
@@ -462,9 +520,18 @@ pub fn silenced_line(overflow: &Overflow, exception_max: u64) -> String {
     )
 }
 
-/// One JSON finding record (§FS-004-check-audit.1). Exception fields are added
-/// only for silenced audit records.
+/// One JSON finding record (§FS-004-check-audit.1) without the command-only
+/// context, so a caller holding bare outcomes still gets the stable fields.
 pub fn overflow_json(outcome: &Outcome) -> Json {
+    overflow_json_with_context(outcome, &[])
+}
+
+/// The same record carrying `exception_would_accept` wherever the text detail
+/// names a ceiling, so a consumer of `--format json` chooses between the plain
+/// and the stated form on the same facts a reader of the text does
+/// (§FS-004-check-audit.1). A silenced record reports the accepting entry's own
+/// ceiling as `exception_max` instead (§FS-003-exceptions.5).
+pub(crate) fn overflow_json_with_context(outcome: &Outcome, contexts: &[FindingContext]) -> Json {
     let overflow = outcome.overflow();
     let mut fields = vec![
         ("path", Json::str(overflow.path.to_string_lossy())),
@@ -476,8 +543,17 @@ pub fn overflow_json(outcome: &Outcome) -> Json {
         ("message_id", Json::str(overflow.message.id.clone())),
         ("message", Json::str(overflow.message.text.clone())),
     ];
-    if let Outcome::Silenced { exception_max, .. } = outcome {
-        fields.push(("exception_max", Json::UInt(*exception_max)));
+    match outcome {
+        Outcome::Reported(_) => {
+            if let Some(ceiling) =
+                context_for(contexts, overflow).and_then(|context| context.would_accept(overflow))
+            {
+                fields.push(("exception_would_accept", Json::UInt(ceiling)));
+            }
+        }
+        Outcome::Silenced { exception_max, .. } => {
+            fields.push(("exception_max", Json::UInt(*exception_max)));
+        }
     }
     Json::Object(fields)
 }
