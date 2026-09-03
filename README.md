@@ -106,7 +106,7 @@ hard: 1 file over the 550-line budget [rule: source, message: split-source-hard]
   reason names the constraint that makes splitting illegal (--kind structural)
   or the boundary that is missing and what must exist first (--kind deferred):
   fissile exception add <path> --severity hard --rule source --kind <kind>
-    src/orders.rs: 620 non-blank lines (budget 550)
+    src/orders.rs: 620 non-blank lines (budget 550; an exception here would accept 700)
 
 soft: 2 files over the 350-line budget [rule: source, message: split-source-soft]
   Should split, next time you are in one of these files: move a cohesive group
@@ -118,8 +118,8 @@ soft: 2 files over the 350-line budget [rule: source, message: split-source-soft
   the boundary that is missing and what must exist first (--kind deferred,
   --until naming what retires it):
   fissile exception add <path> --severity soft --rule source --kind <kind>
-    src/util.rs: 410 non-blank lines (budget 350)
-    src/billing.rs: 372 non-blank lines (budget 350)
+    src/util.rs: 410 non-blank lines (budget 350; an exception here would accept 500)
+    src/billing.rs: 372 non-blank lines (budget 350; an exception here would accept 400)
 
 hint: fissile measure <path>... reports size and headroom for the files you split into.
 # exit 1
@@ -127,9 +127,12 @@ hint: fissile measure <path>... reports size and headroom for the files you spli
 
 The header states the severity, the crossed limit, and the rule and message that
 own the budget; every file line leads with the path and, for line rules, names
-the counting basis and budget so editors and agents know what to change. Twelve
-files under one rule cost one copy of the guidance, not twelve. A passing run
-prints exactly `ok`.
+the counting basis and budget so editors and agents know what to change. It also
+names the ceiling an `exception add` with no `--max` would record for that file,
+so a reader choosing to record the overflow rather than split reaches for a
+number with headroom instead of copying the measurement. Twelve files under one
+rule cost one copy of the guidance, not twelve. A passing run prints exactly
+`ok`.
 
 The shipped messages are deliberately generic and carry no citation — they know
 nothing about your layout, and an ID from *fissile's* docs would resolve nowhere
@@ -139,7 +142,7 @@ architecture, is the first edit worth making.
 `--format json` is the agent surface — one flat record per finding, ungrouped:
 
 ```json
-[{"path":"src/orders.rs","unit":"lines","actual":620,"limit":550,"severity":"hard","rule_id":"source","message_id":"split-source-hard","message":"Must split before more code lands here: ..."}]
+[{"path":"src/orders.rs","unit":"lines","actual":620,"limit":550,"severity":"hard","rule_id":"source","message_id":"split-source-hard","message":"Must split before more code lands here: ...","exception_would_accept":700}]
 ```
 
 The schema is published under `schema/` and validated against emitted output.
@@ -153,12 +156,12 @@ blocking anyone, so you can see the surface before turning the hook on:
 $ fissile audit --top 5
 hard: 1 file over the 550-line budget [rule: source, message: split-source-hard]
   Must split before more code lands here: ...
-    src/orders.rs: 620 non-blank lines (budget 550)
+    src/orders.rs: 620 non-blank lines (budget 550; an exception here would accept 700)
 
 soft: 2 files over the 350-line budget [rule: source, message: split-source-soft]
   Should split, next time you are in one of these files: ...
-    src/util.rs: 410 non-blank lines (budget 350)
-    src/billing.rs: 372 non-blank lines (budget 350)
+    src/util.rs: 410 non-blank lines (budget 350; an exception here would accept 500)
+    src/billing.rs: 372 non-blank lines (budget 350; an exception here would accept 400)
 
 exceptions:
   structural (never expires): 3

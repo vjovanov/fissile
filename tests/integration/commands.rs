@@ -82,10 +82,11 @@ fn check_reports_hard_overflow_and_fails() {
     assert!(run.failed, "a 250-line file crosses the hard limit");
     assert!(run.output.contains("src/big.rs"));
     assert!(run.output.contains("hard: 1 file over the"));
-    assert!(
-        run.output
-            .contains("src/big.rs: 250 non-blank lines (budget 200)")
-    );
+    // 250 lines on the default 100-line step: what a plain `exception add`
+    // would record for the file (§FS-004-check-audit.1).
+    assert!(run.output.contains(
+        "src/big.rs: 250 non-blank lines (budget 200; an exception here would accept 300)"
+    ));
     assert!(run.output.contains("[rule: rust, message:"));
 }
 
@@ -95,19 +96,22 @@ fn check_reports_hard_overflow_and_fails() {
 #[test]
 fn limits_are_strictly_above_in_check_and_audit() {
     let root = temp_repo();
-    for (actual, expected_severity, failed) in [
-        (99, None, false),  // below soft
-        (100, None, false), // equal soft
-        (101, Some("soft"), false),
-        (199, Some("soft"), false), // below hard
-        (200, Some("soft"), false), // equal hard
-        (201, Some("hard"), true),
+    // The ceiling each detail names, on the default 100-line step: withheld
+    // where it would reach the 200-line hard limit for a file still under it,
+    // named at and above it (§FS-004-check-audit.1).
+    for (actual, expected_severity, ceiling, failed) in [
+        (99, None, None, false),  // below soft
+        (100, None, None, false), // equal soft
+        (101, Some("soft"), None, false),
+        (199, Some("soft"), None, false),      // below hard
+        (200, Some("soft"), Some(200), false), // equal hard
+        (201, Some("hard"), Some(300), true),
     ] {
         fs::write(root.join("src/big.rs"), rust_lines(actual)).unwrap();
 
         let check_run = check::run(&check_options(&root)).expect("check runs");
         assert_eq!(check_run.failed, failed, "check failed at actual={actual}");
-        assert_severity(&check_run.output, actual, expected_severity);
+        assert_severity(&check_run.output, actual, expected_severity, ceiling);
 
         let audit_run = audit::run(&AuditOptions {
             root: root.clone(),
@@ -116,11 +120,11 @@ fn limits_are_strictly_above_in_check_and_audit() {
         })
         .expect("audit runs");
         assert_eq!(audit_run.failed, failed, "audit failed at actual={actual}");
-        assert_severity(&audit_run.output, actual, expected_severity);
+        assert_severity(&audit_run.output, actual, expected_severity, ceiling);
     }
 }
 
-fn assert_severity(output: &str, actual: usize, expected: Option<&str>) {
+fn assert_severity(output: &str, actual: usize, expected: Option<&str>, ceiling: Option<u64>) {
     match expected {
         None => assert_eq!(output.trim(), "ok", "unexpected finding at actual={actual}"),
         Some(severity) => {
@@ -128,10 +132,13 @@ fn assert_severity(output: &str, actual: usize, expected: Option<&str>) {
                 output.contains(&format!("{severity}: 1 file over the")),
                 "missing {severity} finding at actual={actual}: {output}"
             );
+            let budget = if severity == "soft" { 100 } else { 200 };
+            let clause = ceiling.map_or_else(String::new, |n| {
+                format!("; an exception here would accept {n}")
+            });
             assert!(
                 output.contains(&format!(
-                    "src/big.rs: {actual} non-blank lines (budget {})",
-                    if severity == "soft" { 100 } else { 200 }
+                    "src/big.rs: {actual} non-blank lines (budget {budget}{clause})"
                 )),
                 "missing contextual detail at actual={actual}: {output}"
             );
