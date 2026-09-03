@@ -10,7 +10,7 @@ args = [
 ]
 exit = 0
 stdout_equals = """
-appended src/** to docs/file-size-agent-exceptions.toml (accepted up to 150 lines)"""
+appended src/** to docs/file-size-agent-exceptions.toml (accepted up to 150 lines; next 100-line step: 200)"""
 
 # No [exceptions.bump] in the config, so the default 100-line step applies —
 # to measurements. A glob always takes --max, and 150 is what was stated.

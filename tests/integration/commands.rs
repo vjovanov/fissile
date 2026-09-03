@@ -991,6 +991,104 @@ fn a_duplicated_hard_entry_is_refused_as_a_duplicate_not_as_two_rule_lists() {
     assert!(!root.join("docs/file-size-agent-exceptions.toml").exists());
 }
 
+/// §FS-005-exception-add.2: a stated ceiling is written as stated, and the
+/// result names the step's next multiple — the round number the measured form
+/// would have chosen — in the normal result and in the dry run alike. Without
+/// it a caller who pinned the day's measurement learned nothing until the next
+/// commit failed the gate (§DF-010-stated-ceilings-are-exact.3).
+#[test]
+fn a_stated_add_names_the_next_step_in_both_results() {
+    let root = temp_repo();
+    let mut options = add_options(&root, Kind::Deferred, Some("the parser lands"));
+    options.max = Some(260);
+    options.unit = Some(Unit::Lines);
+
+    let mut dry = options.clone();
+    dry.dry_run = true;
+    let run = exception::run(&dry).expect("the dry run runs");
+    assert!(
+        run.output.ends_with(
+            "would update docs/file-size-human-exceptions.toml (next 100-line step: 300)"
+        ),
+        "{}",
+        run.output
+    );
+    assert!(!root.join("docs/file-size-human-exceptions.toml").exists());
+
+    let run = exception::run(&options).expect("exception add runs");
+    assert_eq!(
+        run.output,
+        "appended src/big.rs to docs/file-size-human-exceptions.toml \
+         (accepted up to 260 lines; next 100-line step: 300)"
+    );
+    let registry = fs::read_to_string(root.join("docs/file-size-human-exceptions.toml")).unwrap();
+    assert!(
+        registry.contains("max_accepted = { value = 260, unit = \"lines\" }"),
+        "{registry}"
+    );
+    assert!(!registry.contains("value = 300"), "{registry}");
+}
+
+/// §FS-005-exception-add.2: the suggestion answers a stated value off the step
+/// and nothing else. A `--max` already on the step has no next number to
+/// suggest, and the measured form is the step's own choice.
+#[test]
+fn an_on_step_or_measured_ceiling_names_no_step() {
+    let root = temp_repo();
+    let mut stated = add_options(&root, Kind::Deferred, Some("the parser lands"));
+    stated.max = Some(300);
+    stated.unit = Some(Unit::Lines);
+    let run = exception::run(&stated).expect("the on-step form runs");
+    assert_eq!(
+        run.output,
+        "appended src/big.rs to docs/file-size-human-exceptions.toml (accepted up to 300 lines)"
+    );
+
+    let root = temp_repo();
+    let run = exception::run(&add_options(
+        &root,
+        Kind::Deferred,
+        Some("the parser lands"),
+    ))
+    .expect("the measured form runs");
+    assert_eq!(
+        run.output,
+        "appended src/big.rs to docs/file-size-human-exceptions.toml (accepted up to 300 lines)"
+    );
+}
+
+/// §DF-010-stated-ceilings-are-exact.2: the suggestion is withheld exactly when
+/// the command would refuse the number — a soft ceiling whose next multiple sits
+/// on the hard limit for a file still under it. Naming it would send the caller
+/// into the refusal the entry was written to avoid
+/// (§DF-007-instructions-at-the-error-site). A file already past the limit is
+/// spared that refusal, so its suggestion stands.
+#[test]
+fn a_suggestion_the_command_would_refuse_is_withheld() {
+    let root = temp_repo();
+    let mut under = soft_options_for_mid(&root);
+    under.max = Some(180);
+    under.unit = Some(Unit::Lines);
+    let run = exception::run(&under).expect("the stated soft form runs");
+    assert_eq!(
+        run.output,
+        "appended src/mid.rs to docs/file-size-agent-exceptions.toml (accepted up to 180 lines)"
+    );
+
+    // src/big.rs measures 250 against a hard limit of 200: the soft entry is the
+    // record of debt, and 300 is a ceiling it may hold.
+    let mut past = add_options(&root, Kind::Deferred, Some("the parser lands"));
+    past.severity = Severity::Soft;
+    past.max = Some(260);
+    past.unit = Some(Unit::Lines);
+    let run = exception::run(&past).expect("a file past the hard limit keeps its suggestion");
+    assert_eq!(
+        run.output,
+        "appended src/big.rs to docs/file-size-agent-exceptions.toml \
+         (accepted up to 260 lines; next 100-line step: 300)"
+    );
+}
+
 fn retune_options(root: &Path, max: Option<u64>) -> RetuneOptions {
     RetuneOptions {
         root: root.to_path_buf(),

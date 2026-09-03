@@ -97,6 +97,14 @@ and at 0.x semver puts the minor number in charge of it.
 - §FS-004-check-audit.2: `audit` now reports exception entry totals alongside
   distinct path-expression totals, so soft/hard twins and repeated globs are
   not presented as additional files. (PR #47)
+- §FS-005-exception-add.2: `exception add --max` now names the step's next
+  multiple in its normal and its `--dry-run` result, as `exception retune --max`
+  already did — the round number the measured form would have written, named and
+  never applied. A ceiling stated at the day's measurement has no headroom, and
+  the silence let four such ceilings ship before unrelated growth of 6 and 38
+  lines in two other files failed CI. The suggestion is withheld exactly where
+  the command would refuse the number, so it never offers a ceiling the next
+  call would reject. Registry contents are unchanged. Resolves #45. (PR #54)
 
 ## 2. [0.8.2] — 2026-08-31
 

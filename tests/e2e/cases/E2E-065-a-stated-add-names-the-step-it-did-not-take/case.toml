@@ -1,0 +1,22 @@
+args = [
+  "exception", "add", "src/big.rs",
+  "--severity", "hard",
+  "--rule", "rust",
+  "--kind", "deferred",
+  "--until", "the case-builder module lands",
+  "--reason", "Missing boundary: the module this belongs in does not exist yet.",
+  "--max", "10",
+  "--unit", "lines",
+  "--force",
+]
+exit = 0
+# A 9-line file, a 4-line step: the caller states 10 and gets 10, and the result
+# names 12 — the multiple the measured form would have written — without going
+# anywhere near it.
+stdout_equals = """
+appended src/big.rs to docs/file-size-human-exceptions.toml (accepted up to 10 lines; next 4-line step: 12)"""
+
+[[files]]
+path = "docs/file-size-human-exceptions.toml"
+contains = ["max_accepted = { value = 10, unit = \"lines\" }"]
+excludes = ["value = 12"]

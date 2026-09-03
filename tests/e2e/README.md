@@ -87,3 +87,4 @@ The harness drives the real `fissile` binary, so every documented behavior under
 - `E2E-062-remove-refuses-an-entry-that-still-silences` — a working exception is not deleted.
 - `E2E-063-remove-dry-run-writes-nothing` — a dry run says what it would delete.
 - `E2E-064-audit-names-remove-for-an-entry-that-silences-nothing` — the report names the command, not just the state.
+- `E2E-065-a-stated-add-names-the-step-it-did-not-take` — a pinned `add --max` learns the round number one step up.

@@ -56,6 +56,16 @@ pub fn suggested_step(base: &Base<'_>, step: u64, hard_limit: Option<u64>) -> Op
     Some(next)
 }
 
+/// How a result names the step's next multiple for a stated ceiling: the round
+/// number the caller could have chosen, named and never applied
+/// (§FS-005-exception-add.2, §FS-008-exception-retune.3). `None` when
+/// [`suggested_step`] withheld one. The caller supplies the punctuation around
+/// it, because `add` folds it into a parenthetical it already prints while
+/// `retune` opens one of its own.
+pub fn step_note(step: u64, unit: Unit, suggested: Option<u64>) -> Option<String> {
+    suggested.map(|next| format!("next {step}-{} step: {next}", unit.singular()))
+}
+
 /// Whether the address names a file already at or above the hard limit — the
 /// case §DF-010-stated-ceilings-are-exact.2 leaves alone, since that file's soft
 /// entry records the debt instead. A glob measures nothing and never claims it.
@@ -570,6 +580,22 @@ mod tests {
         assert_eq!(suggested_step(&stated(480), 100, Some(600)), Some(500));
         assert_eq!(suggested_step(&stated(500), 100, None), None);
         assert_eq!(suggested_step(&measured(472), 100, None), None);
+    }
+
+    /// §FS-005-exception-add.2, §FS-008-exception-retune.3: both commands print
+    /// one sentence for the suggestion, so the wording cannot drift apart — and
+    /// a withheld suggestion has nothing to print.
+    #[test]
+    fn the_step_note_is_the_same_sentence_for_both_commands() {
+        assert_eq!(
+            step_note(100, Unit::Lines, Some(600)).as_deref(),
+            Some("next 100-line step: 600")
+        );
+        assert_eq!(
+            step_note(4096, Unit::Bytes, Some(8192)).as_deref(),
+            Some("next 4096-byte step: 8192")
+        );
+        assert_eq!(step_note(100, Unit::Lines, None), None);
     }
 
     /// §FS-008-exception-retune.3: "one the command would refuse" is the whole
