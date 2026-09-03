@@ -1,0 +1,6 @@
+# A config that declares no rules enforces nothing, and says so: silence would
+# read the same as a command that printed nothing at all (§FS-010-limits.2).
+args = ["limits", "--no-color"]
+exit = 0
+stdout_equals = """
+no rules configured"""

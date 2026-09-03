@@ -1,16 +1,18 @@
 # FS-006-cli: the top-level command line is small, self-describing, and versioned
 
-`fissile` is one binary with five commands: `init`, `check`, `measure`, `audit`,
-and `exception`, the last carrying the `add`, `retune` and `remove` subcommands
-(§FS-002-init, §FS-004-check-audit, §FS-007-measure, §FS-005-exception-add,
-§FS-008-exception-retune, §FS-009-exception-remove). Everything above the
-commands — dispatch, help, version — is specified here so the top level cannot
-drift between surfaces.
+`fissile` is one binary with six commands: `init`, `check`, `measure`, `audit`,
+`limits`, and `exception`, the last carrying the `add`, `retune` and `remove`
+subcommands (§FS-002-init, §FS-004-check-audit, §FS-007-measure,
+§FS-010-limits, §FS-005-exception-add, §FS-008-exception-retune,
+§FS-009-exception-remove). Everything above the commands — dispatch, help,
+version — is specified here so the top level cannot drift between surfaces.
 
 `check` and `measure` are separate commands over the same measurement, because
 they answer different questions under different contracts: `check` is a gate that
 exits non-zero on a standing hard overflow, `measure` an inspection that always
-exits `0` (§FS-007-measure.3).
+exits `0` (§FS-007-measure.3). `limits` asks a question over no measurement at
+all — it describes the configured rules themselves, for a caller with no file in
+hand — and takes the same always-`0` inspection contract (§FS-010-limits.1).
 
 ## 1. Dispatch
 

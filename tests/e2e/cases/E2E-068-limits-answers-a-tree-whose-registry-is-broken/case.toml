@@ -1,0 +1,7 @@
+# The tree of §E2E-054-an-orphan-shadow-fails-the-load, where the registry load
+# fails and `check` and `audit` both exit 2. `limits` reads the config and not
+# the registries, so it still answers (§FS-010-limits.5).
+args = ["limits", "--no-color"]
+exit = 0
+stdout_equals = """
+rust [src/**/*.rs] lines soft 2 hard 4"""

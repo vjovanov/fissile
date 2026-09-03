@@ -1,0 +1,9 @@
+# Every configured rule, in declaration order, whether or not this tree holds a
+# file it matches — none of these three do (§FS-010-limits.2). A rule that
+# declares one threshold prints the one it declares (§FS-010-limits.3).
+args = ["limits", "--no-color"]
+exit = 0
+stdout_equals = """
+rust [src/**/*.rs, tests/**/*.rs] lines soft 2 hard 8
+assets [assets/**/*.png] bytes hard 4096
+notes [notes/*.md] lines soft 40"""
