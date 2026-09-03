@@ -110,6 +110,7 @@ Large file for its type. Exclude it in [scan].exclude if it is generated or bina
 [[rules]]
 id = "large-file-default"
 include = ["**/*"]
+exclude = []
 unit = "bytes"
 soft = 65536
 hard = 131072
@@ -118,6 +119,7 @@ message = "large-file-default"
 [[rules]]
 id = "rust-library"
 include = ["src/**/*.rs"]
+exclude = []
 unit = "lines"
 soft = 700
 hard = 900
@@ -129,6 +131,7 @@ hard_message = "split-rust-library-hard"
 [[rules]]
 id = "rust-benchmarks"
 include = ["benches/**/*.rs"]
+exclude = []
 unit = "lines"
 soft = 250
 hard = 400
@@ -146,6 +149,7 @@ message = "split-rust-benchmark"
 [[rules]]
 id = "spec-docs"
 include = ["docs/**/*.md", "examples/**/*.md", "tests/e2e/**/*.md"]
+exclude = []
 unit = "lines"
 soft = 750
 hard = 2000
@@ -162,6 +166,7 @@ hard_message = "split-spec-hard"
 [[rules]]
 id = "entrypoints"
 include = ["AGENTS.md", "CLAUDE.md", ".claude/CLAUDE.md", "GEMINI.md"]
+exclude = []
 unit = "lines"
 soft = 250
 hard = 500
@@ -174,6 +179,7 @@ message = "trim-entrypoint"
 [[rules]]
 id = "readme"
 include = ["README.md"]
+exclude = []
 unit = "lines"
 soft = 1800
 hard = 2000
@@ -184,6 +190,7 @@ message = "trim-readme"
 [[rules]]
 id = "tooling"
 include = [".github/**/*.yml", ".github/**/*.yaml", "scripts/**/*.sh"]
+exclude = []
 unit = "lines"
 soft = 200
 hard = 350
@@ -194,6 +201,7 @@ message = "split-tooling"
 [[rules]]
 id = "config-toml"
 include = ["**/*.toml"]
+exclude = []
 unit = "lines"
 soft = 180
 hard = 300
