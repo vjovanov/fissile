@@ -98,3 +98,4 @@ The harness drives the real `fissile` binary, so every documented behavior under
 - `E2E-077-a-rule-exclusion-keeps-other-budgets` — a changelog leaves its line rule but stays under the byte catch-all.
 - `E2E-078-limits-prints-rule-exclusions` — text inventory prints a non-empty rule exclusion after its includes.
 - `E2E-079-limits-json-carries-rule-exclusions` — JSON inventory carries a non-empty exclusion and omits an empty one.
+- `E2E-080-remove-reaches-an-orphan-shadow` — soft removal can reach the twin its earlier hard removal orphaned.

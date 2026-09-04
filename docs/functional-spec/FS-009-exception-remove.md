@@ -70,17 +70,30 @@ one the load already draws. Reading a registry is two stages: every entry is
 built from the document first — it parses, it declares a supported version, and
 each entry's own fields are present and consistent (§FS-003-exceptions.2) — and
 only then is what was built held against the configured rules. `remove` loosens
-the second stage and nothing of the first. So whatever stops an entry from being
-built stops `remove` too, and is reported exactly as it is for every other
-command: a blank `reason`, a blank `until`, an empty rule list, a ceiling of
-zero, a `kind` that contradicts its `until` (§FS-003-exceptions.2.1), a field
-that is not there at all.
+the second stage and nothing of the first, with one repair-only exception: an
+otherwise well-formed soft entry whose `shadows = "hard"` target is absent must
+remain addressable by `exception remove --severity soft`. That command may carry
+the unresolved entry only far enough to apply the usual address, removal, and
+byte-preserving write (§4); it deletes the entry, exits zero, and reports the
+normal removal. This remains a repair when the path is above the soft limit:
+the orphan cannot silence a finding because ordinary loading aborts before
+evaluation, so §3 does not preserve it.
 
-A failure at that stage is not confined to the entry that carries it. Building
-stops at the first entry that fails, so the document goes unread and every other
-entry in it is out of reach until the offending one is edited by hand. An entry
-that will not build is therefore the thing to repair first, and no command —
-this one included — will do it.
+The exception does not resolve the orphan or make it valid. `check`, `audit`,
+the hook, every other command, and a removal from any registry other than the
+soft registry still reject the same missing twin under the strict shadow rule
+(§FS-003-exceptions.2.3). More than one possible twin remains an ambiguity, and
+every failure in the orphan's own document or fields remains a build failure:
+a blank `reason`, a blank `until`, an empty rule list, a ceiling of zero, a
+`kind` that contradicts its `until` (§FS-003-exceptions.2.1), or a field that is
+not there at all. Those failures stop `remove` exactly as they stop every other
+command.
+
+Any of those remaining failures at that stage is not confined to the entry that
+carries it. Building stops at the first entry that fails, so the document goes
+unread and every other entry in it is out of reach until the offending one is
+edited by hand. An entry that will not build is therefore the thing to repair
+first, and no command — this one included — will do it.
 
 Two of the rule-check failures stay out of reach for a different reason: the
 address takes its rule ids and its unit from the command line, and the unit from

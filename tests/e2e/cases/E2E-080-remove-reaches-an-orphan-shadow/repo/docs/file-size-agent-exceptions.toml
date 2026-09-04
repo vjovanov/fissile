@@ -1,0 +1,23 @@
+fissile_exceptions_version = 2
+
+# This standalone registry note is unrelated to either entry.
+
+[[exceptions]]
+path = "src/big.rs"
+match = "exact"
+rules = ["rust"]
+kind = "deferred"
+shadows = "hard"
+max_accepted = { value = 100, unit = "lines" }
+
+# This entry and its formatting must survive byte for byte.
+[[exceptions]]
+path = "src/other.rs"
+match = "exact"
+rules = ["rust"]
+kind = "deferred"
+max_accepted = { value = 8, unit = "lines" }
+until = "src/other.rs is split"
+reason = """
+Keep the unrelated rationale exactly as written.
+"""
