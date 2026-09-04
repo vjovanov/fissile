@@ -84,6 +84,23 @@ impl RemovalEntry {
         }
     }
 
+    /// Whether two repair views describe the same entry as written. A resolved
+    /// index points into the loader's filtered [`Registries::soft`] vector, so
+    /// deleting an earlier entry may renumber it without changing the document
+    /// (§FS-009-exception-remove.5).
+    pub(crate) fn same_written_entry(&self, other: &Self) -> bool {
+        match (&self.0, &other.0) {
+            (
+                Entry::Resolved { entry, .. },
+                Entry::Resolved {
+                    entry: other_entry, ..
+                },
+            ) => entry == other_entry,
+            (Entry::OrphanShadow { .. }, Entry::OrphanShadow { .. }) => self == other,
+            _ => false,
+        }
+    }
+
     pub(crate) fn applies_to_rule(&self, rule: &str) -> bool {
         self.rules()
             .iter()

@@ -452,7 +452,12 @@ fn check_written(
                 .as_deref()
                 .map(|text| RegistrySource::new(&loaded.config.exceptions.hard_registry, text));
             let (written, entries) = Registries::load_for_soft_removal(Some(source), hard)?;
-            written.soft == after.soft && entries == after_removal_entries
+            written.soft == after.soft
+                && entries.len() == after_removal_entries.len()
+                && entries
+                    .iter()
+                    .zip(after_removal_entries)
+                    .all(|(written, expected)| written.same_written_entry(expected))
         }
         Severity::Hard => Registries::load(None, Some(source))?.hard == after.hard,
     };
