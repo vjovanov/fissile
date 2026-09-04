@@ -322,6 +322,38 @@ fn an_orphan_shadowing_twin_is_a_schema_error() {
     );
 }
 
+/// §FS-009-exception-remove.2: soft removal gets an address-only view of an
+/// orphan, while the ordinary registry view continues to reject exactly the
+/// same documents under §FS-003-exceptions.2.3.
+#[test]
+fn soft_removal_alone_can_load_an_orphan_shadow_address() {
+    let empty = "fissile_exceptions_version = 2\n";
+    let strict = load_both(SHADOWING_TWIN, empty).expect_err("strict load rejects the orphan");
+    assert!(matches!(strict, ExceptionError::ShadowsWithoutTwin { .. }));
+
+    let (registries, entries) = Registries::load_for_soft_removal(
+        Some(RegistrySource::new(SOFT_REGISTRY, SHADOWING_TWIN)),
+        Some(RegistrySource::new(HARD_REGISTRY, empty)),
+    )
+    .expect("soft removal reaches the orphan address");
+    assert!(registries.soft.is_empty(), "the orphan is not resolved");
+    assert!(registries.hard.is_empty());
+    assert_eq!(entries.len(), 1);
+    assert!(entries[0].resolved().is_none());
+    assert_eq!(entries[0].path(), "tests/fixtures/large.json");
+    assert_eq!(entries[0].rules().len(), 1);
+    assert_eq!(entries[0].rules()[0], "fixtures");
+    assert_eq!(entries[0].max_value(), 300000);
+
+    let invalid = SHADOWING_TWIN.replace("value = 300000", "value = 0");
+    let error = Registries::load_for_soft_removal(
+        Some(RegistrySource::new(SOFT_REGISTRY, &invalid)),
+        Some(RegistrySource::new(HARD_REGISTRY, empty)),
+    )
+    .expect_err("an invalid field owned by the orphan stays strict");
+    assert!(matches!(error, ExceptionError::NonPositiveMax { .. }));
+}
+
 /// §FS-003-exceptions.2.3: a twin inherits one rationale, so two hard entries
 /// answering its address is an ambiguity, not a pick.
 #[test]
