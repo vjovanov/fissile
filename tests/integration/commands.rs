@@ -1342,6 +1342,33 @@ fn write_soft_registry(root: &Path, entry: &str) {
     .unwrap();
 }
 
+/// Hard-then-soft orphan repair (§FS-009-exception-remove.2).
+#[test]
+fn hard_then_soft_removal_repairs_a_shadow_pair() {
+    let root = temp_repo();
+    let mut hard_entry = add_options(&root, Kind::Deferred, Some("the module lands"));
+    hard_entry.max = Some(300);
+    hard_entry.unit = Some(Unit::Lines);
+    exception::run(&hard_entry).unwrap();
+    let mut shadow = hard_entry.clone();
+    shadow.severity = Severity::Soft;
+    shadow.rationale = Rationale::ShadowsHard;
+    exception::run(&shadow).unwrap();
+    fs::write(root.join("src/big.rs"), rust_lines(10)).unwrap();
+
+    let mut hard = remove_options(&root, "src/big.rs", MatchKind::Exact);
+    hard.severity = Severity::Hard;
+    remove::run(&hard).unwrap();
+
+    let strict = check::run(&check_options(&root)).err().unwrap();
+    assert!(strict.to_string().contains("declares shadows = \"hard\""));
+    let run = remove::run(&remove_options(&root, "src/big.rs", MatchKind::Exact)).unwrap();
+    assert!(run.output.contains("removed src/big.rs"));
+    let soft = fs::read_to_string(root.join("docs/file-size-agent-exceptions.toml")).unwrap();
+    assert_eq!(soft, "fissile_exceptions_version = 2\n");
+    assert!(!check::run(&check_options(&root)).unwrap().failed);
+}
+
 /// §FS-009-exception-remove.3: a glob entry is removable only when no member of
 /// its class is silenced by it. One member over the limit and under the ceiling
 /// is enough to refuse — the class is what the entry accepts, not one file.

@@ -265,7 +265,13 @@ impl Registries {
         // The hard registry is built first, so a defect in an entry a twin
         // points at is reported where it lives, not at the twin inheriting it.
         let hard_entries = build_all(hard_raw, Severity::Hard, hard)?;
-        resolve_shadows(&mut soft_raw, &hard_entries, registry_path(soft), hard)?;
+        resolve_shadows(
+            &mut soft_raw,
+            &hard_entries,
+            registry_path(soft),
+            hard,
+            false,
+        )?;
         Ok(Self {
             soft: build_all(soft_raw, Severity::Soft, soft)?,
             hard: hard_entries,
@@ -464,8 +470,14 @@ fn resolve_shadows(
     hard: &[Exception],
     soft_registry: &str,
     hard_source: Option<RegistrySource<'_>>,
-) -> Result<(), ExceptionError> {
-    for entry in soft.iter_mut().filter(|entry| entry.shadows.is_some()) {
+    tolerate_missing: bool,
+) -> Result<Vec<usize>, ExceptionError> {
+    let mut orphaned = Vec::new();
+    for (index, entry) in soft
+        .iter_mut()
+        .enumerate()
+        .filter(|(_, entry)| entry.shadows.is_some())
+    {
         // An entry with a rationale of its own is not shadowing one, and a
         // second copy of either field is the drift the pointer removes.
         for (field, stated) in [
@@ -483,6 +495,10 @@ fn resolve_shadows(
         let twins = shadow_twins(hard, &entry.path, entry.match_kind, unit, &entry.rules);
         let twin = match twins.as_slice() {
             [twin] => *twin,
+            [] if tolerate_missing => {
+                orphaned.push(index);
+                continue;
+            }
             [] => {
                 return Err(ExceptionError::ShadowsWithoutTwin {
                     site: site(soft_registry, &entry.path),
@@ -500,7 +516,7 @@ fn resolve_shadows(
         entry.reason = Some(twin.reason.clone());
         entry.until = Some(twin.until.clone());
     }
-    Ok(())
+    Ok(orphaned)
 }
 
 /// The hard entries a `shadows = "hard"` soft entry at this address inherits
@@ -606,6 +622,10 @@ fn build_exception(
 mod errors;
 use errors::site;
 pub use errors::{EntrySite, ExceptionError};
+
+#[path = "exceptions_removal.rs"]
+mod removal;
+pub(crate) use removal::RemovalEntry;
 
 #[cfg(test)]
 #[path = "exceptions_tests.rs"]

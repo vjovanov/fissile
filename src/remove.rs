@@ -9,10 +9,10 @@ use std::path::{Path, PathBuf};
 
 use crate::cli::{self, CommandError, Loaded};
 use crate::entry::{self, Address};
-use crate::exceptions::{Exception, MatchKind, Registries, RegistrySource};
+use crate::exceptions::{Exception, MatchKind, Registries, RegistrySource, RemovalEntry};
 use crate::report::{self, EvalError};
 use crate::toml_lines;
-use crate::{FileMeasurement, RuleHit, Severity, Unit, scan};
+use crate::{FileMeasurement, Glob, RuleHit, Severity, Unit, scan};
 
 /// Inputs to `exception remove`. No `--max` and no `--unit`: the command states
 /// no ceiling (§FS-009-exception-remove.1).
@@ -33,9 +33,26 @@ pub struct Run {
 }
 
 pub fn run(options: &RemoveOptions) -> Result<Run, CommandError> {
-    // The registry this command repairs is one the rule check aborts on, so it
-    // is the one command that loads without it (§FS-009-exception-remove.2).
-    let loaded = cli::load_unvalidated(&options.root, options.config_path.as_deref())?;
+    // Only soft removal may carry a missing-twin shadow, and only in the
+    // separate address-only representation. Hard removal and every other
+    // command keep the strict structural load (§FS-009-exception-remove.2).
+    let (loaded, removal_entries) = match options.severity {
+        Severity::Soft => {
+            cli::load_for_soft_removal(&options.root, options.config_path.as_deref())?
+        }
+        Severity::Hard => {
+            let loaded = cli::load_unvalidated(&options.root, options.config_path.as_deref())?;
+            let entries = loaded
+                .registries
+                .hard
+                .iter()
+                .cloned()
+                .enumerate()
+                .map(|(index, entry)| RemovalEntry::from_resolved(entry, index))
+                .collect();
+            (loaded, entries)
+        }
+    };
     let path = match options.match_kind {
         MatchKind::Exact => scan::normalize_repo_path(&loaded.root, &options.path)?,
         MatchKind::Glob => options.path.replace('\\', "/"),
@@ -56,12 +73,12 @@ pub fn run(options: &RemoveOptions) -> Result<Run, CommandError> {
     // An address with no entry behind it has nothing to delete, and the entries
     // that are there are listed from what was just read
     // (§FS-009-exception-remove.1).
-    let Some((index, existing)) = entry::locate(&loaded.registries, &address)? else {
+    let Some((document_index, existing)) = locate_removal(&removal_entries, &address)? else {
         return Err(CommandError::Usage(format!(
             "{}: no entry accepts {path} for this rule and unit, so there is nothing to \
              remove{}",
             registry_rel.display(),
-            addressable(&loaded.registries, options.severity)
+            addressable(&removal_entries)
         )));
     };
     let existing = existing.clone();
@@ -69,14 +86,30 @@ pub fn run(options: &RemoveOptions) -> Result<Run, CommandError> {
 
     // What the registry holds once the entry is gone. The refusal below reads it,
     // and the write is held to producing exactly this (§FS-009-exception-remove.5).
-    let after = without(&loaded.registries, options.severity, index);
-    check_silenced(&loaded, &after, &existing, &registry_rel)?;
+    let after = if let Some((resolved_index, resolved)) = existing.resolved() {
+        let after = without(&loaded.registries, options.severity, resolved_index);
+        check_silenced(&loaded, &after, resolved, &registry_rel)?;
+        after
+    } else {
+        // An orphan was never a valid exception and cannot silence a finding;
+        // removing it leaves the resolved registry view unchanged.
+        loaded.registries.clone()
+    };
+    let mut after_removal_entries = removal_entries.clone();
+    after_removal_entries.remove(document_index);
 
     let registry_path = loaded.root.join(&registry_rel);
     let text = cli::read_optional(&registry_path)?
         .ok_or_else(|| CommandError::Usage(format!("{} is missing", registry_rel.display())))?;
-    let new_text = delete_block(&text, index, &registry_rel, &existing.path)?;
-    check_written(&loaded, options.severity, &after, &new_text, &registry_rel)?;
+    let new_text = delete_block(&text, document_index, &registry_rel, existing.path())?;
+    check_written(
+        &loaded,
+        options.severity,
+        &after,
+        &after_removal_entries,
+        &new_text,
+        &registry_rel,
+    )?;
 
     let note = twin_note(twin(&loaded, options, &path, unit), unit);
     let head = format!(
@@ -87,8 +120,8 @@ pub fn run(options: &RemoveOptions) -> Result<Run, CommandError> {
         } else {
             "removed"
         },
-        existing.path,
-        existing.max_value
+        existing.path(),
+        existing.max_value()
     );
     if options.dry_run {
         return Ok(Run {
@@ -109,16 +142,54 @@ pub fn run(options: &RemoveOptions) -> Result<Run, CommandError> {
 /// error message is not a report (§GOAL-003-friendly-output).
 const LISTED: usize = 10;
 
+/// Locate one entry in the selected registry's document-order repair view.
+/// This mirrors normal address resolution, but can see an orphan that is
+/// deliberately absent from [`Registries`] (§FS-009-exception-remove.2).
+fn locate_removal<'a>(
+    entries: &'a [RemovalEntry],
+    address: &Address<'_>,
+) -> Result<Option<(usize, &'a RemovalEntry)>, CommandError> {
+    let mut found = entries.iter().enumerate().filter(|(_, existing)| {
+        existing.max_unit() == address.unit
+            && address
+                .rules
+                .iter()
+                .any(|rule| existing.applies_to_rule(rule))
+            && removal_matchers_overlap(existing, address.match_kind, address.path)
+    });
+    let Some((index, entry)) = found.next() else {
+        return Ok(None);
+    };
+    if let Some((_, second)) = found.next() {
+        return Err(CommandError::Usage(format!(
+            "{}: {} spans more than one entry ({} and {}); address one at a time — \
+             each entry is named by its own path matcher",
+            entry.registry(),
+            address.path,
+            entry.path(),
+            second.path()
+        )));
+    }
+    Ok(Some((index, entry)))
+}
+
+fn removal_matchers_overlap(existing: &RemovalEntry, match_kind: MatchKind, path: &str) -> bool {
+    match (existing.match_kind(), match_kind) {
+        (MatchKind::Exact, MatchKind::Exact) => existing.path() == path,
+        (MatchKind::Glob, MatchKind::Exact) => existing.matches_path(path),
+        (MatchKind::Exact, MatchKind::Glob) => Glob::new(path).matches(existing.path()),
+        (MatchKind::Glob, MatchKind::Glob) => {
+            Glob::new(existing.path()).intersects(&Glob::new(path))
+        }
+    }
+}
+
 /// The entries the caller could have addressed, from the registry `remove` has
 /// already read. `audit --stale-exceptions` would abort in exactly the state
 /// this command exists to repair, so the refusal answers its own question
 /// rather than naming a command that cannot run (§FS-009-exception-remove.1,
 /// §DF-007-instructions-at-the-error-site).
-fn addressable(registries: &Registries, severity: Severity) -> String {
-    let entries = match severity {
-        Severity::Soft => &registries.soft,
-        Severity::Hard => &registries.hard,
-    };
+fn addressable(entries: &[RemovalEntry]) -> String {
     if entries.is_empty() {
         return "; it holds no entries".to_owned();
     }
@@ -126,11 +197,11 @@ fn addressable(registries: &Registries, severity: Severity) -> String {
     for existing in entries.iter().take(LISTED) {
         listed.push_str(&format!(
             "\n  {} ({}, rules {}, up to {} {})",
-            existing.path,
-            entry::match_str(existing.match_kind),
-            existing.rules.join(" "),
-            existing.max_value,
-            existing.max_unit
+            existing.path(),
+            entry::match_str(existing.match_kind()),
+            existing.rules().join(" "),
+            existing.max_value(),
+            existing.max_unit()
         ));
     }
     if entries.len() > LISTED {
@@ -144,12 +215,12 @@ fn addressable(registries: &Registries, severity: Severity) -> String {
 /// removal each direction is wrong for its own reason
 /// (§FS-009-exception-remove.1).
 fn check_matcher(
-    existing: &Exception,
+    existing: &RemovalEntry,
     addressed: MatchKind,
     path: &str,
     registry_rel: &Path,
 ) -> Result<(), CommandError> {
-    match (existing.match_kind, addressed) {
+    match (existing.match_kind(), addressed) {
         // Deleting the class-wide entry from under one member drops the ceiling
         // for every other file the glob names, which the caller did not ask for.
         (MatchKind::Glob, MatchKind::Exact) => Err(CommandError::Usage(format!(
@@ -157,8 +228,8 @@ fn check_matcher(
              that glob names; remove the class as `--match glob \"{}\"` if that is what \
              should go",
             registry_rel.display(),
-            existing.path,
-            existing.path
+            existing.path(),
+            existing.path()
         ))),
         // The reverse deletes one file's entry under a spelling no entry carries,
         // and reports the change against a path the registry never held.
@@ -166,8 +237,8 @@ fn check_matcher(
             "{}: no glob entry accepts {path}; it spans the exact entry {}, which is \
              removed as `--match exact {}`",
             registry_rel.display(),
-            existing.path,
-            existing.path
+            existing.path(),
+            existing.path()
         ))),
         _ => Ok(()),
     }
@@ -365,6 +436,7 @@ fn check_written(
     loaded: &Loaded,
     severity: Severity,
     after: &Registries,
+    after_removal_entries: &[RemovalEntry],
     new_text: &str,
     registry_rel: &Path,
 ) -> Result<(), CommandError> {
@@ -373,11 +445,18 @@ fn check_written(
         Severity::Hard => &loaded.config.exceptions.hard_registry,
     };
     let source = RegistrySource::new(configured, new_text);
-    let (written, expected) = match severity {
-        Severity::Soft => (Registries::load(Some(source), None)?.soft, &after.soft),
-        Severity::Hard => (Registries::load(None, Some(source))?.hard, &after.hard),
+    let unchanged = match severity {
+        Severity::Soft => {
+            let hard_text = cli::read_optional(&loaded.root.join(&loaded.hard_registry))?;
+            let hard = hard_text
+                .as_deref()
+                .map(|text| RegistrySource::new(&loaded.config.exceptions.hard_registry, text));
+            let (written, entries) = Registries::load_for_soft_removal(Some(source), hard)?;
+            written.soft == after.soft && entries == after_removal_entries
+        }
+        Severity::Hard => Registries::load(None, Some(source))?.hard == after.hard,
     };
-    if &written != expected {
+    if !unchanged {
         return Err(CommandError::Usage(format!(
             "{}: removing that entry would change the ones that remain; edit the file by hand",
             registry_rel.display()

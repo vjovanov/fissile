@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 
 use crate::Checker;
 use crate::config::{Color, Config, ConfigError, Format as ConfigFormat};
-use crate::exceptions::{ExceptionError, Registries, RegistrySource};
+use crate::exceptions::{ExceptionError, Registries, RegistrySource, RemovalEntry};
 use crate::report::EvalError;
 
 /// Output format for a finding stream (§FS-001-config.6).
@@ -101,6 +101,46 @@ pub fn load_unvalidated(root: &Path, config_path: Option<&Path>) -> Result<Loade
         soft_registry,
         hard_registry,
     })
+}
+
+/// Load the repair-only view for soft `exception remove`. Unlike
+/// [`load_unvalidated`], this carries a missing-twin shadow separately from the
+/// resolved registries so the command can address it without evaluating it
+/// (§FS-009-exception-remove.2).
+pub(crate) fn load_for_soft_removal(
+    root: &Path,
+    config_path: Option<&Path>,
+) -> Result<(Loaded, Vec<RemovalEntry>), CommandError> {
+    let config = Config::load(root, config_path)?;
+    let checker = config.to_checker()?;
+
+    let soft_registry = PathBuf::from(&config.exceptions.soft_registry);
+    let hard_registry = PathBuf::from(&config.exceptions.hard_registry);
+    let soft_text =
+        read_optional(&root.join(&soft_registry)).map_err(|e| named(&soft_registry, e))?;
+    let hard_text =
+        read_optional(&root.join(&hard_registry)).map_err(|e| named(&hard_registry, e))?;
+    let (registries, removal_entries) = Registries::load_for_soft_removal(
+        soft_text
+            .as_deref()
+            .map(|text| RegistrySource::new(&config.exceptions.soft_registry, text)),
+        hard_text
+            .as_deref()
+            .map(|text| RegistrySource::new(&config.exceptions.hard_registry, text)),
+    )
+    .map_err(|error| error.naming_hard_registry(&config.exceptions.hard_registry))?;
+
+    Ok((
+        Loaded {
+            config,
+            checker,
+            registries,
+            root: root.to_path_buf(),
+            soft_registry,
+            hard_registry,
+        },
+        removal_entries,
+    ))
 }
 
 /// The file set a caller named: git-staged, or explicit paths normalized to the
