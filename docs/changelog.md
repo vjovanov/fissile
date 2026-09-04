@@ -154,6 +154,10 @@ and at 0.x semver puts the minor number in charge of it.
 
 ### Fixed
 
+- §FS-009-exception-remove.2: soft `exception remove` can delete an orphaned
+  `shadows = "hard"` entry after its hard twin is removed, while ordinary
+  registry loading stays strict and continues to reject orphan shadows.
+  Resolves #55. (PR #60)
 - §FS-004-check-audit.2: `audit` now reports exception entry totals alongside
   distinct path-expression totals, so soft/hard twins and repeated globs are
   not presented as additional files. (PR #47)
