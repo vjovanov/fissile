@@ -354,6 +354,108 @@ fn soft_removal_alone_can_load_an_orphan_shadow_address() {
     assert!(matches!(error, ExceptionError::NonPositiveMax { .. }));
 }
 
+/// §FS-009-exception-remove.5: the post-write comparison retains every field
+/// owned by an orphan even though none of that metadata is needed to address
+/// the entry for removal.
+#[test]
+fn soft_removal_written_comparison_retains_orphan_metadata() {
+    let empty = "fissile_exceptions_version = 2\n";
+    let original_text = SHADOWING_TWIN.replace(
+        "kind = \"deferred\"",
+        "kind = \"deferred\"\n\
+         title = \"old title\"\n\
+         owner = \"old owner\"\n\
+         issue = \"old issue\"",
+    );
+    let (_, original_entries) = Registries::load_for_soft_removal(
+        Some(RegistrySource::new(SOFT_REGISTRY, &original_text)),
+        Some(RegistrySource::new(HARD_REGISTRY, empty)),
+    )
+    .expect("the original orphan loads for removal");
+    for (field, changed) in [
+        (
+            "kind",
+            original_text.replace("kind = \"deferred\"", "kind = \"structural\""),
+        ),
+        (
+            "title",
+            original_text.replace("title = \"old title\"", "title = \"new title\""),
+        ),
+        (
+            "owner",
+            original_text.replace("owner = \"old owner\"", "owner = \"new owner\""),
+        ),
+        (
+            "issue",
+            original_text.replace("issue = \"old issue\"", "issue = \"new issue\""),
+        ),
+    ] {
+        let (_, changed_entries) = Registries::load_for_soft_removal(
+            Some(RegistrySource::new(SOFT_REGISTRY, &changed)),
+            Some(RegistrySource::new(HARD_REGISTRY, empty)),
+        )
+        .unwrap_or_else(|error| panic!("changed orphan {field} loads for removal: {error}"));
+        assert!(
+            !original_entries[0].same_written_entry(&changed_entries[0]),
+            "the write guard must retain orphan {field}"
+        );
+    }
+}
+
+/// §FS-009-exception-remove.5: an inherited rationale may have the same
+/// effective value as a standalone rationale, but changing the persisted
+/// `shadows` identity is still a change to the surviving entry.
+#[test]
+fn soft_removal_written_comparison_retains_shadow_identity() {
+    let standalone = SHADOWING_TWIN.replace(
+        "shadows = \"hard\"",
+        "until = \"the fixture generator lands\"\n\
+         reason = \"no generator reproduces this corpus from the incident descriptions yet\"",
+    );
+    let (shadow_registries, shadow_entries) = Registries::load_for_soft_removal(
+        Some(RegistrySource::new(SOFT_REGISTRY, SHADOWING_TWIN)),
+        Some(RegistrySource::new(HARD_REGISTRY, HARD_TWIN)),
+    )
+    .expect("the shadow resolves");
+    let (standalone_registries, standalone_entries) = Registries::load_for_soft_removal(
+        Some(RegistrySource::new(SOFT_REGISTRY, &standalone)),
+        Some(RegistrySource::new(HARD_REGISTRY, HARD_TWIN)),
+    )
+    .expect("the equivalent standalone entry loads");
+
+    assert_eq!(
+        shadow_registries.soft, standalone_registries.soft,
+        "the effective entries deliberately agree"
+    );
+    assert!(
+        !shadow_entries[0].same_written_entry(&standalone_entries[0]),
+        "the write guard must retain the shadow pointer"
+    );
+}
+
+/// §FS-009-exception-remove.5: removing an earlier resolved entry renumbers a
+/// survivor in the filtered loader vector, but does not change its persisted
+/// meaning.
+#[test]
+fn soft_removal_written_comparison_ignores_resolved_index() {
+    let second = SOFT.replace("large.json", "other.json");
+    let both = format!(
+        "{}\n{}",
+        SOFT,
+        second.replace("fissile_exceptions_version = 2", "")
+    );
+    let (_, before) =
+        Registries::load_for_soft_removal(Some(RegistrySource::new(SOFT_REGISTRY, &both)), None)
+            .expect("both entries load");
+    let (_, after) =
+        Registries::load_for_soft_removal(Some(RegistrySource::new(SOFT_REGISTRY, &second)), None)
+            .expect("the survivor loads");
+
+    assert_eq!(before[1].resolved().map(|(index, _)| index), Some(1));
+    assert_eq!(after[0].resolved().map(|(index, _)| index), Some(0));
+    assert!(before[1].same_written_entry(&after[0]));
+}
+
 /// §FS-003-exceptions.2.3: a twin inherits one rationale, so two hard entries
 /// answering its address is an ambiguity, not a pick.
 #[test]
