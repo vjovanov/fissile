@@ -190,6 +190,29 @@ loose ceilings:
 
 Add `--rule-coverage` to find rules and messages that match nothing.
 
+Both of those are read in a loop — edit the config, run again, look again — so
+`--only` cuts the report down to the sections you are reading:
+
+```text
+$ fissile audit --only coverage
+rule coverage:
+  rules matching no file: legacy
+  files only under catch-all: scripts/release.sh
+  unused messages: none
+```
+
+The sections are the seven keys the JSON output publishes — `findings`,
+`silenced`, `exceptions`, `top`, `stale`, `loose`, `coverage` — and they print
+in that order however you name them. Naming one is what asks for it, so `--only
+coverage` needs no `--rule-coverage`; `--only top` still needs `--top <N>`,
+which carries the count. Selection reaches the screen and nothing else: a
+repository with a hard overflow still exits non-zero with its findings off
+screen (§FS-004-check-audit.2).
+
+A script needs neither flag: `fissile audit --format json --rule-coverage | jq
+.coverage` returns the same section, and JSON is the surface agents should
+reach for (§GOAL-004-token-thrift).
+
 ## How big is this file?
 
 `check` reports a measurement only when a file is over budget, and the count is

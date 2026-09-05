@@ -32,6 +32,39 @@ and at 0.x semver puts the minor number in charge of it.
 
 ## Unreleased
 
+### Added
+
+- §FS-004-check-audit.2: `fissile audit --only <section>[,<section>]` prints the
+  named sections of the text report and nothing else, so tuning config or
+  pruning the registry stops paying for a findings block the reader is not
+  looking at. The names are the seven top-level keys of
+  `schema/audit.schema.json` — `findings`, `silenced`, `exceptions`, `top`,
+  `stale`, `loose`, `coverage` — and they render in that order whatever order
+  they were named in. Naming a section is the request to compute it, so `--only
+  coverage` needs no `--rule-coverage`; `--only top` still needs `--top <N>`,
+  which carries a count no default could stand in for. Selection reaches the
+  screen and nothing else: exit status is computed from the whole run, so a
+  standing hard overflow still exits non-zero under `--only coverage`. An
+  unknown or empty name is a usage error naming the valid set, and `--only`
+  with `--format json` is one too — `findings`, `silenced` and `exceptions` are
+  `required` in the schema, so a filtered object would not validate. `audit`
+  with no `--only` prints what it printed before, and the JSON surface is
+  unchanged. Resolves #15. (PR #N)
+- §GOAL-004-token-thrift.1, §FS-006-cli.2: `fissile audit --help` names the JSON
+  route, `fissile audit --format json --rule-coverage | jq .coverage`, and says
+  that `--format json` is the agent surface. The goals document has designated
+  it one since §GOAL-004-token-thrift was written; the screen's two examples
+  were both text and said so nowhere. (PR #N)
+
+### Changed
+
+- §FS-004-check-audit.2: `fissile::audit::AuditOptions` gains a public
+  `only: Option<Vec<Section>>` field, and `fissile::audit` gains the public
+  `Section` enum and the `SECTIONS` array that fixes its canonical order. A
+  library caller constructing the options with a struct literal must initialize
+  the new field, normally with `None`, which is the whole report. A 0.x source
+  break, so the minor number moves. (PR #N)
+
 ## 2. [0.8.3] — 2026-09-05
 
 ### Added
