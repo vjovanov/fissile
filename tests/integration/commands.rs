@@ -313,6 +313,7 @@ fn structural_hard_exception_also_silences_soft() {
         top: None,
         stale_exceptions: false,
         rule_coverage: false,
+        only: None,
     })
     .expect("audit runs");
     // Attribution names no id since version 2 removed it (§DF-005-exception-identity).
@@ -380,6 +381,7 @@ fn audit_top_ranks_largest_files() {
         top: Some(2),
         stale_exceptions: true,
         rule_coverage: true,
+        only: None,
     })
     .expect("audit runs");
     assert!(run.failed, "the oversized file is a hard overflow");
@@ -404,6 +406,7 @@ fn audit_uses_configured_format_default() {
         top: None,
         stale_exceptions: false,
         rule_coverage: false,
+        only: None,
     })
     .expect("audit runs");
 
@@ -422,6 +425,7 @@ fn audit_json_top_omits_unmeasured_units() {
         top: Some(2),
         stale_exceptions: false,
         rule_coverage: false,
+        only: None,
     })
     .expect("audit runs");
 
@@ -628,6 +632,7 @@ reason = "the soft twin shares the structural constraint"
         top: None,
         stale_exceptions: false,
         rule_coverage: false,
+        only: None,
     })
     .expect("audit runs");
 
@@ -678,6 +683,7 @@ fn stale_exceptions_name_the_registry_they_live_in() {
         top: None,
         stale_exceptions: true,
         rule_coverage: false,
+        only: None,
     };
     let text = audit::run(&options).expect("audit runs").output;
     assert!(
