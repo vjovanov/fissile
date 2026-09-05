@@ -127,7 +127,7 @@ and at 0.x semver puts the minor number in charge of it.
   `exception` command `Run` types each gain a public `notes: Vec<String>` —
   what discovery owes stderr, carried out to the surface that owns it.
   `fissile::init::Report` gains `config: PathBuf`, the config the run wrote or
-  found. A library caller constructing any of these with a struct literal must
+  found, and `deprecation: Option<&'static str>`. A library caller constructing any of these with a struct literal must
   initialize the new field. `Config::load(root, explicit)` keeps its signature;
   the search order is reported through the additive `Config::discover`. A 0.x
   source break, so the minor number moves. (PR #N)

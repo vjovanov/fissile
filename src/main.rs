@@ -113,7 +113,7 @@ fn run_init(args: &[String]) -> ExitCode {
             // `init` does not discover, so the deprecation is its own to say: a
             // repository whose config it found at the old home hears it from
             // nowhere else (§FS-001-config.8.2, §FS-002-init.2).
-            if let Some(warning) = report.deprecation() {
+            if let Some(warning) = report.deprecation {
                 eprintln!("{warning}");
             }
             eprintln!("{}", report.render());

@@ -209,17 +209,14 @@ pub struct Report {
     /// The `next:` block names one of these rather than a fixed filename, so it
     /// cannot point at a file that was never written (§FS-002-init.5).
     pub entrypoints: Vec<PathBuf>,
+    /// The deprecation this run owes the reader (§FS-001-config.8.2). `init`
+    /// does not discover, so it is set only where it deferred to a config at
+    /// the old home: a `--config` the caller spelled out is their choice, and
+    /// nothing is being decided behind them (§FS-001-config.8.1).
+    pub deprecation: Option<&'static str>,
 }
 
 impl Report {
-    /// The deprecation this run owes the reader (§FS-001-config.8.2). `init` does
-    /// not go through discovery, but a repository whose config it found at the
-    /// old home is one nothing else would tell (§FS-002-init.2).
-    pub fn deprecation(&self) -> Option<&'static str> {
-        (self.config == Path::new(crate::config::DEPRECATED_CONFIG_HOME))
-            .then_some(crate::config::DEPRECATED_WARNING)
-    }
-
     /// Whether the run changed anything; drives the `next:` block (§FS-002-init.5).
     pub fn changed_anything(&self) -> bool {
         self.outcomes.iter().any(|outcome| outcome.action.changed())
@@ -330,7 +327,7 @@ pub fn run(options: &InitOptions) -> Result<Report, InitError> {
     let mut outcomes = Vec::new();
 
     // 1. Config — written when absent, never overwritten (§FS-002-init.2).
-    let config_path = existing_config(options);
+    let (config_path, deprecated) = existing_config(options);
     outcomes.push(write_new_file(
         &options.root.join(&config_path),
         DEFAULT_CONFIG,
@@ -407,23 +404,26 @@ pub fn run(options: &InitOptions) -> Result<Report, InitError> {
         dry_run: options.dry_run,
         hook,
         entrypoints,
+        deprecation: deprecated.then_some(crate::config::DEPRECATED_WARNING),
     })
 }
 
-/// Which config document this run is about (§FS-002-init.2). A repository whose
-/// config is still at the deprecated home has an existing config, so the default
-/// home defers to it: writing the generated default at the new path instead
-/// would take precedence over the project's own rules on the very next run
-/// (§FS-001-config.8.1). A `--config` the caller spelled out is never moved.
-fn existing_config(options: &InitOptions) -> PathBuf {
+/// Which config document this run is about, and whether it deferred to the
+/// deprecated home to get there (§FS-002-init.2). A repository whose config is
+/// still at the old path has an existing config, so the default home defers to
+/// it: writing the generated default at the new path instead would take
+/// precedence over the project's own rules on the very next run
+/// (§FS-001-config.8.1). A `--config` the caller spelled out is never moved, and
+/// never remarked on.
+fn existing_config(options: &InitOptions) -> (PathBuf, bool) {
     let deprecated = PathBuf::from(crate::config::DEPRECATED_CONFIG_HOME);
     if options.config_path == Path::new(crate::config::CONFIG_HOME)
         && !options.root.join(&options.config_path).exists()
         && options.root.join(&deprecated).exists()
     {
-        return deprecated;
+        return (deprecated, true);
     }
-    options.config_path.clone()
+    (options.config_path.clone(), false)
 }
 
 /// The project name for a fresh `AGENTS.md` heading: the `--name` value, else the
