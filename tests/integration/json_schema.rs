@@ -187,6 +187,7 @@ fn audit_silenced_records_carry_documented_exception_fields() {
         top: Some(1),
         stale_exceptions: true,
         rule_coverage: false,
+        only: None,
     })
     .expect("audit runs");
 
@@ -379,6 +380,7 @@ fn audit_reports_a_loose_ceiling_with_the_value_to_retune_to() {
         top: None,
         stale_exceptions: true,
         rule_coverage: false,
+        only: None,
     })
     .expect("audit runs");
 
@@ -446,6 +448,7 @@ fn audit_flags_a_ceiling_with_no_headroom() {
         top: None,
         stale_exceptions: true,
         rule_coverage: false,
+        only: None,
     })
     .expect("audit runs");
 

@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::slice::Iter;
 
-use fissile::audit::{self, AuditOptions};
+use fissile::audit::{self, AuditOptions, Section};
 use fissile::check::{self, CheckOptions};
 use fissile::cli::Format;
 use fissile::init::{self, AgentTargets, HookMode, InitOptions};
@@ -293,6 +293,12 @@ fn run_audit(args: &[String]) -> ExitCode {
                 Ok(count) => options.top = Some(count),
                 Err(message) => return usage_fail("audit", &message, AUDIT_USAGE),
             },
+            // A set, so a repeated name and a second `--only` both add
+            // (§FS-004-check-audit.2).
+            "--only" => match value(&mut iter, "--only").and_then(|raw| options.select(&raw)) {
+                Ok(()) => (),
+                Err(message) => return usage_fail("audit", &message, AUDIT_USAGE),
+            },
             other if other.starts_with('-') => {
                 return usage_fail("audit", &format!("unknown option `{other}`"), AUDIT_USAGE);
             }
@@ -304,6 +310,20 @@ fn run_audit(args: &[String]) -> ExitCode {
                 );
             }
         }
+    }
+
+    // The two things `--only` cannot mean, refused before any work is done
+    // (§FS-004-check-audit.2). `top` is the one section whose computation takes
+    // a parameter, so naming it does not supply the count.
+    if options.selects(Section::Top) && options.top.is_none() {
+        return usage_fail("audit", "--only top requires --top <N>", AUDIT_USAGE);
+    }
+    if options.only.is_some() && options.format == Some(Format::Json) {
+        return usage_fail(
+            "audit",
+            "--only selects sections of the text report and is not valid with --format json",
+            AUDIT_USAGE,
+        );
     }
 
     match audit::run(&options) {

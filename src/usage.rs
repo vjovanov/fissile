@@ -66,10 +66,22 @@ examples:
 pub const AUDIT_USAGE: &str = "\
 usage: fissile audit [--config <path>] [--format text|json] [--top <N>]
                      [--stale-exceptions] [--rule-coverage] [--no-color]
+                     [--only <section>[,<section>]]
+
+--only prints the sections it names and nothing else: findings, silenced,
+exceptions, top, stale, loose, coverage — always in that order, whatever order
+you name them. Naming a section is what asks for it, so --only coverage needs
+no --rule-coverage; --only top still needs --top <N>, which carries the count.
+It selects what is printed and nothing else: the exit code is the run's.
+
+--format json is the agent surface. It returns the same sections as separate
+keys, so a script reaches one with jq and needs no selector.
 
 examples:
   fissile audit --top 10
-  fissile audit --stale-exceptions --rule-coverage";
+  fissile audit --stale-exceptions --rule-coverage
+  fissile audit --only coverage
+  fissile audit --format json --rule-coverage | jq .coverage";
 
 pub const LIMITS_USAGE: &str = "\
 usage: fissile limits [--config <path>] [--format text|json] [--no-color]

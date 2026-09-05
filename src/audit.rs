@@ -22,6 +22,112 @@ pub struct AuditOptions {
     pub top: Option<usize>,
     pub stale_exceptions: bool,
     pub rule_coverage: bool,
+    /// The sections `--only` named, or `None` for the whole report
+    /// (§FS-004-check-audit.2). A set: the order they were named in and a name
+    /// repeated do not reach the output, which renders in canonical order.
+    pub only: Option<Vec<Section>>,
+}
+
+impl AuditOptions {
+    /// Add the sections one `--only` value names, or report the first name that
+    /// is not one (§FS-004-check-audit.2). A second `--only` adds to the
+    /// selection rather than replacing it, and a repeated name selects its
+    /// section once.
+    pub fn select(&mut self, raw: &str) -> Result<(), String> {
+        // Parsed whole before anything is added, so a bad name leaves the
+        // selection as it was.
+        let named = raw
+            .split(',')
+            .map(Section::parse)
+            .collect::<Result<Vec<_>, _>>()?;
+        let selected = self.only.get_or_insert_default();
+        for section in named {
+            if !selected.contains(&section) {
+                selected.push(section);
+            }
+        }
+        Ok(())
+    }
+
+    /// Whether `--only` named this section. Naming a section is the request to
+    /// compute it, so the flag that would otherwise ask for it is not also
+    /// required (§FS-004-check-audit.2).
+    pub fn selects(&self, section: Section) -> bool {
+        self.only
+            .as_ref()
+            .is_some_and(|only| only.contains(&section))
+    }
+
+    /// Whether the text report prints this section: every section, until
+    /// `--only` narrows it (§FS-004-check-audit.2).
+    fn prints(&self, section: Section) -> bool {
+        self.only
+            .as_ref()
+            .is_none_or(|only| only.contains(&section))
+    }
+}
+
+/// A section of the audit report, addressable by name through `--only`
+/// (§FS-004-check-audit.2). The names and their order are the top-level keys of
+/// `schema/audit.schema.json`, so the text surface and the JSON surface cannot
+/// grow two vocabularies for one report.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Section {
+    Findings,
+    Silenced,
+    Exceptions,
+    Top,
+    Stale,
+    Loose,
+    Coverage,
+}
+
+/// Every section in the canonical order `schema/audit.schema.json` declares
+/// them, which is the order a report renders in whatever order `--only` named
+/// them (§FS-004-check-audit.2).
+pub const SECTIONS: [Section; 7] = [
+    Section::Findings,
+    Section::Silenced,
+    Section::Exceptions,
+    Section::Top,
+    Section::Stale,
+    Section::Loose,
+    Section::Coverage,
+];
+
+impl Section {
+    /// The name `--only` takes for this section, which is the key
+    /// `--format json` publishes it under (§FS-004-check-audit.2).
+    pub fn name(self) -> &'static str {
+        match self {
+            Section::Findings => "findings",
+            Section::Silenced => "silenced",
+            Section::Exceptions => "exceptions",
+            Section::Top => "top",
+            Section::Stale => "stale",
+            Section::Loose => "loose",
+            Section::Coverage => "coverage",
+        }
+    }
+
+    /// The section a `--only` name selects. An unknown or empty name is an
+    /// error naming it and the whole valid set in canonical order: a silent
+    /// empty report reads exactly like a section that had nothing to say
+    /// (§FS-004-check-audit.2).
+    pub fn parse(name: &str) -> Result<Self, String> {
+        SECTIONS
+            .into_iter()
+            .find(|section| section.name() == name)
+            .ok_or_else(|| {
+                let bad = if name.is_empty() {
+                    "empty --only section name".to_owned()
+                } else {
+                    format!("unknown --only section `{name}`")
+                };
+                let valid: Vec<&str> = SECTIONS.iter().map(|section| section.name()).collect();
+                format!("{bad} (valid: {})", valid.join(", "))
+            })
+    }
 }
 
 pub struct Run {
@@ -57,10 +163,23 @@ struct Inventory {
 
 pub fn run(options: &AuditOptions) -> Result<Run, CommandError> {
     let loaded = cli::load(&options.root, options.config_path.as_deref())?;
-    let files = scan::walk_scope(&loaded.root, &loaded.config.scan)?;
     let format = options
         .format
         .unwrap_or_else(|| loaded.config.output.format.into());
+    // `findings`, `silenced` and `exceptions` are `required` in
+    // `schema/audit.schema.json`, so a filtered object would not validate
+    // against the contract it claims to satisfy (§FS-004-check-audit.2). The
+    // CLI refuses the flag pair with its usage screen; this refuses the same
+    // thing for a library caller, and for a config whose `[output].format` is
+    // what makes the run JSON — accepting a selection and ignoring it is the
+    // one outcome the caller cannot tell from an empty section.
+    if options.only.is_some() && format == Format::Json {
+        return Err(CommandError::Usage(
+            "--only selects sections of the text report and is not valid with --format json"
+                .to_owned(),
+        ));
+    }
+    let files = scan::walk_scope(&loaded.root, &loaded.config.scan)?;
 
     let mut measured_files = Vec::with_capacity(files.len());
     let mut errors = Vec::new();
@@ -102,7 +221,12 @@ pub fn run(options: &AuditOptions) -> Result<Run, CommandError> {
 
     let mut failed = report::has_hard_failure(&outcomes);
 
-    let stale = options.stale_exceptions.then(|| {
+    // Naming a section is the request to compute it, so the flag that would
+    // otherwise ask for it is not also required (§FS-004-check-audit.2).
+    let registry_pass = options.stale_exceptions || options.selects(Section::Stale);
+    let loose_pass = options.stale_exceptions || options.selects(Section::Loose);
+
+    let stale = registry_pass.then(|| {
         // Registry plus the entry's own `path`: the list spans both registries,
         // and the same path can be stale in each (§FS-003-exceptions.4).
         let entries: Vec<EntrySite> = loaded
@@ -136,11 +260,8 @@ pub fn run(options: &AuditOptions) -> Result<Run, CommandError> {
         // Unfiltered by `[exceptions].stale`, which governs stale entries only: a
         // loose ceiling accepts everything it accepted yesterday and breaks
         // nothing today (§FS-003-exceptions.7).
-        loose: options
-            .stale_exceptions
-            .then(|| loose::entries(&loaded, &files)),
-        coverage: options
-            .rule_coverage
+        loose: loose_pass.then(|| loose::entries(&loaded, &files)),
+        coverage: (options.rule_coverage || options.selects(Section::Coverage))
             .then(|| coverage(&loaded, &measured_files)),
         // Default-on, no flag: the two numbers are what an inventory is for
         // (§FS-004-check-audit.2).
@@ -151,7 +272,9 @@ pub fn run(options: &AuditOptions) -> Result<Run, CommandError> {
     let output = match format {
         Format::Text => {
             let color = cli::use_color(loaded.config.output.color, options.no_color, format);
-            render_text(&loaded, &outcomes, &contexts, &inventory, color, &errors)
+            render_text(
+                options, &loaded, &outcomes, &contexts, &inventory, color, &errors,
+            )
         }
         Format::Json => render_json(&outcomes, &contexts, &inventory),
     };
@@ -282,7 +405,12 @@ fn coverage(loaded: &Loaded, measured_files: &[scan::MeasuredFile]) -> Coverage 
     }
 }
 
+/// Sections render in canonical order and only where the selection prints them
+/// (§FS-004-check-audit.2). A section can be computed and left unprinted:
+/// `--only` governs the screen, while exit status is computed from the whole
+/// run.
 fn render_text(
+    options: &AuditOptions,
     loaded: &Loaded,
     outcomes: &[Outcome],
     contexts: &[report::FindingContext],
@@ -292,36 +420,44 @@ fn render_text(
 ) -> String {
     let mut sections = Vec::new();
 
-    // Each grouped block is its own section, so the blank-line separation is the
-    // same between blocks as between audit sections (§FS-004-check-audit.1).
-    let reported = report::finding_blocks_with_context(outcomes, color, contexts);
-    if reported.is_empty() {
-        // Withheld when a file could not be measured (§FS-004-check-audit.5).
-        if errors.is_empty() {
-            sections.push(report::success_marker(&loaded.config.output.success, color));
+    if options.prints(Section::Findings) {
+        // Each grouped block is its own section, so the blank-line separation is
+        // the same between blocks as between audit sections
+        // (§FS-004-check-audit.1).
+        let reported = report::finding_blocks_with_context(outcomes, color, contexts);
+        if reported.is_empty() {
+            // The marker is what an empty findings section prints rather than a
+            // line the run adds beside its sections, so it follows the selection
+            // (§FS-004-check-audit.2). Withheld when a file could not be
+            // measured (§FS-004-check-audit.5).
+            if errors.is_empty() {
+                sections.push(report::success_marker(&loaded.config.output.success, color));
+            }
+        } else {
+            sections.extend(reported);
         }
-    } else {
-        sections.extend(reported);
     }
 
-    let silenced: Vec<String> = outcomes
-        .iter()
-        .filter_map(|outcome| match outcome {
-            Outcome::Silenced {
-                overflow,
-                exception_max,
-            } => Some(report::silenced_line(overflow, *exception_max)),
-            Outcome::Reported(_) => None,
-        })
-        .collect();
-    if !silenced.is_empty() {
-        sections.push(silenced.join("\n"));
+    if options.prints(Section::Silenced) {
+        let silenced: Vec<String> = outcomes
+            .iter()
+            .filter_map(|outcome| match outcome {
+                Outcome::Silenced {
+                    overflow,
+                    exception_max,
+                } => Some(report::silenced_line(overflow, *exception_max)),
+                Outcome::Reported(_) => None,
+            })
+            .collect();
+        if !silenced.is_empty() {
+            sections.push(silenced.join("\n"));
+        }
     }
 
     // Omitted when there is nothing to inventory: a repository with no
     // exceptions pays no lines for the section (§FS-004-check-audit.2).
     let kinds = inventory.kinds;
-    if !kinds.is_empty() {
+    if options.prints(Section::Exceptions) && !kinds.is_empty() {
         let paths = inventory.kind_paths;
         sections.push(format!(
             "exceptions:\n  structural (never expires): {} entries across {} paths\n  deferred (carrying debt): {} entries across {} paths",
@@ -332,7 +468,7 @@ fn render_text(
         ));
     }
 
-    if let Some(top) = &inventory.top {
+    if let Some(top) = printed(&inventory.top, Section::Top, options) {
         for (unit, ranked) in top {
             let mut lines = vec![format!("top {unit}:")];
             for (value, path) in ranked {
@@ -342,7 +478,7 @@ fn render_text(
         }
     }
 
-    if let Some(stale) = &inventory.stale {
+    if let Some(stale) = printed(&inventory.stale, Section::Stale, options) {
         let mut lines = vec!["stale exceptions:".to_owned()];
         if stale.is_empty() {
             lines.push("  none".to_owned());
@@ -353,7 +489,7 @@ fn render_text(
         sections.push(lines.join("\n"));
     }
 
-    if let Some(loose) = &inventory.loose {
+    if let Some(loose) = printed(&inventory.loose, Section::Loose, options) {
         let mut lines = vec!["loose ceilings:".to_owned()];
         if loose.is_empty() {
             lines.push("  none".to_owned());
@@ -364,11 +500,16 @@ fn render_text(
         sections.push(lines.join("\n"));
     }
 
-    if let Some(coverage) = &inventory.coverage {
+    if let Some(coverage) = printed(&inventory.coverage, Section::Coverage, options) {
         sections.push(render_coverage_text(coverage));
     }
 
     sections.join("\n\n")
+}
+
+/// A computed section, when the selection prints it (§FS-004-check-audit.2).
+fn printed<'a, T>(section: &'a Option<T>, name: Section, options: &AuditOptions) -> Option<&'a T> {
+    section.as_ref().filter(|_| options.prints(name))
 }
 
 fn render_coverage_text(coverage: &Coverage) -> String {
