@@ -161,18 +161,23 @@ struct Inventory {
     kind_paths: KindPathCounts,
 }
 
+/// Runs the audit and renders the report in the format the options resolve to.
+///
+/// The selection is refused against JSON here as well as at the CLI, because
+/// `findings`, `silenced` and `exceptions` are `required` in
+/// `schema/audit.schema.json`: a filtered object would not validate against the
+/// contract it claims to satisfy (§FS-004-check-audit.2). The CLI refuses the
+/// flag pair with its usage screen; this refuses the same thing for a library
+/// caller, and for a config whose `[output].format` is what makes the run JSON.
+/// Accepting a selection and ignoring it is the one outcome the caller cannot
+/// tell apart from a section that had nothing in it.
 pub fn run(options: &AuditOptions) -> Result<Run, CommandError> {
     let loaded = cli::load(&options.root, options.config_path.as_deref())?;
     let format = options
         .format
         .unwrap_or_else(|| loaded.config.output.format.into());
-    // `findings`, `silenced` and `exceptions` are `required` in
-    // `schema/audit.schema.json`, so a filtered object would not validate
-    // against the contract it claims to satisfy (§FS-004-check-audit.2). The
-    // CLI refuses the flag pair with its usage screen; this refuses the same
-    // thing for a library caller, and for a config whose `[output].format` is
-    // what makes the run JSON — accepting a selection and ignoring it is the
-    // one outcome the caller cannot tell from an empty section.
+    // A selection is a text-report request, whatever made the run JSON
+    // (§FS-004-check-audit.2).
     if options.only.is_some() && format == Format::Json {
         return Err(CommandError::Usage(
             "--only selects sections of the text report and is not valid with --format json"
@@ -426,10 +431,9 @@ fn render_text(
         // (§FS-004-check-audit.1).
         let reported = report::finding_blocks_with_context(outcomes, color, contexts);
         if reported.is_empty() {
-            // The marker is what an empty findings section prints rather than a
-            // line the run adds beside its sections, so it follows the selection
-            // (§FS-004-check-audit.2). Withheld when a file could not be
-            // measured (§FS-004-check-audit.5).
+            // The marker is the empty findings section's own output, so it
+            // follows the selection (§FS-004-check-audit.2), and is withheld
+            // when a file could not be measured (§FS-004-check-audit.5).
             if errors.is_empty() {
                 sections.push(report::success_marker(&loaded.config.output.success, color));
             }
