@@ -1,0 +1,25 @@
+# E2E-085 with the one flag that could plausibly overwrite the file. `--force`
+# re-writes the generated documents, and the config is not one of them: an
+# existing config is reported as `exists` and left byte-for-byte unchanged, even
+# with `--force` (§FS-002-init.2), and the deprecated path is still named
+# (§FS-001-config.8.2).
+args = ["init", "--force"]
+exit = 0
+git = true
+creates = ["AGENTS.md"]
+# No second config, anywhere under the new home.
+absent = [".agent-grounds"]
+stderr_contains = [
+  "exists",
+  ".agents/fissile.toml is deprecated; move it to .agent-grounds/fissile.toml",
+  # The `next:` block sends the reader to the config this run found, which is
+  # still the old one (§FS-002-init.5).
+  "Review .agents/fissile.toml",
+]
+
+# The project's config is left as it was: its own rule is still there, and none
+# of the generated default's rules were written over or beside it.
+[[files]]
+path = ".agents/fissile.toml"
+contains = ['id = "the-projects-own-rule"', "soft = 40"]
+excludes = ["large-file-default", "citable-spec", "entrypoint"]
