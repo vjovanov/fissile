@@ -7,5 +7,5 @@ stderr_contains = [
   "next:",
   "--no-hook skipped the managed hook; wire fissile check --staged into your commit flow — a hook manager or core.hooksPath, if this repo uses one.",
 ]
-creates = [".agents/fissile.toml", "AGENTS.md"]
+creates = [".agent-grounds/fissile.toml", "AGENTS.md"]
 absent = [".git/hooks/pre-commit"]

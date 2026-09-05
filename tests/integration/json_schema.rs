@@ -63,9 +63,9 @@ fn temp_repo() -> PathBuf {
     static COUNTER: AtomicUsize = AtomicUsize::new(0);
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
     let dir = std::env::temp_dir().join(format!("fissile-schema-{}-{n}", std::process::id()));
-    fs::create_dir_all(dir.join(".agents")).unwrap();
+    fs::create_dir_all(dir.join(".agent-grounds")).unwrap();
     fs::create_dir_all(dir.join("src")).unwrap();
-    fs::write(dir.join(".agents/fissile.toml"), CONFIG).unwrap();
+    fs::write(dir.join(".agent-grounds/fissile.toml"), CONFIG).unwrap();
     let body: String = (0..250).map(|i| format!("fn f{i}() {{}}\n")).collect();
     fs::write(dir.join("src/big.rs"), body).unwrap();
     dir

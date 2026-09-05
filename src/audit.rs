@@ -27,6 +27,9 @@ pub struct AuditOptions {
 pub struct Run {
     pub output: String,
     pub failed: bool,
+    /// What stderr owes beside the findings: today, the deprecated config home
+    /// this run was governed by (§FS-001-config.8.2).
+    pub notes: Vec<String>,
     /// File-level measurement errors; force exit 2 (§FS-004-check-audit.5).
     pub errors: Vec<String>,
 }
@@ -155,6 +158,7 @@ pub fn run(options: &AuditOptions) -> Result<Run, CommandError> {
     Ok(Run {
         output,
         failed,
+        notes: cli::config_notes(&loaded.source),
         errors,
     })
 }

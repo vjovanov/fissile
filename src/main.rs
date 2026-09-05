@@ -110,6 +110,12 @@ fn run_init(args: &[String]) -> ExitCode {
     let dry_run = options.dry_run;
     match init::run(&options) {
         Ok(report) => {
+            // `init` does not discover, so the deprecation is its own to say: a
+            // repository whose config it found at the old home hears it from
+            // nowhere else (§FS-001-config.8.2, §FS-002-init.2).
+            if let Some(warning) = report.deprecation() {
+                eprintln!("{warning}");
+            }
             eprintln!("{}", report.render());
             // A dry run is the one way to read the instructions without writing
             // a file, so it prints them — on stdout, keeping the planned writes
@@ -192,15 +198,10 @@ fn run_check(args: &[String]) -> ExitCode {
     };
 
     match check::run(&options) {
-        Ok(run) => {
-            // Under `--format json` stdout is holding a machine shape, so the
-            // run's account of a registry it can no longer read comes out here
-            // rather than being lost (§FS-004-check-audit.5).
-            for note in &run.notes {
-                eprintln!("{note}");
-            }
-            finish_run("check", &run.output, run.failed, &run.errors)
-        }
+        // Under `--format json` stdout is holding a machine shape, so the run's
+        // account of a registry it can no longer read comes out on stderr rather
+        // than being lost (§FS-004-check-audit.5).
+        Ok(run) => finish_run("check", &run.output, run.failed, &run.notes, &run.errors),
         Err(error) => {
             eprintln!("fissile check: {error}");
             ExitCode::from(2)
@@ -226,7 +227,7 @@ fn run_measure(args: &[String]) -> ExitCode {
     match measure::run(&options) {
         // Never `failed`: measuring is inspection, and a file over a hard limit
         // is an answer rather than a verdict (§FS-007-measure.1).
-        Ok(run) => finish_run("measure", &run.output, false, &run.errors),
+        Ok(run) => finish_run("measure", &run.output, false, &run.notes, &run.errors),
         Err(error) => {
             eprintln!("fissile measure: {error}");
             ExitCode::from(2)
@@ -234,10 +235,21 @@ fn run_measure(args: &[String]) -> ExitCode {
     }
 }
 
-/// Print a run's findings and its file-level errors, then map them to the exit
-/// code: errors exit 2 even without a standing hard finding, because silently
-/// passing an unmeasurable file would make the gate unsound (§FS-004-check-audit.5).
-fn finish_run(command: &str, output: &str, failed: bool, errors: &[String]) -> ExitCode {
+/// Print a run's findings, its notes and its file-level errors, then map them to
+/// the exit code: errors exit 2 even without a standing hard finding, because
+/// silently passing an unmeasurable file would make the gate unsound
+/// (§FS-004-check-audit.5). Notes change no exit code — a deprecated config path
+/// is said, never charged (§FS-001-config.8.2).
+fn finish_run(
+    command: &str,
+    output: &str,
+    failed: bool,
+    notes: &[String],
+    errors: &[String],
+) -> ExitCode {
+    for note in notes {
+        eprintln!("{note}");
+    }
     if !output.is_empty() {
         println!("{output}");
     }
@@ -295,7 +307,7 @@ fn run_audit(args: &[String]) -> ExitCode {
     }
 
     match audit::run(&options) {
-        Ok(run) => finish_run("audit", &run.output, run.failed, &run.errors),
+        Ok(run) => finish_run("audit", &run.output, run.failed, &run.notes, &run.errors),
         Err(error) => {
             eprintln!("fissile audit: {error}");
             ExitCode::from(2)
@@ -345,6 +357,9 @@ fn run_limits(args: &[String]) -> ExitCode {
         // Never a gate: the inventory is an answer, and the config loading is
         // the whole of what can go wrong (§FS-010-limits.1).
         Ok(run) => {
+            for note in &run.notes {
+                eprintln!("{note}");
+            }
             println!("{}", run.output);
             ExitCode::SUCCESS
         }

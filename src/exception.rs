@@ -57,6 +57,9 @@ pub struct Run {
     pub output: String,
     /// Said on stderr without changing the outcome (§FS-005-exception-add.4).
     pub warnings: Vec<String>,
+    /// What discovery owes the reader, said whole rather than under this
+    /// command's own warning prefix (§FS-001-config.8.2).
+    pub notes: Vec<String>,
 }
 
 pub fn run(options: &AddOptions) -> Result<Run, CommandError> {
@@ -158,12 +161,14 @@ pub fn run(options: &AddOptions) -> Result<Run, CommandError> {
     let warnings = restatement_warning(options, &path, unit)
         .into_iter()
         .collect();
+    let notes = cli::config_notes(&loaded.source);
 
     if options.dry_run {
         let note = step_note.map_or_else(String::new, |note| format!(" ({note})"));
         return Ok(Run {
             output: format!("{rendered}\nwould update {}{note}", registry_rel.display()),
             warnings,
+            notes,
         });
     }
 
@@ -178,6 +183,7 @@ pub fn run(options: &AddOptions) -> Result<Run, CommandError> {
             registry_rel.display()
         ),
         warnings,
+        notes,
     })
 }
 

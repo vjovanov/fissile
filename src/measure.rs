@@ -26,6 +26,9 @@ pub struct MeasureOptions {
 /// limit is an answer, not a verdict (§FS-007-measure.1).
 pub struct Run {
     pub output: String,
+    /// What stderr owes beside the rows: today, the deprecated config home this
+    /// run was governed by (§FS-001-config.8.2).
+    pub notes: Vec<String>,
     pub errors: Vec<String>,
 }
 
@@ -97,7 +100,11 @@ pub fn run(options: &MeasureOptions) -> Result<Run, CommandError> {
         }
         Format::Json => Json::Array(rows.iter().map(row_json).collect()).render(),
     };
-    Ok(Run { output, errors })
+    Ok(Run {
+        output,
+        notes: cli::config_notes(&loaded.source),
+        errors,
+    })
 }
 
 /// Every rule that measures this file, with the ceilings each registry records

@@ -384,8 +384,8 @@ Failures split by scope. A **run-level** failure — an unreadable or invalid
 config, an invalid exception registry, a failed `git diff --cached`, an
 ambiguous rule overlap — aborts before findings and exits `2` with a single
 `fissile <command>:` diagnostic on stderr. When the failing document is a file,
-the diagnostic names it (`.agents/fissile.toml: config parse error: … at line
-100`), and a failed git invocation appends git's own first stderr line so
+the diagnostic names it (`.agent-grounds/fissile.toml: config parse error: … at
+line 100`), and a failed git invocation appends git's own first stderr line so
 "not a git repository" is visible verbatim.
 
 A **file-level** failure — one path that cannot be read or measured (missing,

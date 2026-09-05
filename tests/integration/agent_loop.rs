@@ -41,9 +41,9 @@ const SOFT_FILE: &str = "    src/grew.rs: 5 non-blank lines (budget 2)";
 fn work_dir() -> PathBuf {
     let dir = std::env::temp_dir().join(format!("fissile-agent-loop-{}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
-    fs::create_dir_all(dir.join(".agents")).unwrap();
+    fs::create_dir_all(dir.join(".agent-grounds")).unwrap();
     fs::create_dir_all(dir.join("src")).unwrap();
-    fs::write(dir.join(".agents/fissile.toml"), CONFIG).unwrap();
+    fs::write(dir.join(".agent-grounds/fissile.toml"), CONFIG).unwrap();
     dir
 }
 

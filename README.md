@@ -56,15 +56,15 @@ cargo install --git https://github.com/vjovanov/fissile
 ## Quickstart
 
 ```sh
-fissile init            # writes .agents/fissile.toml, AGENTS.md, and the git hook
+fissile init            # writes .agent-grounds/fissile.toml, AGENTS.md, and the git hook
 ```
 
 ```text
-wrote ./.agents/fissile.toml
+wrote ./.agent-grounds/fissile.toml
 wrote ./AGENTS.md
 wrote ./.git/hooks/pre-commit
 next:
-1. Review .agents/fissile.toml: the source rule budgets common code extensions; add this repo's languages or tune the limits.
+1. Review .agent-grounds/fissile.toml: the source rule budgets common code extensions; add this repo's languages or tune the limits.
 2. Commit a change to see the pre-commit hook run fissile check --staged.
 3. Run fissile audit once and add justified exceptions with fissile exception add.
 see AGENTS.md for what agents are told; the findings carry the rest.
@@ -365,7 +365,7 @@ assert!(checker.check(&file)?.is_empty());
 
 ## Configuration
 
-A single versioned TOML file at `.agents/fissile.toml` — data, not a plugin
+A single versioned TOML file at `.agent-grounds/fissile.toml` — data, not a plugin
 surface. Budgets are set per extension, per glob, and per unit (`bytes`,
 `lines`, or `tokens`); each rule names a message template. Full schema in
 [`docs/functional-spec/FS-001-config.md`](docs/functional-spec/FS-001-config.md),
