@@ -413,8 +413,10 @@ pub fn run(options: &InitOptions) -> Result<Report, InitError> {
 /// still at the old path has an existing config, so the default home defers to
 /// it: writing the generated default at the new path instead would take
 /// precedence over the project's own rules on the very next run
-/// (§FS-001-config.8.1). A `--config` the caller spelled out is never moved, and
-/// never remarked on.
+/// (§FS-001-config.8.1). The rule is about the default path, not about how the
+/// caller arrived at it: a `--config` spelling out that same path defers too,
+/// because the shadowing this prevents does not care who named the file. Any
+/// other `--config` is taken as given, and never remarked on.
 fn existing_config(options: &InitOptions) -> (PathBuf, bool) {
     let deprecated = PathBuf::from(crate::config::DEPRECATED_CONFIG_HOME);
     if options.config_path == Path::new(crate::config::CONFIG_HOME)

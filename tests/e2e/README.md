@@ -104,3 +104,4 @@ The harness drives the real `fissile` binary, so every documented behavior under
 - `E2E-083-the-deprecated-home-still-governs-and-says-so` — the old path keeps working and says to move.
 - `E2E-084-the-config-home-wins-and-names-what-it-ignored` — with both present, precedence is stated rather than silent.
 - `E2E-085-init-keeps-a-config-at-the-deprecated-home` — an existing config is never replaced by a generated one.
+- `E2E-086-init-force-keeps-a-config-at-the-deprecated-home` — `--force` does not reach the config either.
