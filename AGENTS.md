@@ -1,5 +1,5 @@
 <!-- BEGIN GRUND MANAGED BLOCK -->
-## Grounding with grund (v7)
+## Grounding with grund (v8)
 
 This project uses [`grund`](https://github.com/vjovanov/grund): every spec, goal, decision, and end-to-end test has a stable ID `<KIND>-<NNN>-<slug>[.<section>]` (`KIND ∈ {GND, GOAL, FS, AR, DF, DA, RM}`), cited with the marker `§` — e.g. `<§>FS-042-user-login.3.1` (the `FS-042-user-login` here is a shape illustration, not a real ID in this repo, hence the `<§>` escape). Type `$$` in a grund-aware editor and it becomes `§`. Bare ID-shaped tokens are also recognized as citations because `[reference] strict = false` is set in `grund.toml`; remove that compatibility override or set strict back to `true` to require the `§` marker (run `grund fmt --marker` first to upgrade existing bare citations).
 
@@ -48,9 +48,11 @@ Declarations are heading lines `# FS-042-user-login: …` in markdown. In a code
 
 ### Citation directions
 
-- **tests/e2e/** must cite FS; avoid citing AR.
-- **tests/integration/** should cite AR.
-Unlisted kinds and pairs are fine.
+`must`/`never` are `grund check` errors; `should`/`avoid` are suggestions (`grund check --suggestions`).
+
+- Each file in **tests/e2e/** must cite FS; avoid citing AR.
+- Each file in **tests/integration/** should cite AR.
+Anything not listed above is allowed.
 
 ### Clickable citations
 
