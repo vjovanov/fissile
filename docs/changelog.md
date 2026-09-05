@@ -32,6 +32,8 @@ and at 0.x semver puts the minor number in charge of it.
 
 ## Unreleased
 
+## 2. [0.8.3] — 2026-09-05
+
 ### Added
 
 - §FS-001-config.8, §FS-002-init.2: the config's home is
@@ -202,32 +204,9 @@ and at 0.x semver puts the minor number in charge of it.
   the command would refuse the number, so it never offers a ceiling the next
   call would reject. Registry contents are unchanged. Resolves #45. (PR #54)
 
-## 2. [0.8.2] — 2026-08-31
-
-### Changed
-
-- §FS-001-config.0.1: the built-in defaults budget a Markdown file by how it is
-  read. The flat `markdown-docs` rule (`**/*.md`, 250/500) splits into
-  `citable-spec` (`**/*.md`, soft 750 / hard 2000) — a document opened when
-  needed and, with stable section IDs, read a section at a time, so its length
-  is not charged on every read the way a source file's is — and `entrypoint`
-  (the §FS-002-init.3 family plus `skills/**/*.md`, soft 250 / hard 500), which
-  is loaded whole into every agent session. An exact filename and a rooted glob
-  outrank `**/*.md` on the §FS-001-config.3.2 specificity order, so neither
-  needs a `priority`. No schema version moves; a repository that already has a
-  config owns it and is unaffected. This repository's own `spec-docs` rule
-  follows, `CLAUDE.md` moves to a new `entrypoints` rule, and the deferred
-  exception that let `FS-001-config.md` sit at its natural size is removed —
-  a 300-line ceiling under a 750-line limit is a run-level error, not merely
-  redundant. Resolves #27 and #41. (PR #42)
-- Testing: adopted grund's two non-citable test homes. The e2e corpus moved
-  from `e2e/cases` to `tests/e2e/cases` (harness at `tests/e2e/main.rs`), the
-  cross-part proofs that lived beside it in `tests/` moved into
-  `tests/integration/`, and every `grund.toml` `[[kinds]]` block's deprecated
-  `prefix` key is now `kind`. Resolves #39. (PR #40)
-
 ## 3. Older releases
 
+- [0.8.2](changelog/0.8.2.md) — 2026-08-31: - §FS-001-config.0.1: the built-in defaults budget a Markdown file by how it is read.
 - [0.8.1](changelog/0.8.1.md) — 2026-08-30: - §FS-002-init.5: `init::Report` carries one `HookStatus` — `Installed`, `SkippedNotGit`, `SkippedByFlag` — in place of the `hook_skipped_not_git` boolean, so the hook step 2 reports is a value every path has to answer for instead of a flag that can be left unset.
 - [0.8.0](changelog/0.8.0.md) — 2026-08-26: - §FS-005-exception-add.2, §FS-008-exception-retune.1: a ceiling stated with `--max` is written as stated; the `[exceptions.bump]` step rounds only what the command measured (§DF-010-stated-ceilings-are-exact).
 - [0.7.1](changelog/0.7.1.md) — 2026-08-24: - §FS-002-init.3: `AGENTS.md` is the one entrypoint that holds the managed block, and every other one `init` touches is a **symbolic link** to it (§DF-009-one-file-agents-read).
