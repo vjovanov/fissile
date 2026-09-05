@@ -64,6 +64,10 @@ path = "tests/integration/rule_exclusions.rs"
 name = "help"
 path = "tests/integration/help.rs"
 
+[[test]]
+name = "config_discovery"
+path = "tests/integration/config_discovery.rs"
+
 [dependencies]
 # Config is data, not code (§GOAL-002-tiny-footprint): serde + toml parse the
 # versioned TOML document. The glob engine and CLI argument parsing are

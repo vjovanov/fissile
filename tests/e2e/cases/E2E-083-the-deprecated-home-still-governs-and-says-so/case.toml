@@ -1,0 +1,13 @@
+# The tree has not been migrated: its only config is at the deprecated path.
+# It still governs the run (§FS-001-config.8.1) and the run says so once, on
+# stderr, naming both paths (§FS-001-config.8.2).
+args = ["limits", "--no-color"]
+exit = 0
+# Exact, so the warning is proven absent from stdout as well as present on
+# stderr: `limits` output is a stream a reader diffs against the config, and
+# the JSON surface of every other command is one a caller parses.
+stdout_equals = """
+from-the-deprecated-home [notes/*.md] lines soft 40"""
+stderr_contains = [
+  ".agents/fissile.toml is deprecated; move it to .agent-grounds/fissile.toml",
+]

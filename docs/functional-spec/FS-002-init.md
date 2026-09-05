@@ -21,7 +21,7 @@ fissile init [<path>] [--name <name>] [--force] [--dry-run]
 - `--name <name>` is the human-readable project name used in a newly created
   `AGENTS.md` heading. It defaults to the target directory basename.
 - `--config <path>` changes the config path written under `<path>`. The default
-  is `.agents/fissile.toml`.
+  is `.agent-grounds/fissile.toml` (§FS-001-config.8).
 - `--exceptions` also creates the configured soft and hard exception registry
   paths when absent.
 - `--hook` forces installation of the managed pre-commit hook (§6) and errors if
@@ -43,7 +43,7 @@ entrypoint selection rules in §3 and the automatic hook install in §6.
 Default `fissile init` writes:
 
 - one agent entrypoint or managed block, per §3;
-- `<path>/.agents/fissile.toml`, when absent, using the schema from
+- `<path>/.agent-grounds/fissile.toml`, when absent, using the schema from
   §FS-001-config. The generated config is fully populated: every schema field is
   written at its default value, ready to edit in place, rather than a minimal
   skeleton (§DF-002-explicit-config).
@@ -54,9 +54,17 @@ With `--exceptions`, it also writes the configured exception registries, default
 contains `fissile_exceptions_version = 2`, explanatory comments, and no
 exception entries.
 
-Existing `.agents/fissile.toml` and existing exception registries are
-project-owned. They are reported as `exists` and left byte-for-byte unchanged,
-even with `--force`.
+An existing config and existing exception registries are project-owned. They
+are reported as `exists` and left byte-for-byte unchanged, even with `--force`.
+
+A config at the deprecated `.agents/fissile.toml` (§FS-001-config.8) is that
+same existing config, so a repository that has one and no
+`.agent-grounds/fissile.toml` gets **no** config written. `init` reports the old
+path as `exists`, leaves it byte-for-byte, and emits the deprecation warning so
+the reader knows to move it. Generating the fully populated default at the new
+path instead would take precedence over the project's own rules on the very next
+run — a config silently replaced by generic limits, which is the one outcome
+this promise exists to prevent.
 
 ## 3. Agent Entrypoints
 
@@ -192,7 +200,7 @@ document (§FS-006-cli.2) and would otherwise leave the flag undiscoverable.
 On success, stderr reports one path per line:
 
 ```text
-wrote .agents/fissile.toml
+wrote .agent-grounds/fissile.toml
 appended AGENTS.md
 ```
 
@@ -205,7 +213,7 @@ After a run that wrote, appended, or updated something, stderr prints a short
 
 ```text
 next:
-1. Review .agents/fissile.toml and tune rule limits.
+1. Review .agent-grounds/fissile.toml and tune rule limits.
 2. Commit a change to see the pre-commit hook run fissile check --staged.
 3. Run fissile audit once and add justified exceptions with fissile exception add.
 see AGENTS.md for what agents are told; the findings carry the rest.
@@ -215,8 +223,13 @@ The `next:` block is suppressed when every selected file already exists with the
 current managed block.
 
 The block must not promise machinery the run did not install, and must not send
-the reader to a file that is not there. Three clauses follow from that:
+the reader to a file that is not there. Four clauses follow from that:
 
+- Step 1 names the config path this run wrote or found, not a fixed filename:
+  `--config` moves it, and a repository still on the deprecated
+  `.agents/fissile.toml` (§FS-001-config.8) keeps its config where the default
+  no longer looks. Naming the literal would send the reader to a file the run
+  did not touch.
 - Step 2 reports the hook the run leaves behind (§6), not the flag it was
   given: a managed block there — this run's, or an earlier run's that
   `--no-hook` declined to touch — earns the invitation above.

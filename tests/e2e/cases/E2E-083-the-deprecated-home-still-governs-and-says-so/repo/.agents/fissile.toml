@@ -1,0 +1,17 @@
+fissile_config_version = 1
+
+[scan]
+include = ["notes"]
+exclude = []
+respect_gitignore = false
+
+[[messages]]
+id = "split"
+text = "Split the note."
+
+[[rules]]
+id = "from-the-deprecated-home"
+include = ["notes/*.md"]
+unit = "lines"
+soft = 40
+soft_message = "split"

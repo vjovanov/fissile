@@ -1,0 +1,9 @@
+# The tree's only config is at the home §FS-001-config.8.1 discovers first.
+# `limits` prints the rules of whichever document was read and nothing else
+# (§FS-010-limits.2, §FS-010-limits.5), so its stdout is the cheapest available
+# proof of which document that was: the built-in defaults would print four rules
+# with none of these names.
+args = ["limits", "--no-color"]
+exit = 0
+stdout_equals = """
+from-the-config-home [notes/*.md] lines soft 40"""

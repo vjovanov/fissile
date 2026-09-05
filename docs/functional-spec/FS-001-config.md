@@ -1,10 +1,11 @@
 # FS-001-config: fissile reads a versioned TOML config file
 
-`fissile` is configured by a single TOML document. The default discovery path is
-`.agents/fissile.toml`; an embedding CLI may also pass an explicit path. The
-config is data, not code, so it can be read inside a pre-commit hook without
-invoking a plugin system (§GOAL-002-tiny-footprint) while still making limits and
-messages project-owned (§GOAL-005-configurable).
+`fissile` is configured by a single TOML document. Its home is
+`.agent-grounds/fissile.toml`, and the former home `.agents/fissile.toml` is
+still read and reported as deprecated (§8); an embedding CLI may also pass an
+explicit path. The config is data, not code, so it can be read inside a
+pre-commit hook without invoking a plugin system (§GOAL-002-tiny-footprint)
+while still making limits and messages project-owned (§GOAL-005-configurable).
 
 The concrete example shape is maintained in `examples/fissile.toml`.
 
@@ -364,3 +365,68 @@ cannot be evaluated unless the caller supplies token measurements directly. With
 substituted with the file path. The command must print one integer token count.
 
 The default build does not bundle a tokenizer model (§GOAL-002-tiny-footprint).
+
+## 8. Where the Config Lives
+
+The config's home is `.agent-grounds/fissile.toml`. `.agents/` holds agent
+instructions and is mounted read-only by sandboxed agent runtimes, so a config
+kept there is one the toolchain that owns it cannot maintain
+(§DF-012-config-home). `.agents/fissile.toml` remains readable so that no
+repository breaks on upgrade, and every run that reads it says it should move.
+
+### 8.1 Discovery Order
+
+Without an explicit path, `fissile` uses the first of these that exists:
+
+1. `<root>/.agent-grounds/fissile.toml`;
+2. `<root>/.agents/fissile.toml`;
+3. the built-in defaults (§0).
+
+Discovery stops at the first path that is present. A file that exists but does
+not parse is an error naming that file (§1), not a miss: falling through to the
+next candidate would govern the repository by a document the reader did not
+mean to be in force, and say nothing about the one they were editing.
+
+An explicit `--config <path>` is not discovery. The named file must exist, it is
+read as given, and it carries no deprecation warning even when it names
+`.agents/fissile.toml` — the caller said which document to read, so nothing is
+being chosen behind them (§FS-002-init.1, §DF-002-explicit-config).
+
+### 8.2 The Deprecation Warning
+
+A run whose config was discovered at `.agents/fissile.toml` emits exactly one
+warning line, naming both paths and the move:
+
+```text
+fissile: warning: .agents/fissile.toml is deprecated; move it to .agent-grounds/fissile.toml
+```
+
+The line goes to stderr in every mode, including `--format json`. Stdout carries
+the findings, and under `--format json` it is a stream a caller parses
+(§6, §FS-004-check-audit.1); a warning that entered it would break that caller,
+and the deprecation is addressed to the person reading the terminal rather than
+to the program reading the output.
+
+It is a warning and never a failure. A deprecated path leaves every exit code
+exactly as it was: the run that reports it passes or fails on its findings
+alone.
+
+The warning belongs to discovery, not to one command, so every command that
+discovers a config carries it — `check`, `audit`, `measure`, `limits`, and the
+`exception` family. A repository whose only contact with `fissile` is the
+pre-commit hook would otherwise never be told.
+
+### 8.3 Both Paths Present
+
+`.agent-grounds/fissile.toml` takes effect and `.agents/fissile.toml` is not
+read. That precedence is stated rather than silent: the run emits one warning
+line naming the file it ignored and the one in force.
+
+```text
+fissile: warning: .agents/fissile.toml is ignored; .agent-grounds/fissile.toml is the config in effect
+```
+
+A config being edited to no effect is the one failure this move could introduce,
+and it is invisible from outside: every run succeeds, every rule the reader
+wrote is missing from it, and nothing says why. One line is what separates that
+from a five-minute answer.
