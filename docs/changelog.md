@@ -65,6 +65,13 @@ and at 0.x semver puts the minor number in charge of it.
   the new field, normally with `None`, which is the whole report. A 0.x source
   break, so the minor number moves. (PR #63)
 
+- §AR-001-ci.2: CI's `grund check` job pins `grund` 0.13.0, up from 0.12.3, and
+  the agent entrypoint's grund managed block moves from v7 to v8 to match.
+  0.13.0 turns an unindexed declaration into a `grund check` error instead of a
+  warning and stops accepting the `prefix` spelling of `[[kinds]] kind`; this
+  repository already satisfied both, so pinning the new release found nothing
+  else to fix. (PR #N)
+
 ## 2. [0.8.3] — 2026-09-05
 
 ### Added
