@@ -35,6 +35,7 @@ fn report_for(entrypoints: &[&str]) -> Report {
         dry_run: false,
         hook: HookStatus::Installed,
         entrypoints: entrypoints.iter().map(PathBuf::from).collect(),
+        deprecation: None,
     }
 }
 
