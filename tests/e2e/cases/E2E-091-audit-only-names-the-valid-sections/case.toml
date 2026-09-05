@@ -1,0 +1,11 @@
+# An unknown section name fails loudly. The alternative — a silent empty report
+# — reads exactly like a section that had nothing to say, so a typo would look
+# like an answer (§FS-004-check-audit.2). The diagnostic names the bad name and
+# the whole valid set, in the canonical order the schema publishes, because the
+# caller's next move is to pick one from it.
+args = ["audit", "--only", "bogus", "--no-color"]
+exit = 2
+stderr_contains = [
+  "bogus",
+  "findings, silenced, exceptions, top, stale, loose, coverage",
+]

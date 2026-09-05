@@ -1,0 +1,14 @@
+# Named `coverage,stale`, printed stale first: sections render in the schema's
+# canonical order whatever order the caller typed (§FS-004-check-audit.2). The
+# selection is a set, so the same set is the same bytes — which is what
+# §GOAL-004-token-thrift.1 asks of every run.
+args = ["audit", "--only", "coverage,stale", "--no-color"]
+exit = 0
+stdout_equals = """
+stale exceptions:
+  docs/file-size-agent-exceptions.toml: src/gone.rs
+
+rule coverage:
+  rules matching no file: prose
+  files only under catch-all: none
+  unused messages: unused"""

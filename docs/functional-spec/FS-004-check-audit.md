@@ -248,6 +248,7 @@ array, a failing exit code, and nothing anywhere saying why.
 ```text
 fissile audit [--config <path>] [--format text|json] [--top <N>]
               [--stale-exceptions] [--rule-coverage]
+              [--only <section>[,<section>]]
 ```
 
 `audit` walks the configured scan scope and reports the current repository
@@ -345,6 +346,71 @@ state. It is for adoption and maintenance, not just pass/fail.
   line is the removal line of case 1.
 - `--rule-coverage` reports which rules matched zero files, which files matched
   only built-in catch-all rules, and which rule/message pairs are unused.
+- `--only <section>[,<section>]` prints the named sections of the **text**
+  report and nothing else. Coverage and registry maintenance are edit-run-edit
+  loops, and every iteration of one currently reprints a findings block the
+  reader is not looking at; the flag is how the text surface reaches one section
+  the way `--format json` already does (§GOAL-004-token-thrift.1).
+
+  The valid names are the seven top-level keys of `schema/audit.schema.json`,
+  and their canonical order is the order that schema declares them in:
+  `findings`, `silenced`, `exceptions`, `top`, `stale`, `loose`, `coverage`.
+  That schema is where the vocabulary comes from, so the text and the JSON
+  surface cannot drift into two names for one section: adding a section to the
+  schema adds it here, and this flag has no vocabulary of its own to keep in
+  step.
+
+  Naming a section is a request to compute it. `--only coverage` reports rule
+  coverage without `--rule-coverage`, and `--only stale` or `--only loose` runs
+  the registry pass without `--stale-exceptions`: the flag that would otherwise
+  ask for the section is what naming it already says. `findings` is the standing
+  findings, or the success marker in their place — the marker is what an empty
+  findings section prints (§1), so it appears when `findings` is named and not
+  otherwise, and `--only coverage` in a repository with nothing to report prints
+  coverage and no `ok`.
+
+  Sections render in canonical order whatever order they were named in, and a
+  name repeated selects its section once; a second `--only` adds to the
+  selection rather than replacing it. The flag names a set, so the same set
+  always prints the same bytes however the caller typed it
+  (§GOAL-004-token-thrift.1). A named section is rendered exactly as it is
+  without `--only` — including the `exceptions:` block omitting itself when both
+  registries are empty — so a selection can legitimately print nothing. Without
+  `--only`, `audit` prints every section it would print today, in canonical
+  order, which is the order it prints them in today.
+
+  `--only top` still requires `--top <N>`, and its absence is a usage error
+  naming `--top <N>`. This is the one place where naming a section does not
+  compute it, and the reason belongs here rather than in the reader's guess:
+  `top` is the only section whose computation takes a **parameter**, and no
+  default count is defensible — one repository's useful ranking is another's
+  whole inventory. Naming the section says which ranking to print, not how far
+  down it goes, so the rule above cannot reach it and the flag carrying the
+  number is still required.
+
+  Selection governs what is printed and nothing else. Exit status is computed
+  from the whole run, so a repository with a standing hard overflow run with
+  `--only coverage` still exits non-zero, and §5's exit `2` for a file that
+  could not be measured is equally untouched — as is every stderr diagnostic
+  either one carries. A flag that changed a gate's exit code by hiding its
+  output would be a trap, and hiding is all this flag does.
+
+  `--only` is a text-surface flag: passing it with `--format json` is a usage
+  error, not a filter and not a silent no-op. `findings`, `silenced` and
+  `exceptions` are `required` in the schema, so a filtered object would not
+  validate against the contract it claims to satisfy, and the JSON surface
+  already addresses its sections independently and already omits the ones
+  nobody asked for. A consumer who wants one key has `jq`. Accepting the flag
+  and ignoring it is the failure worth refusing outright: it is the one
+  outcome where the caller cannot tell selection from a section that had
+  nothing to say.
+
+  An unknown or empty section name is a usage error naming the name that was
+  not recognized and the valid set in canonical order, and exits `2` with its
+  diagnostic on stderr (§5) — never a silent empty report, which reads exactly
+  like a section that had nothing in it. The seven names are public API in a
+  second place from here on: renaming one breaks a command line as well as a
+  JSON consumer.
 
 `audit` exits non-zero for hard overflows and schema errors. Soft-only findings
 exit `0`. Stale exceptions follow `[exceptions].stale`: `warn`, `error`, or

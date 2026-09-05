@@ -1,0 +1,11 @@
+# `--only` selects sections of the *text* report. The JSON object makes
+# `findings`, `silenced` and `exceptions` required, so a filtered one would not
+# validate against the schema it claims to satisfy — and a JSON consumer already
+# addresses sections by key. So the combination is a usage error rather than a
+# filter, and rather than a flag quietly ignored (§FS-004-check-audit.2).
+args = ["audit", "--only", "coverage", "--format", "json"]
+exit = 2
+stderr_contains = [
+  "--only",
+  "--format json",
+]
