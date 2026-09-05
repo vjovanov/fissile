@@ -44,7 +44,7 @@ and at 0.x semver puts the minor number in charge of it.
   keeps it byte-for-byte and gets no second one written at the new home, because
   a generated default there would take precedence over the project's own rules on
   the very next run. Sibling issues carry the same move in `grund`, `rhei` and
-  `ephor`; `.agents/skills` is out of scope everywhere. Resolves #61. (PR #N)
+  `ephor`; `.agents/skills` is out of scope everywhere. Resolves #61. (PR #62)
 
 - §FS-001-config.3.4, §FS-010-limits.3, §FS-010-limits.4: a `[[rules]]` entry
   may declare `exclude` globs that remove a path from that rule before overlap
@@ -131,7 +131,7 @@ and at 0.x semver puts the minor number in charge of it.
   any of these with a struct literal must initialize the new field.
   `Config::load(root, explicit)` keeps its signature; the search order is
   reported through the additive `Config::discover`. A 0.x source break, so the
-  minor number moves. (PR #N)
+  minor number moves. (PR #62)
 
 - §FS-001-config.3.4: `fissile::config::RuleSpec` gains a public
   `exclude: Vec<String>` field. A library caller constructing the public struct
@@ -182,7 +182,7 @@ and at 0.x semver puts the minor number in charge of it.
   changes no exit code — but every run that reads it prints one warning line on
   stderr naming the move, and a run that finds a config at both paths says which
   one it ignored. Nothing breaks on upgrade; a repository migrates by moving the
-  file. (PR #N)
+  file. (PR #62)
 
 ### Fixed
 
