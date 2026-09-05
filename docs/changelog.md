@@ -49,12 +49,12 @@ and at 0.x semver puts the minor number in charge of it.
   with `--format json` is one too — `findings`, `silenced` and `exceptions` are
   `required` in the schema, so a filtered object would not validate. `audit`
   with no `--only` prints what it printed before, and the JSON surface is
-  unchanged. Resolves #15. (PR #N)
+  unchanged. Resolves #15. (PR #63)
 - §GOAL-004-token-thrift.1, §FS-006-cli.2: `fissile audit --help` names the JSON
   route, `fissile audit --format json --rule-coverage | jq .coverage`, and says
   that `--format json` is the agent surface. The goals document has designated
   it one since §GOAL-004-token-thrift was written; the screen's two examples
-  were both text and said so nowhere. (PR #N)
+  were both text and said so nowhere. (PR #63)
 
 ### Changed
 
@@ -63,7 +63,7 @@ and at 0.x semver puts the minor number in charge of it.
   `Section` enum and the `SECTIONS` array that fixes its canonical order. A
   library caller constructing the options with a struct literal must initialize
   the new field, normally with `None`, which is the whole report. A 0.x source
-  break, so the minor number moves. (PR #N)
+  break, so the minor number moves. (PR #63)
 
 ## 2. [0.8.3] — 2026-09-05
 
