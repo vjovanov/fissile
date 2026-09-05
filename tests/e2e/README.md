@@ -99,3 +99,8 @@ The harness drives the real `fissile` binary, so every documented behavior under
 - `E2E-078-limits-prints-rule-exclusions` — text inventory prints a non-empty rule exclusion after its includes.
 - `E2E-079-limits-json-carries-rule-exclusions` — JSON inventory carries a non-empty exclusion and omits an empty one.
 - `E2E-080-remove-reaches-an-orphan-shadow` — soft removal can reach the twin its earlier hard removal orphaned.
+- `E2E-081-the-config-home-governs-the-run` — a config at `.agent-grounds/` is the one in force.
+- `E2E-082-init-writes-the-config-home` — init installs the config at the new home and creates no `.agents/`.
+- `E2E-083-the-deprecated-home-still-governs-and-says-so` — the old path keeps working and says to move.
+- `E2E-084-the-config-home-wins-and-names-what-it-ignored` — with both present, precedence is stated rather than silent.
+- `E2E-085-init-keeps-a-config-at-the-deprecated-home` — an existing config is never replaced by a generated one.

@@ -1,0 +1,10 @@
+# Both paths hold a config. The two rules differ in id and in threshold, so the
+# single printed line says which document was read and leaves no reading in
+# which both could have contributed (§FS-001-config.8.3).
+args = ["limits", "--no-color"]
+exit = 0
+stdout_equals = """
+from-the-config-home [notes/*.md] lines soft 40"""
+stderr_contains = [
+  ".agents/fissile.toml is ignored; .agent-grounds/fissile.toml is the config in effect",
+]

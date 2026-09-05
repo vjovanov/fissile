@@ -28,3 +28,6 @@ workspace member the way grund's own integration suite is.
   schema (§FS-001-config, §DF-002-explicit-config).
 - `help.rs` — `--help` stays a one-screen surface and every subcommand carries
   an example (§GOAL-003-friendly-output.3).
+- `config_discovery.rs` — one search order serves every command, so the
+  deprecation of `.agents/fissile.toml` reaches stderr from all of them, never
+  stdout, and moves no exit code (§FS-001-config.8).

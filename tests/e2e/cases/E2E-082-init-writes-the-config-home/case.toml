@@ -1,0 +1,13 @@
+# No `repo/`: `init` starts from an empty tree, and `git = true` makes it a
+# repository so the run is the ordinary one (§FS-002-init.6).
+args = ["init"]
+exit = 0
+git = true
+creates = [".agent-grounds/fissile.toml", "AGENTS.md"]
+# The shallowest path that must not appear: nothing in this run has a reason to
+# create `.agents/` at all, so naming the directory is a stronger assertion than
+# naming the file inside it — and the file alone could not be asserted, since
+# the harness requires an `absent` path's directory to exist.
+absent = [".agents"]
+# Step 1 of the `next:` block names the config this run wrote (§FS-002-init.5).
+stderr_contains = ["Review .agent-grounds/fissile.toml"]
