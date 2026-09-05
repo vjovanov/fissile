@@ -70,7 +70,7 @@ and at 0.x semver puts the minor number in charge of it.
   0.13.0 turns an unindexed declaration into a `grund check` error instead of a
   warning and stops accepting the `prefix` spelling of `[[kinds]] kind`; this
   repository already satisfied both, so pinning the new release found nothing
-  else to fix. (PR #N)
+  else to fix. (PR #64)
 
 ## 2. [0.8.3] — 2026-09-05
 
