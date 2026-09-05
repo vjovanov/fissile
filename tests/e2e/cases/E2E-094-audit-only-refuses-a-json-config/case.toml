@@ -1,0 +1,12 @@
+# The config, not the command line, is what makes this run JSON, and `--only` is
+# refused there too. The CLI never sees the flag pair, so the refusal that
+# answers here is the one inside `audit::run`; without it the selection would be
+# accepted and quietly ignored — the one outcome the caller cannot tell from a
+# section that had nothing in it (§FS-004-check-audit.2).
+args = ["audit", "--only", "coverage"]
+exit = 2
+stdout_equals = ""
+stderr_contains = [
+  "--only",
+  "--format json",
+]

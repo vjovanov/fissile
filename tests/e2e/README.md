@@ -112,3 +112,4 @@ The harness drives the real `fissile` binary, so every documented behavior under
 - `E2E-091-audit-only-names-the-valid-sections` — an unknown name is a refusal, not an empty report.
 - `E2E-092-audit-only-is-a-text-flag` — the selector stops where the JSON contract starts.
 - `E2E-093-audit-only-findings-is-the-gate-output` — asked for findings, audit gives the gate's answer.
+- `E2E-094-audit-only-refuses-a-json-config` — a config's JSON format refuses the selector too.
