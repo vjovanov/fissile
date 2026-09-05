@@ -105,3 +105,10 @@ The harness drives the real `fissile` binary, so every documented behavior under
 - `E2E-084-the-config-home-wins-and-names-what-it-ignored` — with both present, precedence is stated rather than silent.
 - `E2E-085-init-keeps-a-config-at-the-deprecated-home` — an existing config is never replaced by a generated one.
 - `E2E-086-init-force-keeps-a-config-at-the-deprecated-home` — `--force` does not reach the config either.
+- `E2E-087-audit-only-prints-one-section` — `--only` prints the section asked for and no other.
+- `E2E-088-audit-only-keeps-a-failing-exit` — hiding a hard overflow does not unfail the run.
+- `E2E-089-audit-only-renders-in-schema-order` — the order named is not the order printed.
+- `E2E-090-audit-only-top-still-needs-a-count` — the one section naming does not compute.
+- `E2E-091-audit-only-names-the-valid-sections` — an unknown name is a refusal, not an empty report.
+- `E2E-092-audit-only-is-a-text-flag` — the selector stops where the JSON contract starts.
+- `E2E-093-audit-only-findings-is-the-gate-output` — asked for findings, audit gives the gate's answer.

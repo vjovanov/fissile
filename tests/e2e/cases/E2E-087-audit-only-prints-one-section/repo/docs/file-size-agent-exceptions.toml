@@ -1,0 +1,12 @@
+fissile_exceptions_version = 2
+
+[[exceptions]]
+path = "src/silenced.rs"
+match = "exact"
+rules = ["rust"]
+kind = "structural"
+max_accepted = { value = 100, unit = "lines" }
+until = "indefinite"
+reason = """
+Generated table: the shape is fixed by the format it mirrors.
+"""

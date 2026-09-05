@@ -1,0 +1,12 @@
+# The trap this case exists for: `src/big.rs` stands over the hard limit, and
+# `--only coverage` hides the finding that says so. The exit code is computed
+# from the run, not from what was printed, so it stays 1
+# (§FS-004-check-audit.2). A selector that quieted a gate would be worse than
+# no selector at all.
+args = ["audit", "--only", "coverage", "--no-color"]
+exit = 1
+stdout_equals = """
+rule coverage:
+  rules matching no file: prose
+  files only under catch-all: none
+  unused messages: unused"""

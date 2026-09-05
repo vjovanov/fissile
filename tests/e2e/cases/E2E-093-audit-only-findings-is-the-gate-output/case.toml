@@ -1,0 +1,8 @@
+# `findings` is the standing findings *or* the success marker in their place, so
+# a clean repository asked for that section alone prints exactly `ok` — and the
+# `exceptions:` counts this registry would otherwise produce stay off screen
+# (§FS-004-check-audit.2). The marker belongs to the section: it is what an
+# empty findings section prints, not a line the run adds on its own.
+args = ["audit", "--only", "findings", "--no-color"]
+exit = 0
+stdout_equals = "ok"

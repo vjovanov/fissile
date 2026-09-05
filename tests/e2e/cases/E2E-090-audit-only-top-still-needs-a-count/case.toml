@@ -1,0 +1,12 @@
+# `top` is the one section whose computation takes a parameter, so naming it
+# does not compute it: no count is defensible as a default, and naming the
+# section says which ranking to print rather than how far down it goes. The
+# absence of `--top <N>` is a usage error naming the flag, exit 2
+# (§FS-004-check-audit.2). No `repo/` — a usage error is one whatever tree the
+# caller is standing in.
+args = ["audit", "--only", "top", "--no-color"]
+exit = 2
+stderr_contains = [
+  "--only top",
+  "--top <N>",
+]

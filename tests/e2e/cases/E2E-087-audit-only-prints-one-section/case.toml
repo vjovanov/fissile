@@ -1,0 +1,12 @@
+# `--only coverage` names the section, and naming it is the request to compute
+# it: no `--rule-coverage` is passed. The tree has a standing soft finding, a
+# silenced overflow and a non-empty exception registry, so every section that
+# `--only` has to suppress has something to print; `stdout_equals` is what makes
+# "and nothing else" an assertion rather than a hope (§FS-004-check-audit.2).
+args = ["audit", "--only", "coverage", "--no-color"]
+exit = 0
+stdout_equals = """
+rule coverage:
+  rules matching no file: prose
+  files only under catch-all: none
+  unused messages: unused"""
