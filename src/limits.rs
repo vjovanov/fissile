@@ -5,7 +5,7 @@
 
 use std::path::PathBuf;
 
-use crate::cli::{CommandError, Format};
+use crate::cli::{self, CommandError, Format};
 use crate::config::Config;
 use crate::json::Json;
 use crate::{Glob, ScopedRule, Selector, Severity, Unit};
@@ -26,6 +26,9 @@ pub struct LimitsOptions {
 /// (§FS-010-limits.1).
 pub struct Run {
     pub output: String,
+    /// What stderr owes beside the inventory: today, the deprecated config home
+    /// this run read it from (§FS-001-config.8.2).
+    pub notes: Vec<String>,
 }
 
 /// Said when the config declares no rules, because printing nothing would read
@@ -36,7 +39,7 @@ const NO_RULES: &str = "no rules configured";
 pub fn run(options: &LimitsOptions) -> Result<Run, CommandError> {
     // The config and nothing else: the registries add nothing to the answer and
     // could only stop it being given while a tree is broken (§FS-010-limits.5).
-    let config = Config::load(&options.root, options.config_path.as_deref())?;
+    let (config, source) = Config::discover(&options.root, options.config_path.as_deref())?;
     let checker = config.to_checker()?;
     let format = options
         .format
@@ -59,7 +62,10 @@ pub fn run(options: &LimitsOptions) -> Result<Run, CommandError> {
         )])
         .render(),
     };
-    Ok(Run { output })
+    Ok(Run {
+        output,
+        notes: cli::config_notes(&source),
+    })
 }
 
 /// `<id> [<include>, …] <unit> soft <N> hard <M>`, with only the thresholds the

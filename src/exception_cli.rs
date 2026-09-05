@@ -88,6 +88,11 @@ fn run_exception_add(args: &[String]) -> ExitCode {
     };
     match exception::run(&options) {
         Ok(run) => {
+            // Discovery's note is already a whole line addressed to the reader,
+            // so it is not folded under this command's prefix (§FS-001-config.8.2).
+            for note in &run.notes {
+                eprintln!("{note}");
+            }
             for warning in &run.warnings {
                 eprintln!("fissile exception add: warning: {warning}");
             }
@@ -260,6 +265,9 @@ fn run_exception_retune(args: &[String]) -> ExitCode {
 
     match retune::run(&options) {
         Ok(run) => {
+            for note in &run.notes {
+                eprintln!("{note}");
+            }
             println!("{}", run.output);
             ExitCode::SUCCESS
         }
@@ -295,6 +303,9 @@ fn run_exception_remove(args: &[String]) -> ExitCode {
 
     match remove::run(&options) {
         Ok(run) => {
+            for note in &run.notes {
+                eprintln!("{note}");
+            }
             println!("{}", run.output);
             ExitCode::SUCCESS
         }

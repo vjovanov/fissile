@@ -32,6 +32,10 @@ usage: fissile init [<path>] [--name <name>] [--config <path>] [--exceptions]
                     [--hook] [--no-hook] [--force] [--dry-run] [--agents-md]
                     [--claude] [--gemini] [--copilot] [--cursor] [--windsurf] [--zed]
 
+--config defaults to .agent-grounds/fissile.toml; a repository whose config is
+still at the deprecated .agents/fissile.toml keeps it there and gets no second
+one.
+
 --dry-run reports the planned writes and prints the managed agent block, which
 is the one way to read what agents are told without writing a file.
 

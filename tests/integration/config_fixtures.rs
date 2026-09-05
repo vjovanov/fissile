@@ -13,10 +13,10 @@ fn load(relative: &str) -> Config {
 
 #[test]
 fn repo_config_loads_and_builds() {
-    let config = load(".agents/fissile.toml");
+    let config = load(".agent-grounds/fissile.toml");
     config
         .to_checker()
-        .expect(".agents/fissile.toml builds a checker");
+        .expect(".agent-grounds/fissile.toml builds a checker");
 }
 
 #[test]

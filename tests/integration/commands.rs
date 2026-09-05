@@ -37,9 +37,9 @@ fn temp_repo() -> PathBuf {
     static COUNTER: AtomicUsize = AtomicUsize::new(0);
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
     let dir = std::env::temp_dir().join(format!("fissile-it-{}-{n}", std::process::id()));
-    fs::create_dir_all(dir.join(".agents")).unwrap();
+    fs::create_dir_all(dir.join(".agent-grounds")).unwrap();
     fs::create_dir_all(dir.join("src")).unwrap();
-    fs::write(dir.join(".agents/fissile.toml"), CONFIG).unwrap();
+    fs::write(dir.join(".agent-grounds/fissile.toml"), CONFIG).unwrap();
     fs::write(dir.join("src/big.rs"), rust_lines(250)).unwrap();
     fs::write(dir.join("src/ok.rs"), "fn ok() {}\n").unwrap();
     dir
@@ -340,7 +340,7 @@ fn check_json_emits_records_or_empty_array() {
 fn check_uses_configured_format_default() {
     let root = temp_repo();
     let json_default = CONFIG.replace("[scan]", "[output]\nformat = \"json\"\n\n[scan]");
-    fs::write(root.join(".agents/fissile.toml"), json_default).unwrap();
+    fs::write(root.join(".agent-grounds/fissile.toml"), json_default).unwrap();
 
     let run = check::run(&check_options(&root)).expect("check runs");
     assert!(run.output.starts_with('['));
@@ -352,7 +352,7 @@ fn color_is_emitted_only_when_enabled() {
     let root = temp_repo();
     // Flip the config to always-color so the result does not depend on a TTY.
     let colored = CONFIG.replace("[scan]", "[output]\ncolor = \"always\"\n\n[scan]");
-    fs::write(root.join(".agents/fissile.toml"), colored).unwrap();
+    fs::write(root.join(".agent-grounds/fissile.toml"), colored).unwrap();
 
     let mut options = check_options(&root);
     let run = check::run(&options).expect("check runs");
@@ -394,7 +394,7 @@ fn audit_top_ranks_largest_files() {
 fn audit_uses_configured_format_default() {
     let root = temp_repo();
     let json_default = CONFIG.replace("[scan]", "[output]\nformat = \"json\"\n\n[scan]");
-    fs::write(root.join(".agents/fissile.toml"), json_default).unwrap();
+    fs::write(root.join(".agent-grounds/fissile.toml"), json_default).unwrap();
 
     let run = audit::run(&AuditOptions {
         root: root.clone(),
@@ -1235,7 +1235,7 @@ hard = 300
 message = "m"
 "#;
     let root = temp_repo();
-    fs::write(root.join(".agents/fissile.toml"), TWO_RULES).unwrap();
+    fs::write(root.join(".agent-grounds/fissile.toml"), TWO_RULES).unwrap();
     fs::write(root.join("src/big.rs"), rust_lines(150)).unwrap();
 
     let mut options = add_options(&root, Kind::Structural, None);
@@ -1594,9 +1594,9 @@ fn repo_with_config(config: &str) -> PathBuf {
     static COUNTER: AtomicUsize = AtomicUsize::new(0);
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
     let dir = std::env::temp_dir().join(format!("fissile-cfg-{}-{n}", std::process::id()));
-    fs::create_dir_all(dir.join(".agents")).unwrap();
+    fs::create_dir_all(dir.join(".agent-grounds")).unwrap();
     fs::create_dir_all(dir.join("src")).unwrap();
-    fs::write(dir.join(".agents/fissile.toml"), config).unwrap();
+    fs::write(dir.join(".agent-grounds/fissile.toml"), config).unwrap();
     dir
 }
 

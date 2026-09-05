@@ -11,7 +11,7 @@ exhaustive, not minimal (§GOAL-005-configurable).
 ## 1. Decision
 
 The starter config written by `fissile init`, the example at `examples/fissile.toml`,
-and `fissile`'s own `.agents/fissile.toml` all spell out every value the schema
+and `fissile`'s own `.agent-grounds/fissile.toml` all spell out every value the schema
 accepts, set to its default unless the project has a reason to differ. A reader
 never has to consult §FS-001-config to learn what a field defaults to or that a
 field exists: the knob is already in the file, at its default, with the value
@@ -43,7 +43,7 @@ named, and editable on the spot, with no hidden state to discover.
 - `fissile init` emits the full schema at defaults, not a minimal skeleton
   (§FS-002-init.2). Generated rules carry their line-counting flags explicitly even
   though each would otherwise take its default (§FS-001-config.3.1).
-- `examples/fissile.toml` and `.agents/fissile.toml` are kept exhaustive. Settings
+- `examples/fissile.toml` and `.agent-grounds/fissile.toml` are kept exhaustive. Settings
   that merely restate a default — `respect_gitignore`, the whole `[output]` block,
   the default registry paths, `[tokens]`, the per-rule `count_*` flags — are present
   on purpose and must not be trimmed as "superfluous."

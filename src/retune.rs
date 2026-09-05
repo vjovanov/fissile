@@ -29,6 +29,9 @@ pub struct RetuneOptions {
 #[derive(Clone, Debug)]
 pub struct Run {
     pub output: String,
+    /// What discovery owes the reader: the deprecated config home this run was
+    /// governed by (§FS-001-config.8.2).
+    pub notes: Vec<String>,
 }
 
 pub fn run(options: &RetuneOptions) -> Result<Run, CommandError> {
@@ -156,6 +159,7 @@ pub fn run(options: &RetuneOptions) -> Result<Run, CommandError> {
                 ),
                 note,
             ),
+            notes: cli::config_notes(&loaded.source),
         });
     }
 
@@ -175,12 +179,14 @@ pub fn run(options: &RetuneOptions) -> Result<Run, CommandError> {
                 format!("{change}\nwould update {}", registry_rel.display()),
                 note,
             ),
+            notes: cli::config_notes(&loaded.source),
         });
     }
 
     fs::write(&registry_path, &new_text)?;
     Ok(Run {
         output: with_note(change, note),
+        notes: cli::config_notes(&loaded.source),
     })
 }
 

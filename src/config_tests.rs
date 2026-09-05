@@ -187,14 +187,44 @@ hard_message = "must"
 fn load_names_the_file_in_parse_errors() {
     // §FS-001-config.1: every config diagnostic names its document.
     let root = std::env::temp_dir().join(format!("fissile-config-{}", std::process::id()));
-    std::fs::create_dir_all(root.join(".agents")).unwrap();
+    std::fs::create_dir_all(root.join(".agent-grounds")).unwrap();
     let text = "fissile_config_version = 1\nbogus = 1\n";
-    std::fs::write(root.join(".agents/fissile.toml"), text).unwrap();
+    std::fs::write(root.join(".agent-grounds/fissile.toml"), text).unwrap();
     let error = Config::load(&root, None).expect_err("parse error");
     let rendered = error.to_string();
     assert!(
-        rendered.contains(".agents/fissile.toml") && rendered.contains("config parse error"),
+        rendered.contains(".agent-grounds/fissile.toml") && rendered.contains("config parse error"),
         "diagnostic must name the file: {rendered}"
+    );
+    let _ = std::fs::remove_dir_all(root);
+}
+
+/// §FS-001-config.8.1: discovery stops at the first candidate that exists. A
+/// config that will not parse is an error naming it, never a miss that falls
+/// through to the deprecated path — that would govern the repository by a
+/// document the reader was not editing.
+#[test]
+fn a_broken_config_home_does_not_fall_through_to_the_deprecated_path() {
+    let root = std::env::temp_dir().join(format!("fissile-discovery-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join(".agent-grounds")).unwrap();
+    std::fs::create_dir_all(root.join(".agents")).unwrap();
+    std::fs::write(
+        root.join(".agent-grounds/fissile.toml"),
+        "fissile_config_version = 1\nbogus = 1\n",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join(".agents/fissile.toml"),
+        "fissile_config_version = 1\n",
+    )
+    .unwrap();
+
+    let error = Config::load(&root, None).expect_err("the broken home is the error");
+    let rendered = error.to_string();
+    assert!(
+        rendered.contains(".agent-grounds/fissile.toml"),
+        "the diagnostic must name the document that broke: {rendered}"
     );
     let _ = std::fs::remove_dir_all(root);
 }

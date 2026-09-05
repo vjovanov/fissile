@@ -88,7 +88,10 @@ pub fn run(options: &CheckOptions) -> Result<Run, CommandError> {
         Blocked::No
     };
 
-    let (output, notes) = match format {
+    // Discovery decided which document governs this run; the note saying so is
+    // owed before anything it found (§FS-001-config.8.2).
+    let mut notes = cli::config_notes(&loaded.source);
+    let (output, stale_notes) = match format {
         Format::Text => {
             let color = cli::use_color(loaded.config.output.color, options.no_color, format);
             let text = Text {
@@ -111,6 +114,7 @@ pub fn run(options: &CheckOptions) -> Result<Run, CommandError> {
             report::stale_blocks(&stale, false),
         ),
     };
+    notes.extend(stale_notes);
     Ok(Run {
         output,
         failed: blocked != Blocked::No,

@@ -31,9 +31,9 @@ fn temp_repo(config: &str) -> PathBuf {
         "fissile-rule-exclusions-{}-{n}",
         std::process::id()
     ));
-    fs::create_dir_all(root.join(".agents")).unwrap();
+    fs::create_dir_all(root.join(".agent-grounds")).unwrap();
     fs::create_dir_all(root.join("src")).unwrap();
-    fs::write(root.join(".agents/fissile.toml"), config).unwrap();
+    fs::write(root.join(".agent-grounds/fissile.toml"), config).unwrap();
     root
 }
 

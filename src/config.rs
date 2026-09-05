@@ -16,6 +16,56 @@ use crate::{Budget, Checker, FissileError, Glob, MessageTemplate, Rule, Selector
 /// The only supported major config version (§FS-001-config.1).
 pub const SUPPORTED_VERSION: u32 = 1;
 
+/// Where the config lives (§FS-001-config.8): the first path discovery looks at.
+pub const CONFIG_HOME: &str = ".agent-grounds/fissile.toml";
+
+/// The former home, still read so that no repository breaks on upgrade
+/// (§FS-001-config.8, §DF-012-config-home).
+pub const DEPRECATED_CONFIG_HOME: &str = ".agents/fissile.toml";
+
+/// Said once, on stderr, by a run discovery landed on the old home
+/// (§FS-001-config.8.2).
+pub const DEPRECATED_WARNING: &str =
+    "fissile: warning: .agents/fissile.toml is deprecated; move it to .agent-grounds/fissile.toml";
+
+/// Said instead when a config sits at both paths: the precedence is stated
+/// rather than left for the reader to discover from a rule that never fires
+/// (§FS-001-config.8.3).
+pub const IGNORED_WARNING: &str = "fissile: warning: .agents/fissile.toml is ignored; \
+                                   .agent-grounds/fissile.toml is the config in effect";
+
+/// Which document the effective config came from (§FS-001-config.8.1). Carried
+/// out of discovery because the deprecation belongs to discovery rather than to
+/// any one command, and only the command surface owns stderr
+/// (§FS-001-config.8.2).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ConfigSource {
+    /// A path the caller named. Not discovery: the caller said which document to
+    /// read, so nothing is being chosen behind them (§FS-001-config.8.1).
+    Explicit(PathBuf),
+    /// [`CONFIG_HOME`]. `shadows_deprecated` records that a config also sits at
+    /// the old path and is therefore not read (§FS-001-config.8.3).
+    Home { shadows_deprecated: bool },
+    /// [`DEPRECATED_CONFIG_HOME`], read because the home is absent.
+    Deprecated,
+    /// No config document under the root: the built-in defaults (§FS-001-config.0).
+    BuiltIn,
+}
+
+impl ConfigSource {
+    /// The one warning line this run owes the reader, or `None` when the config
+    /// came from somewhere that needs no comment (§FS-001-config.8.2, §8.3).
+    pub fn deprecation(&self) -> Option<&'static str> {
+        match self {
+            ConfigSource::Deprecated => Some(DEPRECATED_WARNING),
+            ConfigSource::Home {
+                shadows_deprecated: true,
+            } => Some(IGNORED_WARNING),
+            _ => None,
+        }
+    }
+}
+
 /// A parsed, validated config document.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
@@ -404,30 +454,39 @@ impl Config {
     }
 
     /// Discover and load the effective config under `root`: an `explicit` path
-    /// must exist; otherwise read `.agents/fissile.toml`, falling back to
-    /// [`Config::built_in`] when absent (§FS-001-config.0, §FS-001-config.2).
+    /// must exist; otherwise [`CONFIG_HOME`], then [`DEPRECATED_CONFIG_HOME`],
+    /// then [`Config::built_in`] (§FS-001-config.0, §FS-001-config.2,
+    /// §FS-001-config.8.1). Use [`Config::discover`] where the run has to say
+    /// which document it read.
     pub fn load(root: &Path, explicit: Option<&Path>) -> Result<Config, ConfigError> {
-        match explicit {
-            Some(path) => {
-                let full = root.join(path);
-                let text = fs::read_to_string(&full).map_err(|error| ConfigError::Io {
-                    path: full.clone(),
-                    reason: error.to_string(),
-                })?;
-                Config::parse(&text).map_err(|error| error.in_file(full))
-            }
-            None => {
-                let full = root.join(".agents/fissile.toml");
-                match fs::read_to_string(&full) {
-                    Ok(text) => Config::parse(&text).map_err(|error| error.in_file(full)),
-                    Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(Config::built_in()),
-                    Err(error) => Err(ConfigError::Io {
-                        path: full,
-                        reason: error.to_string(),
-                    }),
-                }
-            }
+        Config::discover(root, explicit).map(|(config, _)| config)
+    }
+
+    /// [`Config::load`], reporting which document the config came from so a
+    /// command can name the deprecated home it is being governed by, or the one
+    /// it passed over (§FS-001-config.8.1).
+    pub fn discover(
+        root: &Path,
+        explicit: Option<&Path>,
+    ) -> Result<(Config, ConfigSource), ConfigError> {
+        if let Some(path) = explicit {
+            let full = root.join(path);
+            let text = fs::read_to_string(&full).map_err(|error| ConfigError::Io {
+                path: full.clone(),
+                reason: error.to_string(),
+            })?;
+            let config = Config::parse(&text).map_err(|error| error.in_file(full))?;
+            return Ok((config, ConfigSource::Explicit(path.to_path_buf())));
         }
+
+        if let Some(config) = read_candidate(root, CONFIG_HOME)? {
+            let shadows_deprecated = root.join(DEPRECATED_CONFIG_HOME).exists();
+            return Ok((config, ConfigSource::Home { shadows_deprecated }));
+        }
+        if let Some(config) = read_candidate(root, DEPRECATED_CONFIG_HOME)? {
+            return Ok((config, ConfigSource::Deprecated));
+        }
+        Ok((Config::built_in(), ConfigSource::BuiltIn))
     }
 
     /// Build a [`Checker`] from the rules and messages in this config.
@@ -463,6 +522,24 @@ impl Config {
         }
 
         Checker::with_exclusions(rules, exclusions).map_err(ConfigError::Engine)
+    }
+}
+
+/// One candidate in the discovery order: `None` when the file is not there, so
+/// the search goes on. A file that exists but does not parse is an error naming
+/// it rather than a miss — falling through would govern the repository by a
+/// document the reader did not mean to be in force (§FS-001-config.8.1).
+fn read_candidate(root: &Path, relative: &str) -> Result<Option<Config>, ConfigError> {
+    let full = root.join(relative);
+    match fs::read_to_string(&full) {
+        Ok(text) => Config::parse(&text)
+            .map_err(|error| error.in_file(full))
+            .map(Some),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(ConfigError::Io {
+            path: full,
+            reason: error.to_string(),
+        }),
     }
 }
 

@@ -3,7 +3,7 @@ exit = 0
 git = true
 stderr_contains = ["wrote", "pre-commit", "next:"]
 creates = [
-  ".agents/fissile.toml",
+  ".agent-grounds/fissile.toml",
   "docs/file-size-agent-exceptions.toml",
   "docs/file-size-human-exceptions.toml",
   "AGENTS.md",

@@ -34,6 +34,18 @@ and at 0.x semver puts the minor number in charge of it.
 
 ### Added
 
+- §FS-001-config.8, §FS-002-init.2: the config's home is
+  `.agent-grounds/fissile.toml`. Every command that discovers a config looks
+  there first and falls back to `.agents/fissile.toml`, `fissile init` writes the
+  new home, and `--config` is unchanged. `.agents/` is by convention where agent
+  *instructions* live, and sandboxed agent runtimes mount it read-only, so a tool
+  that has to maintain its own config could not write the one file it owns
+  (§DF-012-config-home). A repository that already has a config at the old path
+  keeps it byte-for-byte and gets no second one written at the new home, because
+  a generated default there would take precedence over the project's own rules on
+  the very next run. Sibling issues carry the same move in `grund`, `rhei` and
+  `ephor`; `.agents/skills` is out of scope everywhere. Resolves #61. (PR #N)
+
 - §FS-001-config.3.4, §FS-010-limits.3, §FS-010-limits.4: a `[[rules]]` entry
   may declare `exclude` globs that remove a path from that rule before overlap
   resolution while leaving every other unit and rule eligible. This is distinct
@@ -110,6 +122,16 @@ and at 0.x semver puts the minor number in charge of it.
 
 ### Changed
 
+- §FS-001-config.8.1: `fissile::cli::Loaded` gains a public `source:
+  ConfigSource` field, and `check`, `audit`, `measure`, `limits` and the three
+  `exception` command `Run` types each gain a public `notes: Vec<String>` —
+  what discovery owes stderr, carried out to the surface that owns it.
+  `fissile::init::Report` gains `config: PathBuf`, the config the run wrote or
+  found. A library caller constructing any of these with a struct literal must
+  initialize the new field. `Config::load(root, explicit)` keeps its signature;
+  the search order is reported through the additive `Config::discover`. A 0.x
+  source break, so the minor number moves. (PR #N)
+
 - §FS-001-config.3.4: `fissile::config::RuleSpec` gains a public
   `exclude: Vec<String>` field. A library caller constructing the public struct
   directly must initialize it, normally with `Vec::new()`; parsed configs
@@ -151,6 +173,15 @@ and at 0.x semver puts the minor number in charge of it.
   instead of keeping the version it just published. A build from main previously
   reported the tag it was already ahead of, so a merged-but-uninstalled fix was
   indistinguishable from an installed one. (PR #50)
+
+### Deprecated
+
+- §FS-001-config.8.2: `.agents/fissile.toml` is deprecated as the config path.
+  It is still discovered, one step behind `.agent-grounds/fissile.toml`, and it
+  changes no exit code — but every run that reads it prints one warning line on
+  stderr naming the move, and a run that finds a config at both paths says which
+  one it ignored. Nothing breaks on upgrade; a repository migrates by moving the
+  file. (PR #N)
 
 ### Fixed
 

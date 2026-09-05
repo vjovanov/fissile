@@ -85,8 +85,8 @@ Unknown major versions are a schema error. Version 1 is additive: unknown keys
 inside known tables are errors, so a typo cannot silently disable a rule.
 
 Every config diagnostic — parse error, unsupported version, schema error —
-names the file it came from (`.agents/fissile.toml: config parse error: … at
-line 100`), so a run driven by `--config` or an editor never leaves the reader
+names the file it came from (`.agent-grounds/fissile.toml: config parse error: …
+at line 100`), so a run driven by `--config` or an editor never leaves the reader
 guessing which document broke (§GOAL-003-friendly-output.1).
 
 ## 2. Scan scope

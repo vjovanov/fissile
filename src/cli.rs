@@ -10,7 +10,7 @@ use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 
 use crate::Checker;
-use crate::config::{Color, Config, ConfigError, Format as ConfigFormat};
+use crate::config::{Color, Config, ConfigError, ConfigSource, Format as ConfigFormat};
 use crate::exceptions::{ExceptionError, Registries, RegistrySource, RemovalEntry};
 use crate::report::EvalError;
 
@@ -48,6 +48,10 @@ pub fn use_color(color: Color, no_color: bool, format: Format) -> bool {
 /// The effective config, checker, and registries for one command invocation.
 pub struct Loaded {
     pub config: Config,
+    /// Which document the config came from. Discovery decides it once; the
+    /// command surface is what turns it into a line on stderr
+    /// (§FS-001-config.8.2).
+    pub source: ConfigSource,
     pub checker: Checker,
     pub registries: Registries,
     pub root: PathBuf,
@@ -69,7 +73,7 @@ pub fn load(root: &Path, config_path: Option<&Path>) -> Result<Loaded, CommandEr
 /// (§FS-009-exception-remove.2). Everything a command needs to *read* the
 /// document still applies here — a registry that will not parse is refused.
 pub fn load_unvalidated(root: &Path, config_path: Option<&Path>) -> Result<Loaded, CommandError> {
-    let config = Config::load(root, config_path)?;
+    let (config, source) = Config::discover(root, config_path)?;
     let checker = config.to_checker()?;
 
     let soft_registry = PathBuf::from(&config.exceptions.soft_registry);
@@ -95,6 +99,7 @@ pub fn load_unvalidated(root: &Path, config_path: Option<&Path>) -> Result<Loade
 
     Ok(Loaded {
         config,
+        source,
         checker,
         registries,
         root: root.to_path_buf(),
@@ -111,7 +116,7 @@ pub(crate) fn load_for_soft_removal(
     root: &Path,
     config_path: Option<&Path>,
 ) -> Result<(Loaded, Vec<RemovalEntry>), CommandError> {
-    let config = Config::load(root, config_path)?;
+    let (config, source) = Config::discover(root, config_path)?;
     let checker = config.to_checker()?;
 
     let soft_registry = PathBuf::from(&config.exceptions.soft_registry);
@@ -133,6 +138,7 @@ pub(crate) fn load_for_soft_removal(
     Ok((
         Loaded {
             config,
+            source,
             checker,
             registries,
             root: root.to_path_buf(),
@@ -141,6 +147,19 @@ pub(crate) fn load_for_soft_removal(
         },
         removal_entries,
     ))
+}
+
+/// What this run's stderr owes before it says anything it found: the one line
+/// discovery leaves when the config came from the deprecated home, or passed one
+/// over (§FS-001-config.8.2, §FS-001-config.8.3). A `Vec` because every command
+/// already carries its stderr notes as one, and the deprecation joins them
+/// rather than needing a stream of its own.
+pub fn config_notes(source: &ConfigSource) -> Vec<String> {
+    source
+        .deprecation()
+        .map(str::to_owned)
+        .into_iter()
+        .collect()
 }
 
 /// The file set a caller named: git-staged, or explicit paths normalized to the

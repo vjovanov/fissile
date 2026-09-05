@@ -2,7 +2,7 @@ fissile_config_version = 1
 
 [scan]
 include = ["src"]
-exclude = ["src/**/*.gen.rs", ".agents/**"]
+exclude = ["src/**/*.gen.rs", ".agent-grounds/**"]
 respect_gitignore = false
 
 [[messages]]

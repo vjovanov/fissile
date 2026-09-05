@@ -7,7 +7,7 @@ git = true
 stderr_contains = [
   "see AGENTS.md for what agents are told; the findings carry the rest.",
 ]
-creates = [".agents/fissile.toml", "AGENTS.md", "CLAUDE.md"]
+creates = [".agent-grounds/fissile.toml", "AGENTS.md", "CLAUDE.md"]
 [[files]]
 path = "AGENTS.md"
 # The adopted content travels, and the block joins it rather than replacing it.
